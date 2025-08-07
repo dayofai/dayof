@@ -18,7 +18,11 @@
     "db:generate": "turbo -F server db:generate",
     "db:migrate": "turbo -F server db:migrate"
   },
-  "dependencies": {},
+  "dependencies": {
+    "dinero.js": "^2.0.0-alpha.14",
+    "drizzle-kit": "^1.0.0-beta.1-40d80bd",
+    "drizzle-orm": "^1.0.0-beta.1-40d80bd"
+  },
   "devDependencies": {
     "turbo": "^2.5.4",
     "@biomejs/biome": "2.1.2",
