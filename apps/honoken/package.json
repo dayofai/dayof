@@ -1,0 +1,53 @@
+{
+  "name": "honoken",
+  "type": "module",
+  "scripts": {
+    "type-check": "bun run tsc --noEmit",
+    "generate:pg": "drizzle-kit generate",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:smoke": "vitest run tests/smoke",
+    "test:http": "vitest run tests/smoke/http-endpoints.test.ts",
+    "test:unit": "vitest run tests/unit",
+    "setup": "node ./scripts/setup.mjs",
+    "check-bundle-size": "node ./scripts/check-bundle-size.js",
+    "dev": "vercel dev",
+    "dev:vercel": "vercel dev",
+    "build": "tsc",
+    "deploy:preview": "vercel",
+    "deploy:prod": "vercel --prod"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.7.0",
+    "@neondatabase/serverless": "^1.0.1",
+    "@upstash/redis": "^1.35.0",
+    "dotenv": "^16.5.0",
+    "drizzle-orm": "^0.44.2",
+    "hono": "^4.7.11",
+    "jose": "^6.0.11",
+    "json-stable-stringify": "^1.3.0",
+    "p-retry": "^6.2.1",
+    "passkit-generator": "^3.4.0",
+    "posthog-node": "^5.1.0",
+    "undici": "^7.10.0",
+    "zod": "3.25.32"
+  },
+  "devDependencies": {
+    "@iarna/toml": "^2.2.5",
+    "@inquirer/confirm": "^5.1.12",
+    "@inquirer/input": "^4.1.12",
+    "@inquirer/prompts": "^7.5.3",
+    "@inquirer/select": "^4.2.3",
+    "@types/node": "^22.15.31",
+    "@types/supertest": "^6.0.3",
+    "@types/web": "^0.0.241",
+    "archiver": "^7.0.1",
+    "chalk": "^5.4.1",
+    "drizzle-kit": "^0.31.1",
+    "esbuild": "^0.25.5",
+    "fs-extra": "^11.3.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.3"
+  }
+}
