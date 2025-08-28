@@ -1,4 +1,5 @@
 node_modules
 .turbo
-
-context
+# Ignore all contents of context but keep the folder
+context/*
+!context/.gitkeep
