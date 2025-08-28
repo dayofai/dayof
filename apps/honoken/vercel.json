@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 300,
+      "runtime": "nodejs20.x",
+      "regions": ["iad1"]
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    }
+  ],
+  "redirects": [
+    { 
+      "source": "/", 
+      "destination": "/api", 
+      "permanent": false 
+    }
+  ]
+}
