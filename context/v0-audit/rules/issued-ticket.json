@@ -1,6 +1,0 @@
-[
-  {"id":"issued.status.active","description":"Issued ticket must be Active.","facts":["issuedTicket.ticketStatusId"],"operator":"eq","left":"issuedTicket.ticketStatusId","right":{"var":"ACTIVE_TICKET_STATUS_ID"},"effect":"allow","denyOnFail":true,"source":"src/lib/scanning-checks/issued-tickets-checks.ts:75-86"},
-  {"id":"issued.session.matchesCurrent","description":"Issued ticket's session must match current scanning session.","facts":["issuedTicket.sessionId","currentSession.id"],"operator":"eq","left":"issuedTicket.sessionId","right":"currentSession.id","effect":"allow","denyOnFail":true,"source":"src/lib/scanning-checks/issued-tickets-checks.ts:137-148"},
-  {"id":"issued.reentry.notAllowed","description":"If reentry is not allowed, deny when prior entries exist for issued ticket.","facts":["session.reentryAllowed","scans.numberOfEntries"],"operator":"implies","left":{"not":"session.reentryAllowed"},"right":{"eq":["scans.numberOfEntries",0]},"effect":"allow","denyOnFail":true,"source":"src/lib/scanning-checks/issued-tickets-checks.ts:155-166"}
-]
-

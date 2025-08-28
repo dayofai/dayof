@@ -1,6 +1,0 @@
-[
-  {"id":"tt.status.active","description":"Ticket Tailor ticket must be Active.","facts":["ticketTailorIssuedTicket.ticketStatusId"],"operator":"eq","left":"ticketTailorIssuedTicket.ticketStatusId","right":{"var":"ACTIVE_TICKET_STATUS_ID"},"effect":"allow","denyOnFail":true,"source":"src/lib/scanning-checks/ticket-tailor-checks.ts:130-141"},
-  {"id":"tt.session.matchesCurrent","description":"Ticket session must match current session.","facts":["ticketTailorIssuedTicket.sessionId","currentSession.id"],"operator":"eq","left":"ticketTailorIssuedTicket.sessionId","right":"currentSession.id","effect":"allow","denyOnFail":true,"source":"src/lib/scanning-checks/ticket-tailor-checks.ts:156-167"},
-  {"id":"tt.reentry.notAllowed","description":"If reentry is not allowed, deny when ticket has prior entry scans.","facts":["currentSession.reentryAllowed","scans.numberOfEntries"],"operator":"implies","left":{"not":"currentSession.reentryAllowed"},"right":{"eq":["scans.numberOfEntries",0]},"effect":"allow","denyOnFail":true,"source":"src/lib/scanning-checks/ticket-tailor-checks.ts:174-186"}
-]
-

@@ -1,6 +1,0 @@
-[
-  {"id":"webhook.order.idempotent","description":"Skip processing if an order already exists for this checkout session (implemented directly in webhook code).","facts":[],"operator":"eq","left":{"value":true},"right":{"value":true},"effect":"process","denyOnFail":false,"source":"src/app/api/stripe/webhook/route.ts:60-71"},
-  {"id":"webhook.installmentPlan.subscriptionSchedule","description":"If checkout session is installment plan, create subscription schedule under connected account context (implemented directly in webhook code).","facts":[],"operator":"eq","left":{"value":true},"right":{"value":true},"effect":"process","denyOnFail":false,"source":"src/app/api/stripe/webhook/route.ts:74-106"},
-  {"id":"webhook.subscription.deleted.tripCancellation","description":"On subscription deleted, cancel issuedTrip and refund order when found after cutoff; skip cards (implemented directly in webhook code).","facts":[],"operator":"eq","left":{"value":true},"right":{"value":true},"effect":"process","denyOnFail":false,"source":"src/app/api/stripe/webhook/route.ts:275-371"}
-]
-

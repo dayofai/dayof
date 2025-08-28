@@ -1,4 +1,0 @@
-[
-  {"id":"session.singleActiveForVenue","description":"There must be exactly one active session for (venueId, now).","facts":["venue.id","now"],"operator":"dbActiveSessionCountEquals","left":["venue.id","now"],"right":1,"effect":"allow","denyOnFail":true,"source":"src/lib/scanning-checks/door-scanning-checks.ts:215-235"}
-]
-
