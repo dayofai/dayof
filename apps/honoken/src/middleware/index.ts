@@ -1,2 +1,2 @@
-export { applePassAuthMiddleware } from './auth';
+export { applePassAuthMiddleware, applePassAuthForListMiddleware } from './auth';
 export { pkpassEtagMiddleware } from './pkpass-etag'; 

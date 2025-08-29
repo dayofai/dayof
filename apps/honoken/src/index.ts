@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { applePassAuthMiddleware, pkpassEtagMiddleware } from './middleware/index';
+import { applePassAuthMiddleware, applePassAuthForListMiddleware, pkpassEtagMiddleware } from './middleware/index';
 import { secureHeaders } from 'hono/secure-headers';
 import type { Env } from './types';
 import { bodyLimit } from 'hono/body-limit';
@@ -197,6 +197,7 @@ function createV1App() {
   
   v1.get('/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier',
     zValidator('param', DevicePassRegistrationsParamsSchema, formatZodError),
+    applePassAuthForListMiddleware,
     handleListUpdatedSerials
   );
   
