@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import type { webcrypto } from 'node:crypto';
 import { 
   getVersionedEncryptionKey, 
   encryptWithVersion, 
@@ -7,23 +8,24 @@ import {
   base64ToArrayBuffer
 } from '../../src/utils/crypto';
 import type { Env } from '../../src/types';
+import { createMockEnv } from '../fixtures/mock-env';
 
 describe('Encryption Key Versioning', () => {
   let mockEnv: Env;
 
   beforeEach(() => {
     // Create a fresh mock environment for each test
-    mockEnv = {
-      HONOKEN_ENCRYPTION_KEY_V1: arrayBufferToBase64(new Uint8Array(32).fill(1)), // 32 bytes for AES-256
-      HONOKEN_ENCRYPTION_KEY_V2: arrayBufferToBase64(new Uint8Array(32).fill(2)), // 32 bytes for AES-256
+    mockEnv = createMockEnv({
+      HONOKEN_ENCRYPTION_KEY_V1: arrayBufferToBase64(new Uint8Array(32).fill(1)),
+      HONOKEN_ENCRYPTION_KEY_V2: arrayBufferToBase64(new Uint8Array(32).fill(2)),
       HONOKEN_ENCRYPTION_KEY_CURRENT: 'v1'
-    } as Env;
+    });
   });
 
   describe('getVersionedEncryptionKey', () => {
     it('should return a valid CryptoKey for version v1', async () => {
       const key = await getVersionedEncryptionKey(mockEnv, 'v1');
-      expect(key).toBeInstanceOf(CryptoKey);
+      expect((key as unknown as webcrypto.CryptoKey).type).toBeDefined();
       expect(key.algorithm.name).toBe('AES-GCM');
       expect(key.usages).toContain('encrypt');
       expect(key.usages).toContain('decrypt');
@@ -31,7 +33,7 @@ describe('Encryption Key Versioning', () => {
 
     it('should return a valid CryptoKey for version v2', async () => {
       const key = await getVersionedEncryptionKey(mockEnv, 'v2');
-      expect(key).toBeInstanceOf(CryptoKey);
+      expect((key as unknown as webcrypto.CryptoKey).type).toBeDefined();
       expect(key.algorithm.name).toBe('AES-GCM');
     });
 

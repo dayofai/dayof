@@ -1,4 +1,5 @@
 import type { Env } from '../types';
+import type { webcrypto } from 'node:crypto';
 
 /**
  * Helper to convert ArrayBuffer or Uint8Array to Base64
@@ -17,7 +18,7 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
 }
 
 // Cache for versioned encryption keys
-const cachedKeys = new Map<string, CryptoKey>();
+const cachedKeys = new Map<string, webcrypto.CryptoKey>();
 
 /**
  * Gets the current encryption key version from environment.
@@ -41,7 +42,7 @@ export function getCurrentKeyVersion(env: Env): string {
  * @returns The validated CryptoKey for AES-GCM encryption/decryption
  * @throws If the requested key version is not found or has invalid length
  */
-export async function getVersionedEncryptionKey(env: Env, version: string): Promise<CryptoKey> {
+export async function getVersionedEncryptionKey(env: Env, version: string): Promise<webcrypto.CryptoKey> {
   // Check cache first
   if (cachedKeys.has(version)) {
     return cachedKeys.get(version)!;
@@ -143,7 +144,7 @@ export async function decryptWithVersion(versionedCiphertext: string, env: Env):
  * Legacy function for backward compatibility during migration.
  * @deprecated Use getVersionedEncryptionKey instead
  */
-export async function getValidatedEncryptionKey(env: Env): Promise<CryptoKey> {
+export async function getValidatedEncryptionKey(env: Env): Promise<webcrypto.CryptoKey> {
   // For backward compatibility, try to use v1 if old env var exists
   if (env.HONOKEN_PEM_BUNDLE_ENCRYPTION_KEY && !env.HONOKEN_ENCRYPTION_KEY_V1) {
     throw new Error(
