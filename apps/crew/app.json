@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "my-better-t-app",
-    "slug": "my-better-t-app",
+    "name": "DayOf Crew",
+    "slug": "dayof-crew",
     "version": "1.0.0",
-    "scheme": "my-better-t-app",
+    "scheme": "dayof-crew",
     "web": {
       "bundler": "metro",
       "output": "static",

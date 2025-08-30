@@ -16,6 +16,6 @@
     "nativewind-env.d.ts"
   ],
   "references": [{
-    "path": "../server"
+    "path": "../platform"
   }]
 }
