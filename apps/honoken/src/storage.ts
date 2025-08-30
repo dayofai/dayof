@@ -252,6 +252,39 @@ export async function listUpdatedSerials(
   };
 }
 
+/**
+ * Verify list access token for the list-updated-serials endpoint.
+ * Checks that the token belongs to any pass of the given passTypeIdentifier
+ * and that the device has an active registration for that pass.
+ */
+export async function verifyListAccessToken(
+  env: Env,
+  passTypeIdentifier: string,
+  deviceLibraryIdentifier: string,
+  token: string,
+  logger?: Logger
+): Promise<boolean> {
+  const dbClient = getDbClient(env, logger);
+  const result = await dbClient.select({ serialNumber: passes.serialNumber })
+    .from(passes)
+    .innerJoin(
+      registrations,
+      and(
+        eq(registrations.passTypeIdentifier, passes.passTypeIdentifier),
+        eq(registrations.serialNumber, passes.serialNumber)
+      )
+    )
+    .where(and(
+      eq(passes.passTypeIdentifier, passTypeIdentifier),
+      eq(passes.authenticationToken, token),
+      eq(registrations.deviceLibraryIdentifier, deviceLibraryIdentifier),
+      eq(registrations.active, true)
+    ))
+    .limit(1);
+
+  return Array.isArray(result) ? result.length > 0 : !!result;
+}
+
 export async function getPassData(
   env: Env,
   passTypeIdentifier: string,

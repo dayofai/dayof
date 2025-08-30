@@ -345,14 +345,48 @@ describe("HTTP Endpoint Smoke Tests", () => {
   });
 
   describe("List Updated Serials", () => {
+    it("should return 401 when listing updated serials without Authorization", async () => {
+      const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}`;
+      const request = new Request(`http://localhost${path}`);
+      const response = await appFetch(request, mockEnv, mockContext);
+      expect(response.status).toBe(401);
+    });
+
+    it("should return 401 when Authorization uses wrong token", async () => {
+      const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}`;
+      const request = new Request(`http://localhost${path}`, {
+        headers: { Authorization: "ApplePass wrong-token" },
+      });
+      const response = await appFetch(request, mockEnv, mockContext);
+      expect(response.status).toBe(401);
+    });
+
+    it("should allow listing updated serials with valid ApplePass token", async () => {
+      const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}`;
+      const request = new Request(`http://localhost${path}`, {
+        headers: { Authorization: "ApplePass valid-test-token" },
+      });
+      const response = await appFetch(request, mockEnv, mockContext);
+      expect([200, 204]).toContain(response.status);
+      if (response.status === 200) {
+        const json = await response.json();
+        expect(json).toEqual({
+          serialNumbers: expect.any(Array),
+          lastUpdated: expect.any(String),
+        });
+      }
+    });
+
     it("should handle device registrations request with proper response structure", async () => {
       const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}`;
       
-      const request = new Request(`http://localhost${path}`);
+      const request = new Request(`http://localhost${path}`, {
+        headers: { Authorization: 'ApplePass valid-test-token' },
+      });
       const response = await appFetch(request, mockEnv, mockContext);
       
-      // Apple spec: 200 (has updates), 204 (no updates, empty body), 401 (unauthorized)
-      expect([200, 204, 401]).toContain(response.status);
+      // Apple spec: 200 (has updates), 204 (no updates, empty body)
+      expect([200, 204]).toContain(response.status);
       
       if (response.status === 200) {
         expect(response.headers.get("content-type")).toContain("application/json");
@@ -383,7 +417,9 @@ describe("HTTP Endpoint Smoke Tests", () => {
     it("should handle passesUpdatedSince query parameter", async () => {
       const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}?passesUpdatedSince=1640995200`;
       
-      const request = new Request(`http://localhost${path}`);
+      const request = new Request(`http://localhost${path}`, {
+        headers: { Authorization: 'ApplePass valid-test-token' },
+      });
       const response = await appFetch(request, mockEnv, mockContext);
       expect([200, 204]).toContain(response.status);
     });

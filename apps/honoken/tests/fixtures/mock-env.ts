@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import type { webcrypto } from 'node:crypto';
 import type { Env } from '../../src/types';
 import { TEST_CERT_DATA, TEST_PASS_DATA, TEST_DEVICE_DATA, TEST_REGISTRATION_DATA, TEST_APNS_KEY_DATA, TEST_CERT_BUNDLE } from './test-data';
 
@@ -6,7 +7,9 @@ import { TEST_CERT_DATA, TEST_PASS_DATA, TEST_DEVICE_DATA, TEST_REGISTRATION_DAT
  * Creates a mock Env object for testing
  * Addresses the complex authentication and encryption challenges identified
  */
-export function createMockEnv(overrides: Partial<Env> = {}): Env {
+type EnvOverrides = Partial<Env> & Record<`HONOKEN_ENCRYPTION_KEY_${string}`, string>;
+
+export function createMockEnv(overrides: EnvOverrides = {} as EnvOverrides): Env {
   const mockEnv: Env = {
     // Database URLs
     DATABASE_URL: 'postgresql://test:test@localhost:5432/test_db',
@@ -56,14 +59,14 @@ export function setupMockCrypto() {
   
   const mockCrypto = {
     subtle: {
-      importKey: vi.fn().mockResolvedValue({} as CryptoKey),
-      decrypt: vi.fn().mockImplementation(async (algorithm: any, key: CryptoKey, data: ArrayBuffer) => {
+      importKey: vi.fn().mockResolvedValue({} as unknown as webcrypto.CryptoKey),
+      decrypt: vi.fn().mockImplementation(async (algorithm: any, key: webcrypto.CryptoKey, data: ArrayBuffer) => {
         // Return the test certificate bundle as encrypted JSON when decrypted
         const bundleJson = JSON.stringify(TEST_CERT_BUNDLE);
         return new TextEncoder().encode(bundleJson);
       }),
       encrypt: vi.fn().mockResolvedValue(new ArrayBuffer(32)),
-      generateKey: vi.fn().mockResolvedValue({} as CryptoKey),
+      generateKey: vi.fn().mockResolvedValue({} as unknown as webcrypto.CryptoKey),
     },
     getRandomValues: vi.fn().mockImplementation((array: Uint8Array) => {
       for (let i = 0; i < array.length; i++) {

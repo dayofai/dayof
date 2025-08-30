@@ -165,18 +165,40 @@ const handleGetPassFile = async (c: any) => {
     return c.json({ error: 'Invalid authorization token' }, 401);
   }
 
+  const testEtag = '"test-etag"';
   const ifNoneMatch = c.req.header('if-none-match');
-  if (ifNoneMatch === '"test-etag"') {
+  const lastModified = new Date().toUTCString();
+
+  if (ifNoneMatch === testEtag) {
+    c.header('ETag', testEtag);
+    c.header('Last-Modified', lastModified);
+    c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
     return c.body(null, 304);
   }
 
-  // Mock: always return 404 for non-existent passes in smoke tests after auth check
+  // For simplicity in smoke mode we still return a 404 (after auth),
+  // but ensure headers are present for 200 paths in case we extend later.
+  c.header('ETag', testEtag);
+  c.header('Last-Modified', lastModified);
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
   return c.json({ error: 'Pass not found' }, 404);
 };
 
 const handleListUpdatedSerials = async (c: any) => {
+  const auth = c.req.header('authorization');
+  if (!auth || !auth.startsWith('ApplePass ')) {
+    return c.json({ error: 'Invalid authorization' }, 401);
+  }
+  const token = auth.replace('ApplePass ', '');
+  if (token !== 'valid-test-token') {
+    return c.json({ error: 'Invalid authorization token' }, 401);
+  }
+
   const result = await mockStorage.listUpdatedSerials();
-  return c.json(result);
+  if (!result || result.serialNumbers.length === 0) {
+    return c.body(null, 204);
+  }
+  return c.json(result, 200);
 };
 
 const handleLogMessages = async (c: any) => {

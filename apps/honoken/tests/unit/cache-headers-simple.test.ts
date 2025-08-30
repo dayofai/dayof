@@ -9,7 +9,7 @@ describe('Cache Headers - Simple Tests', () => {
     // Simplified test - just verify the headers we care about
     app.get('/pass', (c) => {
       // This simulates what the actual route does after middleware
-      c.header('Cache-Control', 'no-store, must-revalidate');
+      c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
       c.header('ETag', '"test-etag"');
       c.header('Last-Modified', new Date().toUTCString());
       c.header('Content-Type', 'application/vnd.apple.pkpass');
@@ -18,7 +18,7 @@ describe('Cache Headers - Simple Tests', () => {
     
     const res = await app.request('/pass');
     
-    expect(res.headers.get('Cache-Control')).toBe('no-store, must-revalidate');
+    expect(res.headers.get('Cache-Control')).toBe('no-cache, no-store, must-revalidate');
     expect(res.headers.get('Cache-Control')).not.toContain('public');
     expect(res.headers.get('Cache-Control')).not.toContain('max-age');
   });
@@ -35,13 +35,13 @@ describe('Cache Headers - Simple Tests', () => {
         // RFC 7232 requires these headers on 304
         c.header('ETag', testEtag);
         c.header('Last-Modified', testLastModified);
-        c.header('Cache-Control', 'no-store, must-revalidate');
+        c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
         return c.body(null, 304);
       }
       
       c.header('ETag', testEtag);
       c.header('Last-Modified', testLastModified);
-      c.header('Cache-Control', 'no-store, must-revalidate');
+      c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
       return c.body('pass data');
     });
     
@@ -57,7 +57,7 @@ describe('Cache Headers - Simple Tests', () => {
     expect(res2.status).toBe(304);
     expect(res2.headers.get('ETag')).toBe(testEtag);
     expect(res2.headers.get('Last-Modified')).toBe(testLastModified);
-    expect(res2.headers.get('Cache-Control')).toBe('no-store, must-revalidate');
+    expect(res2.headers.get('Cache-Control')).toBe('no-cache, no-store, must-revalidate');
   });
 
   it('should prioritize If-None-Match over If-Modified-Since', async () => {
@@ -74,13 +74,13 @@ describe('Cache Headers - Simple Tests', () => {
         if (ifNoneMatch === testEtag) {
           c.header('ETag', testEtag);
           c.header('Last-Modified', testLastModified);
-          c.header('Cache-Control', 'no-store, must-revalidate');
+          c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
           return c.body(null, 304);
         }
       } else if (ifModifiedSince === testLastModified) {
         c.header('ETag', testEtag);
         c.header('Last-Modified', testLastModified);
-        c.header('Cache-Control', 'no-store, must-revalidate');
+        c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
         return c.body(null, 304);
       }
       

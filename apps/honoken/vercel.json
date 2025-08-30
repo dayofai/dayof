@@ -1,10 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["iad1"],
+  "outputDirectory": ".",
   "functions": {
     "api/index.ts": {
-      "maxDuration": 300,
-      "runtime": "nodejs22.x"
+      "maxDuration": 300
     }
   },
   "rewrites": [
