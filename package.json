@@ -7,8 +7,8 @@
   ],
   "scripts": {
     "check": "oxlint",
-    "dev": "turbo dev --filter=!example-web --filter=!example-server --filter=!crew --filter=!handbook",
-    "build": "turbo build --filter=!example-web --filter=!example-server --filter=!handbook --filter=!crew",
+    "dev": "turbo dev --filter=!crew --filter=!handbook",
+    "build": "turbo build --filter=!handbook --filter=!crew",
     "check-types": "turbo check-types",
     "dev:platform": "turbo -F platform dev",
     "dev:frontrow": "turbo -F frontrow dev",
