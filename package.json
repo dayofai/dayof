@@ -8,6 +8,7 @@
   "scripts": {
     "check": "oxlint",
     "dev": "turbo dev --filter=!crew --filter=!handbook",
+    "dev:events": "turbo -F events dev",
     "build": "turbo build --filter=!handbook --filter=!crew",
     "check-types": "turbo check-types",
     "dev:platform": "turbo -F platform dev",
@@ -18,7 +19,8 @@
     "db:push": "turbo -F server db:push",
     "db:studio": "turbo -F server db:studio",
     "db:generate": "turbo -F server db:generate",
-    "db:migrate": "turbo -F server db:migrate"
+    "db:migrate": "turbo -F server db:migrate",
+    "dev:inngest:events": "inngest-cli dev -u http://localhost:3001/api/inngest"
   },
   "dependencies": {
     "dinero.js": "^2.0.0-alpha.14",
