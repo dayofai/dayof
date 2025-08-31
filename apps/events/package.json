@@ -1,0 +1,20 @@
+{
+  "name": "events",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "hono": "^4.8.2",
+    "@hono/node-server": "^1.14.4",
+    "inngest-kit": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "tsx": "^4.19.2",
+    "@types/node": "^22.15.31"
+  }
+}
