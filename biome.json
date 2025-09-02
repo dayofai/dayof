@@ -19,7 +19,22 @@
       "!**/.source"
     ]
   },
-  "extends": [
-    "ultracite"
+  "extends": ["ultracite"],
+  "overrides": [
+    {
+      "includes": [
+        "packages/**/runtime/**/*.{ts,tsx}",
+        "packages/**/inngest/**/*.ts",
+        "packages/facts/**/*.ts",
+        "packages/rules/**/*.ts"
+      ],
+      "linter": {
+        "rules": {
+          "performance": {
+            "noNamespaceImport": "off"
+          }
+        }
+      }
+    }
   ]
 }
