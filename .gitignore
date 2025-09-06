@@ -2,3 +2,5 @@ node_modules
 .turbo
 .vercel
 .env*.local
+context/backup/
+/context/backup/**

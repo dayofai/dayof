@@ -46,10 +46,15 @@ type FeeShape = {
   amount?: unknown | null;
 };
 const refineFee = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
-  schema.superRefine((val: unknown, ctx) => {
-    const v = val as FeeShape;
+  schema.check((ctx) => {
+    const v = ctx.value as FeeShape;
     const addIssue = (path: 'percentage' | 'amount', message: string) => {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+      ctx.issues.push({
+        code: 'custom',
+        path: [path],
+        message,
+        input: ctx.value,
+      });
     };
     const rules: Record<'percentage' | 'fixed', () => void> = {
       percentage: () => {
@@ -79,21 +84,23 @@ const refineFee = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
   });
 
 const refineCartOrOrder = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
-  schema.superRefine((val: unknown, ctx) => {
-    const rec = val as Record<string, unknown>;
+  schema.check((ctx) => {
+    const rec = ctx.value as Record<string, unknown>;
     const hasEither = rec.cartId != null || rec.orderId != null;
     if (hasEither) {
       return;
     }
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+    ctx.issues.push({
+      code: 'custom',
       path: ['cartId'],
       message: 'Either cartId or orderId must be provided.',
+      input: ctx.value,
     });
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+    ctx.issues.push({
+      code: 'custom',
       path: ['orderId'],
       message: 'Either cartId or orderId must be provided.',
+      input: ctx.value,
     });
   });
 
@@ -104,13 +111,18 @@ type PhaseShape = {
   intervalCount?: unknown | null;
 };
 const refineSchedulePhase = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
-  schema.superRefine((val: unknown, ctx) => {
-    const v = val as PhaseShape;
+  schema.check((ctx) => {
+    const v = ctx.value as PhaseShape;
     const add = (
       path: 'amount' | 'interval' | 'intervalCount',
       message: string
     ) => {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+      ctx.issues.push({
+        code: 'custom',
+        path: [path],
+        message,
+        input: ctx.value,
+      });
     };
     const rules: Record<'bridge' | 'installment', () => void> = {
       bridge: () => {
