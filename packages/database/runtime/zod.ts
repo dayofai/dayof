@@ -46,63 +46,52 @@ type FeeShape = {
   amount?: unknown | null;
 };
 const refineFee = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
-  schema.check((ctx) => {
-    const v = ctx.value as FeeShape;
-    const addIssue = (path: 'percentage' | 'amount', message: string) => {
-      ctx.issues.push({
-        code: 'custom',
-        path: [path],
-        message,
-        input: ctx.value,
-      });
-    };
-    const rules: Record<'percentage' | 'fixed', () => void> = {
-      percentage: () => {
-        if (v.percentage == null) {
-          addIssue('percentage', 'required for percentage type');
-        }
-        if (v.amount != null) {
-          addIssue('amount', 'must be null for percentage type');
-        }
+  schema
+    .refine(
+      (val) => {
+        const v = val as FeeShape;
+        return v.feeType !== 'percentage' || v.percentage != null;
       },
-      fixed: () => {
-        if (v.amount == null) {
-          addIssue('amount', 'required for fixed type');
-        }
-        if (v.percentage != null) {
-          addIssue('percentage', 'must be null for fixed type');
-        }
+      { path: ['percentage'], error: 'required for percentage type' }
+    )
+    .refine(
+      (val) => {
+        const v = val as FeeShape;
+        return v.feeType !== 'percentage' || v.amount == null;
       },
-    };
-    if (!v.feeType) {
-      return;
-    }
-    const fn = rules[v.feeType];
-    if (fn) {
-      fn();
-    }
-  });
+      { path: ['amount'], error: 'must be null for percentage type' }
+    )
+    .refine(
+      (val) => {
+        const v = val as FeeShape;
+        return v.feeType !== 'fixed' || v.amount != null;
+      },
+      { path: ['amount'], error: 'required for fixed type' }
+    )
+    .refine(
+      (val) => {
+        const v = val as FeeShape;
+        return v.feeType !== 'fixed' || v.percentage == null;
+      },
+      { path: ['percentage'], error: 'must be null for fixed type' }
+    );
 
 const refineCartOrOrder = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
-  schema.check((ctx) => {
-    const rec = ctx.value as Record<string, unknown>;
-    const hasEither = rec.cartId != null || rec.orderId != null;
-    if (hasEither) {
-      return;
-    }
-    ctx.issues.push({
-      code: 'custom',
-      path: ['cartId'],
-      message: 'Either cartId or orderId must be provided.',
-      input: ctx.value,
-    });
-    ctx.issues.push({
-      code: 'custom',
-      path: ['orderId'],
-      message: 'Either cartId or orderId must be provided.',
-      input: ctx.value,
-    });
-  });
+  schema
+    .refine(
+      (val) => {
+        const rec = val as Record<string, unknown>;
+        return rec.cartId != null || rec.orderId != null;
+      },
+      { path: ['cartId'], error: 'Either cartId or orderId must be provided.' }
+    )
+    .refine(
+      (val) => {
+        const rec = val as Record<string, unknown>;
+        return rec.cartId != null || rec.orderId != null;
+      },
+      { path: ['orderId'], error: 'Either cartId or orderId must be provided.' }
+    );
 
 type PhaseShape = {
   type?: 'bridge' | 'installment';
@@ -111,50 +100,58 @@ type PhaseShape = {
   intervalCount?: unknown | null;
 };
 const refineSchedulePhase = <T extends z.ZodRawShape>(schema: z.ZodObject<T>) =>
-  schema.check((ctx) => {
-    const v = ctx.value as PhaseShape;
-    const add = (
-      path: 'amount' | 'interval' | 'intervalCount',
-      message: string
-    ) => {
-      ctx.issues.push({
-        code: 'custom',
-        path: [path],
-        message,
-        input: ctx.value,
-      });
-    };
-    const rules: Record<'bridge' | 'installment', () => void> = {
-      bridge: () => {
-        if (v.amount != null) {
-          add('amount', 'amount must be null for bridge phase');
-        }
-        if (v.interval != null) {
-          add('interval', 'interval must be null for bridge phase');
-        }
-        if (v.intervalCount != null) {
-          add('intervalCount', 'intervalCount must be null for bridge phase');
-        }
+  schema
+    .refine(
+      (val) => {
+        const v = val as PhaseShape;
+        return v.type !== 'bridge' || v.amount == null;
       },
-      installment: () => {
-        if (v.amount == null) {
-          add('amount', 'amount is required for installment phase');
-        }
-        if (v.interval == null) {
-          add('interval', 'interval is required for installment phase');
-        }
-        if (v.intervalCount == null) {
-          add(
-            'intervalCount',
-            'intervalCount is required for installment phase'
-          );
-        }
+      { path: ['amount'], error: 'amount must be null for bridge phase' }
+    )
+    .refine(
+      (val) => {
+        const v = val as PhaseShape;
+        return v.type !== 'bridge' || v.interval == null;
       },
-    };
-    if (v.type && v.type in rules) {
-      rules[v.type]();
-    }
-  });
+      { path: ['interval'], error: 'interval must be null for bridge phase' }
+    )
+    .refine(
+      (val) => {
+        const v = val as PhaseShape;
+        return v.type !== 'bridge' || v.intervalCount == null;
+      },
+      {
+        path: ['intervalCount'],
+        error: 'intervalCount must be null for bridge phase',
+      }
+    )
+    .refine(
+      (val) => {
+        const v = val as PhaseShape;
+        return v.type !== 'installment' || v.amount != null;
+      },
+      { path: ['amount'], error: 'amount is required for installment phase' }
+    )
+    .refine(
+      (val) => {
+        const v = val as PhaseShape;
+        return v.type !== 'installment' || v.interval != null;
+      },
+      {
+        path: ['interval'],
+        error: 'interval is required for installment phase',
+      }
+    )
+    .refine(
+      (val) => {
+        const v = val as PhaseShape;
+        return v.type !== 'installment' || v.intervalCount != null;
+      },
+      {
+        path: ['intervalCount'],
+        error: 'intervalCount is required for installment phase',
+      }
+    );
 
 // Users / Orgs
 export const UsersInsert = createInsertSchema(s.users);

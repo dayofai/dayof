@@ -1,3 +1,5 @@
+<plan>
+
 Here’s a clean, **actionable plan** tailored to your repo to make Better Auth a **standalone Hono service** and wire it to your web apps (TanStack Start) and the Expo app.
 
 ---
@@ -1150,3 +1152,34 @@ Below is a precise rundown against your repo.
 - **Document the convention** in your repo README (top-level “Conventions” section: “Auth lives at /auth on auth.dayof.ai; clients must set baseURL”).
 
 If you want, I can add a short “Conventions” snippet for your README and a `check-env` script that fails builds when `VITE_AUTH_BASE_URL` / `EXPO_PUBLIC_AUTH_BASE_URL` are missing.
+
+---
+
+**Pick `/auth`** for the standalone auth service at `auth.dayof.ai`.
+Keep `/api/auth` only as the **proxy path inside your web apps** for local/preview.
+
+### Why `/auth` (for the dedicated service)
+
+- **Separation of concerns:** On `auth.dayof.ai`, `/auth/*` makes it obvious those endpoints are authentication—not a general “API.” You keep `/api/*` free on that service for anything else you may add later (internal admin, metrics, etc.).
+- **Fewer collisions / rewrites:** Your web apps already use `/api` for SSR (`/api/server`) and other things. Using `/auth` upstream avoids mental collisions with existing `/api/*` uses across services.
+- **Clarity in tooling & logs:** Grepping, dashboards, WAF rules, and observability are cleaner when the path clearly encodes the concern (`/auth`).
+- **No cookie downside:** Better Auth sets `Path=/` by default; choosing `/auth` vs `/api/auth` doesn’t change cookie behavior. You’ll still scope `Domain=dayof.ai` in prod and omit it in previews.
+
+### When would `/api/auth` be better?
+
+- If auth lived **inside the same Vercel project** as a web app (and not on its own domain). Then staying under `/api/*` helps avoid SPA router conflicts. That’s **not** your setup.
+
+### Concrete plan for your repo
+
+- **Auth service (Vercel project `auth`)**: mount Better Auth at **`/auth/*`** and set
+  `BETTER_AUTH_URL=https://auth.dayof.ai/auth`.
+- **Prod web apps** (`dayof.ai` and `app.dayof.ai`): set
+  `VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth`.
+- **Preview/local web apps**: keep **proxy** at `/api/auth/*` that forwards to the auth service’s `/auth/*`. Set
+  `VITE_AUTH_BASE_URL=/api/auth` and `AUTH_PROXY_BASE=https://<your-auth-preview>/auth`.
+- **Expo app**: set
+  `EXPO_PUBLIC_AUTH_BASE_URL=https://auth.dayof.ai/auth`.
+
+That gives you a clean, intention‑revealing URL on the auth domain, with zero downsides for cookies or clients, and preserves the nice dev/preview behavior via the per‑app `/api/auth` proxy.
+
+</plan>
