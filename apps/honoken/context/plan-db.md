@@ -27,10 +27,11 @@
    - `wallet_pass_content` (composite PK and FK to `wallet_pass`)
    - Drizzle relations for joins where useful
 2. Export wallet schema from `packages/database/schema/index.ts` and include in the shared `schema` object.
-3. Update Honoken to import `db` and `schema` from `database` package and replace local schema imports/usages.
-4. Implement ETag-on-write helpers and refactor middleware to read-only behavior.
-5. Optionally add an admin dev endpoint to trigger APNs for a pass.
-6. Clean up Honoken’s local schema and drizzle config linkage.
+3. Generate and apply migrations from the shared database package (Drizzle V2), targeting Neon.
+4. Update Honoken to import `db` and `schema` from `database` package and replace local schema imports/usages.
+5. Implement ETag-on-write helpers and refactor middleware to read-only behavior.
+6. Optionally add an admin dev endpoint to trigger APNs for a pass.
+7. Clean up Honoken’s local schema and drizzle config linkage.
 
 ---
 
@@ -39,6 +40,7 @@
 - Add: `packages/database/schema/wallet.ts`
 - Modify: `packages/database/schema/index.ts` (export and compose wallet tables)
 - Modify: `packages/database/db/index.ts` (schema already passed in; ensure wallet tables available via `schema`)
+- Add (if not present): `packages/database/drizzle.config.ts` pointing at `packages/database/schema/**/*.ts` for migration generation.
 - Modify Honoken imports and references:
   - `apps/honoken/src/db/index.ts` (switch to shared db client or wrapper over it)
   - `apps/honoken/src/db/schema.ts` (deprecate/remove, migrate references)
@@ -215,12 +217,13 @@ File: `apps/honoken/src/routes/admin.ts`
 
 ## Rollout Steps
 
-1. Implement `packages/database/schema/wallet.ts` and export from index; run migrations from the shared package to create tables.
-2. Update Honoken imports to use shared `database` package schema and client; remove local schema usage.
-3. Refactor `pkpass-etag` to read-only; add write helpers for ETag.
-4. Smoke test endpoints (`/v1/*`), especially conditional GET paths and registration flows.
-5. Add dev push endpoint if desired; verify APNs fetch path works with wallet tables.
-6. Remove deprecated files and update docs.
+1. Implement Drizzle V2 schema in `packages/database/schema/wallet.ts`; export from `packages/database/schema/index.ts`.
+2. Add `packages/database/drizzle.config.ts` (if missing). Generate migrations in the shared package and apply to Neon.
+3. Update Honoken imports to use shared `database` package schema and client; remove local schema usage.
+4. Refactor `pkpass-etag` to read-only; add write helpers for ETag.
+5. Smoke test endpoints (`/v1/*`), especially conditional GET paths and registration flows.
+6. Add dev push endpoint if desired; verify APNs fetch path works with wallet tables.
+7. Remove deprecated files (`apps/honoken/src/db/schema.ts`) and update docs/README to reflect `wallet_pass_content`.
 
 ---
 
@@ -254,7 +257,7 @@ This section refines the plan with pragmatic changes and concrete code/SQL based
 
 Clarifying note: If you later share DB with legacy tables, consider the rename path below instead of fresh creates.
 
-### B) Schema DDL — greenfield create (recommended here)
+### B) Schema DDL — greenfield create with Drizzle V2 (recommended here)
 
 Minimal SQL to create fresh `wallet_*` tables (no data migration required):
 
@@ -350,9 +353,104 @@ CREATE TABLE wallet_pass_content (
 
 Drizzle V2 tables should mirror this structure and indexes.
 
-### C) Alternative: rename path (if you ever need to keep data)
+Drizzle V2 config for the shared database package (example):
 
-If you’re not greenfield in a future phase, you can rename in place and add the new content table:
+```ts
+// packages/database/drizzle.config.ts
+import type { Config } from "drizzle-kit";
+
+export default {
+  schema: "./schema/**/*.ts",
+  out: "./migrations",
+  dialect: "postgresql",
+  dbCredentials: {
+    // Use a dev branch URL for generation; prod/preview is managed by Neon/Vercel integration
+    url: process.env.DEV_DATABASE_URL!,
+  },
+} satisfies Config;
+```
+
+Migration commands (from `packages/database`):
+
+```bash
+cd packages/database
+DEV_DATABASE_URL=postgresql://... npx drizzle-kit generate
+# Apply via Neon Console or preferred SQL client.
+```
+
+Drizzle V2 table example (TypeScript) for `wallet_pass` and `wallet_pass_content`:
+
+```ts
+// packages/database/schema/wallet.ts
+import {
+  pgTable,
+  text,
+  boolean,
+  timestamp,
+  pgEnum,
+  primaryKey,
+  index,
+  jsonb,
+} from "drizzle-orm/pg-core";
+
+export const walletTicketStyleEnum = pgEnum("wallet_ticket_style_enum", [
+  "coupon",
+  "event",
+  "storeCard",
+  "generic",
+]);
+
+export const walletPass = pgTable(
+  "wallet_pass",
+  (t) => ({
+    passTypeIdentifier: t.text("pass_type_identifier").notNull(),
+    serialNumber: t.text("serial_number").notNull(),
+    authenticationToken: t.text("authentication_token").notNull(),
+    ticketStyle: walletTicketStyleEnum("ticket_style"),
+    poster: t.boolean("poster").notNull().default(false),
+    etag: t.text("etag"),
+    createdAt: t
+      .timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: t
+      .timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdateFn(() => new Date()),
+  }),
+  (table) => ({
+    pk: primaryKey({ columns: [table.passTypeIdentifier, table.serialNumber] }),
+    updatedIdx: index("idx_wallet_pass_updated_at").on(table.updatedAt),
+  })
+);
+
+export const walletPassContent = pgTable(
+  "wallet_pass_content",
+  (t) => ({
+    passTypeIdentifier: t.text("pass_type_identifier").notNull(),
+    serialNumber: t.text("serial_number").notNull(),
+    data: jsonb("data").notNull(),
+    createdAt: t
+      .timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: t
+      .timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdateFn(() => new Date()),
+  }),
+  (table) => ({
+    pk: primaryKey({ columns: [table.passTypeIdentifier, table.serialNumber] }),
+    // Add FK using a separate constraint here or via SQL migration if needed
+  })
+);
+```
+
+### C) Alternative: rename path (for future reference — NOT applicable in greenfield)
+
+If you’re not greenfield in a future phase, you can rename in place and add the new content table. This is documented here for completeness but not part of the current implementation.
 
 ```sql
 ALTER TABLE certs          RENAME TO wallet_cert;
