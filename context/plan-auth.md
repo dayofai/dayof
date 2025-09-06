@@ -1182,4 +1182,434 @@ Keep `/api/auth` only as the **proxy path inside your web apps** for local/previ
 
 That gives you a clean, intention‑revealing URL on the auth domain, with zero downsides for cookies or clients, and preserves the nice dev/preview behavior via the per‑app `/api/auth` proxy.
 
+---
+
+> **Pick /auth** for the standalone auth service at auth.dayof.ai.
+> Keep /api/auth only as the **proxy path inside your web apps** for local/preview.
+
+What about our plan needs to change for this?
+
+---
+
+Short version: **nothing material changes**. The patch I gave you already implements the “/auth on the standalone service + /api/auth proxy in the web apps” model. If you apply it as‑is, you’re aligned with the decision.
+
+That said, here’s the **delta checklist** so you can sanity‑scan what actually depends on the choice of `/auth` vs `/api/auth`:
+
+---
+
+## What must match the `/auth` decision
+
+### 1) Auth service (apps/auth)
+
+- **Mount path:** handler mounted at `/auth/*` (not `/api/auth/*`).
+- **Base URL:** `BETTER_AUTH_URL` **includes the path**
+  `https://auth.dayof.ai/auth`
+- **Cookies (prod only):** `AUTH_COOKIE_DOMAIN=dayof.ai` (share across **dayof.ai** ↔ **app.dayof.ai**).
+- **CORS allowlist:** `ALLOWED_ORIGINS=https://dayof.ai,https://app.dayof.ai` (+ locals/previews).
+- **Runtime:** Node (unchanged).
+
+> If you ever switch to `/api/auth` on the auth service, you’d need to change both the mount path and every client’s `baseURL`. Otherwise, keep it on `/auth` and you’re done.
+
+### 2) Web apps (frontrow, backstage)
+
+- **Client `baseURL`:** point to `/auth` in prod, **proxy** in dev/preview:
+  - **Prod:** `VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth`
+  - **Dev/Preview:** `VITE_AUTH_BASE_URL=/api/auth`
+
+- **Proxy forward target:** must end with `/auth`
+  `AUTH_PROXY_BASE=https://<your-auth-preview-or-staging>/auth`
+- **No changes** to your app API base (`VITE_SERVER_URL`) or ORPC code.
+
+> Routing note: your `/api/auth.ts` filesystem function **wins before** Frontrow’s catch‑all rewrite to `/api/server`, so no extra vercel.json edits are needed.
+
+### 3) Expo (Crew)
+
+- **Client `baseURL`:** absolute, includes `/auth`
+  `EXPO_PUBLIC_AUTH_BASE_URL=https://auth.dayof.ai/auth`
+- Leave `EXPO_PUBLIC_SERVER_URL` as‑is for your own API.
+- The Expo plugin keeps storing & sending the session cookie; nothing else changes.
+
+### 4) Other services (events/Inngest, honoken)
+
+- No change required. If you later want those services to **read** the session, forward the cookie you already carry in web/Expo when calling them.
+
+---
+
+## Things that **don’t** change (but people often break)
+
+- **Cookie behavior:** Using `/auth` vs `/api/auth` doesn’t change cookies. In **prod**, you set `Domain=dayof.ai`. In **previews/dev**, you **omit** `AUTH_COOKIE_DOMAIN` so cookies are host‑only (that’s why we proxy through `/api/auth`).
+- **Client defaults:** Don’t rely on defaults. Always set `baseURL` explicitly (server and all clients). If someone forgets, they’ll try `/api/auth` and get 404s.
+
+---
+
+## Quick validation flow
+
+- **Prod web:** Sign in on `dayof.ai` → `Set-Cookie` shows `Domain=dayof.ai`. Navigate to `app.dayof.ai` → still signed in.
+- **Preview web:** Sign in on a preview URL → `Set-Cookie` has **no Domain** (host‑only). Works without any third‑party cookie issues because we go through `/api/auth`.
+- **Expo:** Sign in → subsequent calls carry the stored cookie; no browser SameSite rules involved.
+
+---
+
+### Bottom line
+
+You don’t need to change anything beyond what’s already in the diffs:
+
+- Keep **auth service at `/auth`**.
+- Keep **web proxies at `/api/auth`** only for dev/preview.
+- Set the envs exactly as above.
+
+If you want, I can add a tiny **README “Conventions”** section and a `check-env` script that fails builds when `VITE_AUTH_BASE_URL` / `EXPO_PUBLIC_AUTH_BASE_URL` aren’t set, so no one accidentally relies on defaults.
+
+---
+
+Perfect — here are **ready‑to‑commit diffs** that add a concise “Conventions” section to your root README and a detailed conventions doc under `context/docs/`.
+
+---
+
+### 1) `README.md` → add a high‑level **Conventions** section (links to the full doc)
+
+```diff
+diff --git a/README.md b/README.md
+index 8f2a3e5..d1b3b9c 100644
+--- a/README.md
++++ b/README.md
+@@ -66,3 +66,43 @@ Use the Expo Go app to run the mobile application.
+ The API is running at [http://localhost:3000](http://localhost:3000).
+
+ ## Project Structure
+@@ -102,3 +142,43 @@ dayof/
+ - `bun dev:server`: Start only the server
+ - `bun check-types`: Check TypeScript types across all apps
+ - `bun dev:native`: Start the React Native/Expo development server
+ - `bun db:push`: Push schema changes to database
+ - `bun db:studio`: Open database studio UI
++
++## Conventions (Auth, URLs, Cookies)
++
++**Auth is a dedicated Hono service** deployed as its own Vercel project at `auth.dayof.ai`, mounted at the path **`/auth`** (not `/api/auth`). All clients MUST set the full base URL including that path.
++
++**Production**
++- Web apps live at **`https://dayof.ai`** (Frontrow) and **`https://app.dayof.ai`** (Backstage).
++- Auth base URL: `https://auth.dayof.ai/auth`
++- Better Auth cookie scope: `Domain=dayof.ai` (shared apex ↔ subdomains), `Secure`, `HttpOnly`, default `SameSite=Lax`.
++- Web clients env: `VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth`
++- Expo env: `EXPO_PUBLIC_AUTH_BASE_URL=https://auth.dayof.ai/auth`
++
++**Local & Vercel Previews**
++- Do **not** set a cookie `Domain`. Cookies must be **host‑only**.
++- Each web app exposes a **proxy route**: `/api/auth/*` → upstream auth `.../auth/*`.
++- Web clients env: `VITE_AUTH_BASE_URL=/api/auth` and set `AUTH_PROXY_BASE` to your auth preview URL (must include `/auth`).
++
++**Never mount auth inside a web app**. Keep auth on `auth.dayof.ai`. Web apps only proxy in dev/preview for host‑only cookies.
++
++**Always set baseURL explicitly** on server & clients. Do **not** rely on Better Auth defaults.
++
++See the full policy and examples in [`context/docs/auth-conventions.md`](context/docs/auth-conventions.md).
+```
+
+---
+
+### 2) `context/docs/auth-conventions.md` → full, precise **Auth Conventions** (new)
+
+````diff
+diff --git a/context/docs/auth-conventions.md b/context/docs/auth-conventions.md
+new file mode 100644
+--- /dev/null
++++ b/context/docs/auth-conventions.md
+@@ -0,0 +1,294 @@
++# Auth Conventions (Better Auth + Hono)
++
++These conventions define how we run authentication across the monorepo (web apps, Expo app, and services).
++
++> TL;DR
++> **Auth lives at `https://auth.dayof.ai/auth` (standalone Hono service).**
++> Web apps **proxy `/api/auth/*` → auth** only in **local/preview**.
++> **Production cookies** use `Domain=dayof.ai` to share sessions between **dayof.ai** and **app.dayof.ai**.
++
++---
++
++## Terms
++
++- **Auth Service**: Vercel project at `auth.dayof.ai`, Hono app, Better Auth mounted under `/auth`.
++- **Frontrow**: Web app at `https://dayof.ai`.
++- **Backstage**: Web app at `https://app.dayof.ai`.
++- **Crew**: Expo (React Native) app.
++- **Services**: `events` (Inngest/Hono), `honoken` (PassKit Web Service).
++
++---
++
++## 1) URLs & Paths
++
++- **Auth Service path**: `/auth` (not `/api/auth`).
++  Server env: `BETTER_AUTH_URL=https://auth.dayof.ai/auth`
++
++- **Web apps (prod)** call auth **directly**:
++  `VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth`
++
++- **Web apps (local/preview)** call auth via **proxy**:
++  - Client base URL: `VITE_AUTH_BASE_URL=/api/auth`
++  - Edge function forwards `/api/auth/*` → `${AUTH_PROXY_BASE}/*`
++  - Env: `AUTH_PROXY_BASE=https://<auth-preview-or-staging>.vercel.app/auth` (must include `/auth`)
++
++- **Expo** always calls auth directly (no proxy):
++  `EXPO_PUBLIC_AUTH_BASE_URL=https://auth.dayof.ai/auth`
++
++- **Do not mount auth under any app’s `/api`**. Keep it as a dedicated service.
++
++---
++
++## 2) Cookies & SameSite Policy
++
++**Production**
++- Better Auth sets `Domain=dayof.ai` (apex). This shares the session across `dayof.ai` and `app.dayof.ai`.
++- `Secure`, `HttpOnly`, default `SameSite=Lax` are required/safe and work across apex ↔ subdomain (they are considered **same‑site**).
++- Server env (prod only): `AUTH_COOKIE_DOMAIN=dayof.ai`
++
++**Local & Preview**
++- **Do not** set a cookie `Domain`. Cookies must be **host‑only**.
++- Browsers will not accept parent domains on public‑suffix hosts like `*.vercel.app`; the proxy makes cookies same‑origin per preview host.
++- We keep `/api/auth/*` proxy in each web app so the response that sets the cookie comes **from the app’s own host**.
++
++**Expo**
++- The Expo client plugin stores/sends the cookie via `SecureStore`. Browser SameSite rules do not apply.
++
++---
++
++## 3) CORS & Trusted Origins
++
++- The Auth Service uses an allowlist. In **prod**:
++  - `ALLOWED_ORIGINS=https://dayof.ai,https://app.dayof.ai`
++- In **local/preview**, include: `http://localhost:3001`, `http://localhost:5173`, and any preview origins you need.
++- `credentials: true` must be enabled; the Better Auth React client handles it. Expo plugin attaches the cookie explicitly.
++- Trusted origins should also be set in Better Auth options (we centralize via env).
++
++---
++
++## 4) Runtimes
++
++- **Auth Service**: Vercel **Node** runtime (DB driver compatibility).
++- **Web app proxies**: **Edge** runtime (simple fetch forwarder).
++- **Frontrow SSR**: Edge (existing).
++- **Events/Honoken**: unchanged.
++
++---
++
++## 5) Environment Variables (by project)
++
++### Auth Service (`apps/auth`)
++
++Required:
++```
++DATABASE_URL=postgres://...
++BETTER_AUTH_SECRET=...                 # long random string
++BETTER_AUTH_URL=https://auth.dayof.ai/auth
++ALLOWED_ORIGINS=https://dayof.ai,https://app.dayof.ai,http://localhost:3001,http://localhost:5173
++```
++
++Production‑only:
++```
++AUTH_COOKIE_DOMAIN=dayof.ai            # share across apex + subdomains
++```
++
++Preview/Dev:
++```
++# Do NOT set AUTH_COOKIE_DOMAIN here.
++BETTER_AUTH_URL=https://<auth-preview>.vercel.app/auth
++ALLOWED_ORIGINS=<add your preview origins + locals>
++```
++
++### Web Apps (Frontrow, Backstage)
++
++Production:
++```
++VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth
++# AUTH_PROXY_BASE unset in prod
++```
++
++Preview/Dev:
++```
++VITE_AUTH_BASE_URL=/api/auth
++AUTH_PROXY_BASE=https://<auth-preview-or-staging>.vercel.app/auth
++```
++
++### Expo (Crew)
++
++All envs:
++```
++EXPO_PUBLIC_AUTH_BASE_URL=https://auth.dayof.ai/auth
++# EXPO_PUBLIC_SERVER_URL remains for your own API base (e.g., ORPC)
++```
++
++---
++
++## 6) Client Configuration
++
++### Web (React + TanStack Start)
++
++```ts
++// apps/*/src/lib/auth-client.ts
++import { createAuthClient } from "better-auth/react";
++
++export const authClient = createAuthClient({
++  // Prod: https://auth.dayof.ai/auth
++  // Dev/Preview: /api/auth (proxy path)
++  baseURL: import.meta.env.VITE_AUTH_BASE_URL!,
++});
++```
++
++### Expo (React Native)
++
++```ts
++import { createAuthClient } from "better-auth/react";
++import { expoClient } from "@better-auth/expo/client";
++import * as SecureStore from "expo-secure-store";
++
++export const authClient = createAuthClient({
++  baseURL: process.env.EXPO_PUBLIC_AUTH_BASE_URL!, // absolute, includes /auth
++  plugins: [
++    expoClient({
++      scheme: "dayof",             // set your deep-link scheme
++      storagePrefix: "dayof-crew",
++      storage: SecureStore,
++    }),
++  ],
++});
++```
++
++### Web Proxy (Edge function)
++
++```ts
++// apps/<app>/api/auth.ts
++export const config = { runtime: "edge" };
++const AUTH_PROXY_BASE = process.env.AUTH_PROXY_BASE!;
++export default async function handler(req: Request) {
++  const url = new URL(req.url);
++  const upstream = new URL(url.pathname.replace(/^\/api\/auth/, "") + url.search, AUTH_PROXY_BASE);
++  return fetch(upstream.toString(), {
++    method: req.method,
++    headers: req.headers,
++    body: ["GET","HEAD"].includes(req.method) ? undefined : req.body,
++    redirect: "manual",
++  });
++}
++```
++
++---
++
++## 7) Database & Adapters
++
++- Use Neon + Drizzle. The auth service imports our shared `database/db` client.
++- Ensure Better Auth tables are generated/migrated. Keep schema in `packages/database/schema` if you want it versioned with the rest of the DB.
++- The auth service runs on the Node runtime so the Neon fetch client works reliably.
++
++---
++
++## 8) Adding a New Web Client
++
++1. Create `.env` with:
++   - **Prod**: `VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth`
++   - **Preview/Dev**: `VITE_AUTH_BASE_URL=/api/auth` and `AUTH_PROXY_BASE=https://<auth-preview>/auth`
++2. Add `/api/auth.ts` proxy (Edge) identical to the other web apps.
++3. Use the standard `authClient` import and call `authClient.signIn.*`, `authClient.signUp.*`, etc.
++4. Verify:
++   - Preview cookie is **host‑only** (no `Domain` attribute).
++   - Prod cookie shows `Domain=dayof.ai` and the session is shared with other hosts under the domain.
++
++---
++
++## 9) Security Rules
++
++- **Do not** set `AUTH_COOKIE_DOMAIN` in local/preview.
++- Only allow trusted origins (set `ALLOWED_ORIGINS`).
++- Leave `HttpOnly` and `Secure` on. Use HTTPS everywhere.
++- If you ever host untrusted tools under `*.dayof.ai`, consider isolating them on a separate registrable domain so shared cookies aren’t exposed.
++- Don’t rely on public‑suffix domains (`*.vercel.app`) for cross‑subdomain cookies; they are intentionally blocked by browsers.
++
++---
++
++## 10) Testing & Troubleshooting
++
++### Production sanity checks
++1. Sign in on **`https://dayof.ai`** → confirm `Set-Cookie` includes `Domain=dayof.ai`.
++2. Navigate to **`https://app.dayof.ai`** → user is already authenticated.
++
++### Preview sanity checks
++1. Sign in on a **preview** URL → `Set-Cookie` **does not** include `Domain`, and is stored for that host only.
++2. Repeat on another preview → sessions are isolated (host‑only).
++
++### Common mistakes
++- Missing/incorrect `baseURL` (clients default to `/api/auth` and 404).
++- Proxy misconfigured (missing `/auth` at the end of `AUTH_PROXY_BASE`).
++- Setting cookie domain on preview (breaks because public‑suffix).
++
++---
++
++## 11) Service Interaction Notes
++
++- **Events (Inngest)**: if auth should emit events (e.g., `user/signed_in`), use Better Auth hooks and `fetch` the events endpoint from the auth service. Keep workflows in the events service.
++- **Honoken**: keep its `/api/v1/...` routes independent. If it needs the session, forward the cookie from callers.
++- **ORPC (`/rpc`)** remains our own app API and is independent of the auth service pathing.
++
++---
++
++## 12) Why `/auth` (not `/api/auth`)?
++
++- Clear separation of concerns: the auth service can still expose its own `/api/*` for unrelated admin/endpoints later.
++- Avoids mental and rewrite collisions with existing app‑level `/api/*` (SSR, RPC, etc.).
++- Cookie behavior is identical either way; path choice doesn’t affect it.
++- The only requirement is: **always** set the base URL explicitly on server and clients.
++
++---
++
++## 13) Quick Reference (copy/paste)
++
++**Auth Service (prod)**
++```
++BETTER_AUTH_URL=https://auth.dayof.ai/auth
++AUTH_COOKIE_DOMAIN=dayof.ai
++ALLOWED_ORIGINS=https://dayof.ai,https://app.dayof.ai
++```
++
++**Auth Service (preview)**
++```
++BETTER_AUTH_URL=https://<auth-preview>.vercel.app/auth
++# Do not set AUTH_COOKIE_DOMAIN
++ALLOWED_ORIGINS=<preview-web-origins>,http://localhost:3001,http://localhost:5173
++```
++
++**Frontrow/Backstage (prod)**
++```
++VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth
++```
++
++**Frontrow/Backstage (preview/dev)**
++```
++VITE_AUTH_BASE_URL=/api/auth
++AUTH_PROXY_BASE=https://<auth-preview-or-staging>.vercel.app/auth
++```
++
++**Crew (Expo)**
++```
++EXPO_PUBLIC_AUTH_BASE_URL=https://auth.dayof.ai/auth
++```
++
++---
++
++## 14) Migration Notes (if we change paths later)
++
++If we ever switch the auth mount path (e.g., `/auth` → `/api/auth`):
++1. Change `BETTER_AUTH_URL` on the auth service to the **new full URL including the path**.
++2. Update **all** clients’ `baseURL` envs to the same path.
++3. Update proxy functions’ `AUTH_PROXY_BASE` to include the new path.
++4. Smoke test prod + preview cookie behavior again.
++
++---
++
++_Last updated:_ keep this doc consistent with any changes to auth pathing, cookie policy, or origin policy.
+````
+
+---
+
+If you want, I can also add a tiny `scripts/check-env.ts` (or a package.json script) that fails builds when `VITE_AUTH_BASE_URL` / `EXPO_PUBLIC_AUTH_BASE_URL` are missing in web/Expo apps and when `BETTER_AUTH_URL` is missing in the auth service.
+
 </plan>

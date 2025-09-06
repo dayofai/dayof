@@ -20,6 +20,13 @@
     ]
   },
   "extends": ["ultracite"],
+  "linter": {
+    "rules": {
+      "performance": {
+        "noNamespaceImport": "off"
+      }
+    }
+  },
   "overrides": [
     {
       "includes": [
