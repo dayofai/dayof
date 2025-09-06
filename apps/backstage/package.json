@@ -1,5 +1,5 @@
 {
-  "name": "platform",
+  "name": "backstage",
   "private": true,
   "type": "module",
   "scripts": {

@@ -11,7 +11,7 @@
     "dev:events": "turbo -F events dev",
     "build": "turbo build --filter=!handbook --filter=!crew",
     "check-types": "turbo check-types",
-    "dev:platform": "turbo -F platform dev",
+    "dev:backstage": "turbo -F backstage dev",
     "dev:frontrow": "turbo -F frontrow dev",
     "dev:handbook": "turbo -F handbook dev",
     "dev:crew": "turbo -F crew dev",
