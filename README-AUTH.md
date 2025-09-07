@@ -1,18 +1,18 @@
-## Auth Service (Better Auth + Hono)
+# Auth Service (Better Auth + Hono)
 
 This repo uses a standalone Better Auth service (Hono, Vercel Node) mounted at `/auth`. Web apps use a proxy (`/api/auth/*`) only in dev/preview. Expo calls the auth service directly.
 
-### Hosts
+## Hosts
 
 - Production web: `https://dayof.ai` (Frontrow), `https://app.dayof.ai` (Backstage)
 - Auth: `https://auth.dayof.ai/auth`
 
-### Environments and cookies
+## Environments and cookies
 
 - Production: cookies are shared between apex and subdomain via `Domain=dayof.ai`.
 - Preview/Local: cookies are host-only; web apps proxy `/api/auth/*` to the auth service.
 
-### Projects and env vars
+## Projects and env vars
 
 Auth (apps/auth)
 
@@ -33,13 +33,13 @@ Crew (Expo)
 - EXPO_PUBLIC_AUTH_BASE_URL: `https://auth.dayof.ai/auth`
 - EXPO_PUBLIC_SERVER_URL: your app API base (unchanged)
 
-### Runtime/Routes
+## Runtime/Routes
 
 - Auth service (Node runtime): `/auth/*`
 - Frontrow SSR remains on Edge; `/api/auth` proxy (Edge) forwards to `AUTH_PROXY_BASE`.
 - Backstage `/api/auth` proxy (Edge) forwards to `AUTH_PROXY_BASE`.
 
-### Better Auth configuration (server)
+## Better Auth configuration (server)
 
 - Base URL includes the path `/auth`.
 - CORS allowlist reads `ALLOWED_ORIGINS` and enables `credentials`.
@@ -52,13 +52,13 @@ Plugins enabled
 
 References
 
-- Phone Number: https://www.better-auth.com/docs/plugins/phone-number
-- Magic Link: https://www.better-auth.com/docs/plugins/magic-link
-- Anonymous: https://www.better-auth.com/docs/plugins/anonymous
-- Admin: https://www.better-auth.com/docs/plugins/admin
-- JWT: https://www.better-auth.com/docs/plugins/jwt
+- [Phone Number](https://www.better-auth.com/docs/plugins/phone-number)
+- [Magic Link](https://www.better-auth.com/docs/plugins/magic-link)
+- [Anonymous](https://www.better-auth.com/docs/plugins/anonymous)
+- [Admin](https://www.better-auth.com/docs/plugins/admin)
+- [JWT](https://www.better-auth.com/docs/plugins/jwt)
 
-### Database schema
+## Database schema
 
 - Location: `packages/database/schema/better-auth.ts` (merged, singular table names)
 - Tables/columns (singular): `user`, `session`, `account`, `verification`, `organization`, `member`, `invitation`, `jwks`
@@ -66,7 +66,7 @@ References
   - user: `phoneNumber`, `phoneNumberVerified`, `isAnonymous`, `role`, `banned`, `banReason`, `banExpires`
   - session: `activeOrganizationId`, `impersonatedBy`
 
-#### Drizzle V2 & migrations (monorepo standard)
+### Drizzle V2 & migrations (monorepo standard)
 
 - The shared database package (`packages/database`) is the single source of truth for Drizzle V2 schema and migrations across services (including Auth and Honoken).
 - Generate migrations only from `packages/database` (using Drizzle Kit). App folders (e.g., `apps/auth`) should NOT hold their own `drizzle.config.ts` or generate migrations.
@@ -76,18 +76,18 @@ References
   - Apply the generated SQL under `packages/database/migrations` via Neon Console or your preferred client
 - Services consume `db`/`schema` from the shared `database` package at runtime; no runtime dependency on Drizzle Kit.
 
-### Schema generation (already applied here)
+## Schema generation (already applied here)
 
 - Generator config: `apps/auth/cli-auth.config.ts`
 - Command used:
   - `npx @better-auth/cli@1.3.8 generate --config apps/auth/cli-auth.config.ts --output packages/database/schema/better-auth.generated.ts --yes`
   - The generated schema was merged into `better-auth.ts` and the generated file removed.
 
-### Env templates
+## Env templates
 
 Auth (.env)
 
-```
+```bash
 DATABASE_URL=
 BETTER_AUTH_SECRET=
 BETTER_AUTH_URL=https://auth.dayof.ai/auth
@@ -99,7 +99,7 @@ INNGEST_EVENT_KEY=
 
 Frontrow (.env)
 
-```
+```bash
 # prod
 VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth
 # preview/dev
@@ -109,7 +109,7 @@ VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth
 
 Backstage (.env)
 
-```
+```bash
 # prod
 VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth
 # preview/dev
@@ -119,24 +119,24 @@ VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth
 
 Crew (.env)
 
-```
+```bash
 EXPO_PUBLIC_AUTH_BASE_URL=https://auth.dayof.ai/auth
 EXPO_PUBLIC_SERVER_URL=
 ```
 
-### Quick validation
+## Quick validation
 
 - Prod sign-in on `dayof.ai` → `Set-Cookie` shows `Domain=dayof.ai`; navigate to `app.dayof.ai` and session is present.
 - Preview sign-in on a preview host → `Set-Cookie` has no Domain; session remains host-only via the proxy.
 - Expo sign-in → subsequent calls include the stored cookie via plugin storage.
 
-### Notes
+## Notes
 
 - Always keep server and client baseURL paths aligned.
 - In preview/dev do not set `AUTH_COOKIE_DOMAIN`.
 - When calling the auth service cross-origin (no proxy), ensure `credentials: "include"`.
 
-### Inngest Use Cases
+## Inngest Use Cases
 
 - **Analytics and Auditing**: Track sign-ins (IP, user agent, geo) for dashboards, anomaly detection, and SOC2 audit trails.
 - **Onboarding Automation**: Create default entities (organization, roles, wallet), seed user preferences, and send welcome emails or push notifications after first sign-in.
@@ -144,9 +144,9 @@ EXPO_PUBLIC_SERVER_URL=
 - **Cross-App Coordination**: Notify other services or applications (via an events worker) about sign-ins to trigger follow-up jobs.
 - **Security Actions**: Trigger risk scoring, device linking, or step-up authentication when suspicious patterns are detected.
 
-#### Other possible events
+### Other possible events
 
-##### Core
+#### Core
 
 - `user/failed_sign_in`
 - `user/password_changed`
@@ -155,7 +155,7 @@ EXPO_PUBLIC_SERVER_URL=
 - `user/delete_requested`
 - `user/deleted`
 
-##### Accounts & Sessions
+#### Accounts & Sessions
 
 - `account/linked`
 - `account/unlinked`
@@ -163,21 +163,21 @@ EXPO_PUBLIC_SERVER_URL=
 - `session/expired`
 - `session/active_org_changed`
 
-##### Organization (Plugin)
+#### Organization (Plugin)
 
 - `organization/created`
 - `member/invited`
 - `member/accepted_invite`
 - `member/role_changed`
 
-##### Phone & Magic Link (Plugins)
+#### Phone & Magic Link (Plugins)
 
 - `phone/otp_sent`
 - `phone/verified`
 - `magic_link/sent`
 - `magic_link/signed_in`
 
-##### 2FA & Passkey (Plugins)
+#### 2FA & Passkey (Plugins)
 
 - `two_factor/enrolled`
 - `two_factor/verified`
@@ -185,7 +185,7 @@ EXPO_PUBLIC_SERVER_URL=
 - `passkey/registered`
 - `passkey/signed_in`
 
-##### Admin & JWT (Plugins)
+#### Admin & JWT (Plugins)
 
 - `admin/banned`
 - `admin/unbanned`

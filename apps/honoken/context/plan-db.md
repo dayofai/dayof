@@ -9,10 +9,10 @@
 
 - **Prefix**: Use `wallet_` for table names (e.g., `wallet_pass`, `wallet_registration`).
 - **Pass content**: Separate table `wallet_pass_content` (one-to-one with `wallet_pass`), JSONB payload; no versioning/history initially.
-- **Tenancy**: `wallet_cert`, `wallet_apns_key`, `wallet_pass_type` remain independent (no `org_id`) for now.
+- **Tenancy**: Passes belong to organizations. Use `createdBy()` to attach `org_id` on `wallet_pass` (and derived rows). `wallet_cert` and `wallet_apns_key` remain global (DayOf SaaS). `wallet_pass_type` is universal.
 - **Soft delete**: Use shared `timeStamps({ softDelete: true })` where appropriate; continue `active` boolean for registrations and leave note about future soft-delete.
 - **ETag**: Compute on write (create/update of pass or content), store in `wallet_pass.etag`. GET path reads only; middleware should not write.
-- **Auth token**: Retain plaintext token for now to match current code paths; plan a follow-up to hash tokens later.
+- **Auth token**: Dev-only plaintext token to keep flows simple (do not ship to prod). Next step: switch to deterministic HMAC tokens (no storage) with versioned secrets and rotation; see "Next step — Deterministic ApplePass tokens (prod)" below.
 - **Logs**: PostHog only; no DB table for `/v1/log` at this time.
 - **APNs dev trigger**: Provide a minimal authenticated endpoint to enqueue/send dev pushes; production orchestration via Inngest.
 - **Naming**: Enforce snake_case for all table and column names in Postgres.
@@ -29,7 +29,7 @@
    - Drizzle relations for joins where useful
    - Type exports for `$inferSelect`/`$inferInsert` so downstream services have strong typing
 2. Export wallet schema from `packages/database/schema/index.ts` and include in the shared `schema` object.
-3. Generate and apply migrations from the shared database package (Drizzle V2), targeting Neon.
+3. Generate migrations from the shared database package (Drizzle V2); applying to Neon will be done later.
 4. Update Honoken to import `db` and `schema` from `database` package and replace local schema imports/usages.
 5. Implement ETag-on-write helpers and refactor middleware to read-only behavior.
 6. Optionally add an admin dev endpoint to trigger APNs for a pass.
@@ -225,7 +225,7 @@ File: `apps/honoken/src/routes/admin.ts`
 ## Rollout Steps
 
 1. Implement Drizzle V2 schema in `packages/database/schema/wallet.ts`; export from `packages/database/schema/index.ts`.
-2. Add `packages/database/drizzle.config.ts` (if missing). Generate migrations in the shared package and apply to Neon.
+2. Add `packages/database/drizzle.config.ts` (if missing). Generate migrations in the shared package; defer applying to Neon until instructed.
 3. Update Honoken imports to use shared `database` package schema and client; remove local schema usage.
 4. Refactor `pkpass-etag` to read-only; add write helpers for ETag.
 5. Smoke test endpoints (`/v1/*`), especially conditional GET paths and registration flows.
@@ -267,11 +267,27 @@ If any issues arise during consolidation:
 
 This section refines the plan with pragmatic changes and concrete code/SQL based on the review. It focuses on correctness, performance, and a frictionless rollout.
 
-### A) Greenfield mode simplifications
+### A) Greenfield mode notes
 
-- IV columns: Since ciphertext is versioned as `version:iv:ciphertext`, we can drop legacy `iv` columns entirely in `wallet_cert` and `wallet_apns_key` (no need to keep them nullable in greenfield).
-- Soft delete: Defer soft delete for `wallet_*` tables to avoid accidental omissions in filters. Keep only `created_at` / `updated_at`. We can add soft delete later with clear query conventions.
+- Soft delete: Follow shared convention via `timeStamps({ softDelete: true })` where specified in this plan.
 - Enum reuse vs rename: For greenfield creation, define `wallet_ticket_style_enum` directly and use it in `wallet_pass.ticket_style`.
+
+#### Next step — Deterministic ApplePass tokens (prod) NOT NOW, LATER
+
+- Rationale: Avoid storing tokens at rest; simplify verification and rotation.
+- Token format: `v{n}.{base64url(HMAC_SHA256(secret_n, passTypeIdentifier:serialNumber))}`.
+- Env:
+  - `HONOKEN_TOKEN_SECRET_CURRENT` (e.g., `v1`)
+  - `HONOKEN_TOKEN_SECRET_V1`, `HONOKEN_TOKEN_SECRET_V2`, ... (base64 keys)
+  - Optional: `HONOKEN_TOKEN_ALLOWED_VERSIONS` (comma list like `v1,v2`) for grace periods.
+- Verify (server): parse version → pick `secret_n` → recompute HMAC over `${passTypeIdentifier}:${serialNumber}` → constant‑time compare.
+- Issue (build pass): always embed token with `HONOKEN_TOKEN_SECRET_CURRENT`.
+- Rotation:
+  1. Add new secret and set `CURRENT` to new version; keep old in allowed.
+  2. Dual-verify old+new; APNs push to prompt Wallet to fetch refreshed pass carrying new token.
+  3. Observe adoption; retire old version by removing it from allowed list.
+  4. Emergency: remove compromised version immediately; requires re‑issuance for affected passes.
+- Dev note: keep plaintext during development only; switch to deterministic before production cutover.
 
 Clarifying note: If you later share DB with legacy tables, consider the rename path below instead of fresh creates.
 
@@ -291,7 +307,8 @@ CREATE TABLE wallet_cert (
   team_id TEXT NOT NULL,
   encrypted_bundle TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
 );
 CREATE INDEX idx_wallet_certs_enhanced ON wallet_cert (is_enhanced);
 CREATE INDEX idx_wallet_certs_team_id ON wallet_cert (team_id);
@@ -303,7 +320,8 @@ CREATE TABLE wallet_apns_key (
   key_id TEXT NOT NULL,
   encrypted_p8_key TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
 );
 CREATE INDEX idx_wallet_apns_key_team_active ON wallet_apns_key (team_id, is_active);
 CREATE UNIQUE INDEX uq_wallet_apns_key_team_key ON wallet_apns_key (team_id, key_id);
@@ -312,7 +330,8 @@ CREATE TABLE wallet_pass_type (
   pass_type_identifier TEXT PRIMARY KEY,
   cert_ref TEXT NOT NULL REFERENCES wallet_cert(cert_ref),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
 );
 CREATE INDEX idx_wallet_pass_type_cert_ref ON wallet_pass_type (cert_ref);
 
@@ -325,6 +344,8 @@ CREATE TABLE wallet_pass (
   etag TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  org_id TEXT REFERENCES organization(id) ON DELETE CASCADE,
   PRIMARY KEY (pass_type_identifier, serial_number),
   CONSTRAINT wallet_pass_type_fk FOREIGN KEY (pass_type_identifier)
     REFERENCES wallet_pass_type(pass_type_identifier)
@@ -337,7 +358,8 @@ CREATE TABLE wallet_device (
   device_library_identifier TEXT PRIMARY KEY,
   push_token TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE wallet_registration (
@@ -347,6 +369,8 @@ CREATE TABLE wallet_registration (
   active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  org_id TEXT REFERENCES organization(id) ON DELETE CASCADE,
   PRIMARY KEY (device_library_identifier, pass_type_identifier, serial_number),
   CONSTRAINT wallet_registration_pass_fk FOREIGN KEY (pass_type_identifier, serial_number)
     REFERENCES wallet_pass(pass_type_identifier, serial_number)
@@ -363,6 +387,8 @@ CREATE TABLE wallet_pass_content (
   data JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  org_id TEXT REFERENCES organization(id) ON DELETE CASCADE,
   PRIMARY KEY (pass_type_identifier, serial_number),
   CONSTRAINT wallet_pass_content_fk FOREIGN KEY (pass_type_identifier, serial_number)
     REFERENCES wallet_pass(pass_type_identifier, serial_number)
@@ -397,7 +423,9 @@ DEV_DATABASE_URL=postgresql://... npx drizzle-kit generate
 # Apply via Neon Console or preferred SQL client.
 ```
 
-Drizzle V2 table example (TypeScript) for `wallet_pass` and `wallet_pass_content`:
+Drizzle V2 table example (TypeScript) for `wallet_pass` and `wallet_pass_content` (with `createdBy()` providing `org_id`).
+
+Note: Examples use shared helpers from the database package — `timeStamps({ softDelete: true })` and `createdBy()` — to match conventions in `packages/database/schema/*`. Avoid declaring `created_at`, `updated_at`, `deleted_at`, or `org_id` manually in TypeScript; use these helpers instead.
 
 ```ts
 // packages/database/schema/wallet.ts
@@ -411,6 +439,8 @@ import {
   index,
   jsonb,
 } from "drizzle-orm/pg-core";
+import { createdBy } from "./extend-created-by";
+import { timeStamps } from "./extend-timestamps";
 
 export const walletTicketStyleEnum = pgEnum("wallet_ticket_style_enum", [
   "coupon",
@@ -428,15 +458,8 @@ export const walletPass = pgTable(
     ticketStyle: walletTicketStyleEnum("ticket_style"),
     poster: t.boolean("poster").notNull().default(false),
     etag: t.text("etag"),
-    createdAt: t
-      .timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: t
-      .timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow()
-      .$onUpdateFn(() => new Date()),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
   }),
   (table) => ({
     pk: primaryKey({ columns: [table.passTypeIdentifier, table.serialNumber] }),
@@ -450,15 +473,8 @@ export const walletPassContent = pgTable(
     passTypeIdentifier: t.text("pass_type_identifier").notNull(),
     serialNumber: t.text("serial_number").notNull(),
     data: jsonb("data").notNull(),
-    createdAt: t
-      .timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: t
-      .timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow()
-      .$onUpdateFn(() => new Date()),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
   }),
   (table) => ({
     pk: primaryKey({ columns: [table.passTypeIdentifier, table.serialNumber] }),
@@ -601,7 +617,7 @@ v1.get(
 
 ### E) Certs/APNs storage & caching refinements
 
-1. DB ping on every cache hit: add a per-entry `lastCheckedAt` and a min recheck interval (e.g., 30–60s). Keep admin invalidation endpoints for instant bust.
+- DB ping on every cache hit: add a per-entry `lastCheckedAt` and a min recheck interval (e.g., 30–60s). Keep admin invalidation endpoints for instant bust.
 
 ```ts
 const MIN_RECHECK_MS = 60_000; // 60s
@@ -616,7 +632,7 @@ if (cache.has(key)) {
 }
 ```
 
-2. AES key length policy: enforce 32‑byte keys consistently.
+- AES key length policy: enforce 32‑byte keys consistently.
 
 ```ts
 const keyBytes = base64ToArrayBuffer(base64Key);
@@ -627,10 +643,7 @@ if (keyBytes.byteLength !== 32) {
 }
 ```
 
-3. Zod version alignment:
-
-- Either upgrade to Zod v4 across the app (and ensure `@hono/zod-validator` supports it), or
-- Revert imports to `import { z } from 'zod'` and avoid v4-only helpers like `z.prettifyError`.
+- Zod version alignment: adopt Zod v4 monorepo-wide and use v4-idiomatic helpers consistently.
 
 ### F) APNs sending — concurrency & Retry‑After
 
@@ -758,3 +771,31 @@ if (status === 429 && retryAfter) {
 6) README and code alignment: I will update Honoken README to explicitly mention wallet_pass_content and ETag-on-write; OK?
 
 7) Zod version: Upgrade the monorepo to Zod v4 (and matching @hono/zod-validator), or keep v3 and remove v4-only APIs in the examples?
+
+---
+
+## Decisions (Q1–Q7) — confirmed
+
+- **Why indexing/hashing auth tokens?** — Elsewhere in `@schema/` we hash or encrypt lookup secrets. For Wallet, Apple requires the plaintext token in `Authorization: ApplePass <token>`.
+
+- **Apple spec compliance** — The schema and endpoints match `context/docs/apple-docs.md` exactly: devices (`wallet_device`), passes (`wallet_pass`), registrations (`wallet_registration`), list-updated based on `wallet_pass.updated_at`, GET pass returns pkpass with `ETag` and `Last-Modified`, and unregister/log endpoints as specified.
+
+- **Token index** — Start with a btree index on `wallet_pass.authentication_token` to support register/verify.
+
+- **Relations** — Add full Drizzle V2 `relations()` now: pass ↔ pass_type, pass ↔ content, registration ↔ device/pass, cert ↔ pass_type, apns_key ↔ cert(team_id).
+
+- **Migration state** — Greenfield: no Neon schema exists yet. We'll leave this for the user to do later.
+
+- **README timing** — Defer README edits until implementation is complete.
+
+- **Zod v4** — Adopt Zod 4 monorepo-wide and keep `packages/database/runtime/zod.ts` idiomatic. Ensure dual runtime (`runtime/effect.ts`, `runtime/zod.ts`) stay aligned.
+
+---
+
+## Apple Wallet Spec Mapping (quick reference)
+
+- Register: POST `/v1/devices/{deviceLibraryIdentifier}/registrations/{passTypeIdentifier}/{serialNumber}` — ApplePass auth; upsert `wallet_device`, insert `wallet_registration`.
+- List Updated: GET `/v1/devices/{deviceLibraryIdentifier}/registrations/{passTypeIdentifier}?passesUpdatedSince=ts` — responds with `{ serialNumbers, lastUpdated }` using `wallet_pass.updated_at`.
+- Send Updated Pass: GET `/v1/passes/{passTypeIdentifier}/{serialNumber}` — ApplePass auth; returns pkpass; uses stored `etag` and `updated_at` for conditional headers.
+- Unregister: DELETE `/v1/devices/{deviceLibraryIdentifier}/registrations/{passTypeIdentifier}/{serialNumber}` — ApplePass auth; delete from `wallet_registration` (and optionally GC devices later).
+- Log: POST `/v1/log` — handled via PostHog, no DB table required.

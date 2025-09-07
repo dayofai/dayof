@@ -19,7 +19,7 @@
     "deploy:prod": "vercel --prod"
   },
   "dependencies": {
-    "@hono/zod-validator": "^0.7.0",
+    "@hono/zod-validator": "^0.7.2",
     "@neondatabase/serverless": "^1.0.1",
     "@upstash/redis": "^1.35.0",
     "database": "workspace:*",
