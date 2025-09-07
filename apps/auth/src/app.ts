@@ -12,7 +12,8 @@ const ALLOW = (process.env.ALLOWED_ORIGINS ?? '')
 app.use(
   '/auth/*',
   cors({
-    origin: (origin) => (origin && ALLOW.includes(origin) ? origin : null),
+    origin: (origin) =>
+      origin ? (ALLOW.includes(origin) ? origin : 'null') : 'null',
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
