@@ -21,6 +21,7 @@ Auth (apps/auth)
 - BETTER_AUTH_URL (must include path, e.g. `https://auth.dayof.ai/auth`)
 - AUTH_COOKIE_DOMAIN=dayof.ai (prod only)
 - ALLOWED_ORIGINS=`https://dayof.ai,https://app.dayof.ai[,http://localhost:3001,http://localhost:5173]`
+- INNGEST_EVENT_KEY (optional: required if emitting events from auth)
 
 Frontrow / Backstage (web)
 
@@ -65,7 +66,17 @@ References
   - user: `phoneNumber`, `phoneNumberVerified`, `isAnonymous`, `role`, `banned`, `banReason`, `banExpires`
   - session: `activeOrganizationId`, `impersonatedBy`
 
-Schema generation (already applied here)
+#### Drizzle V2 & migrations (monorepo standard)
+
+- The shared database package (`packages/database`) is the single source of truth for Drizzle V2 schema and migrations across services (including Auth and Honoken).
+- Generate migrations only from `packages/database` (using Drizzle Kit). App folders (e.g., `apps/auth`) should NOT hold their own `drizzle.config.ts` or generate migrations.
+- Typical flow:
+  - Set `DEV_DATABASE_URL` to your Neon dev branch URL in your shell
+  - From `packages/database`, run: `npx drizzle-kit generate`
+  - Apply the generated SQL under `packages/database/migrations` via Neon Console or your preferred client
+- Services consume `db`/`schema` from the shared `database` package at runtime; no runtime dependency on Drizzle Kit.
+
+### Schema generation (already applied here)
 
 - Generator config: `apps/auth/cli-auth.config.ts`
 - Command used:
@@ -83,6 +94,7 @@ BETTER_AUTH_URL=https://auth.dayof.ai/auth
 # prod only
 AUTH_COOKIE_DOMAIN=dayof.ai
 ALLOWED_ORIGINS=https://dayof.ai,https://app.dayof.ai,http://localhost:3001,http://localhost:5173
+INNGEST_EVENT_KEY=
 ```
 
 Frontrow (.env)

@@ -15,6 +15,7 @@
 - **Auth token**: Retain plaintext token for now to match current code paths; plan a follow-up to hash tokens later.
 - **Logs**: PostHog only; no DB table for `/v1/log` at this time.
 - **APNs dev trigger**: Provide a minimal authenticated endpoint to enqueue/send dev pushes; production orchestration via Inngest.
+- **Naming**: Enforce snake_case for all table and column names in Postgres.
 
 ---
 
@@ -26,6 +27,7 @@
    - `wallet_pass` (composite PK), `wallet_device`, `wallet_registration`
    - `wallet_pass_content` (composite PK and FK to `wallet_pass`)
    - Drizzle relations for joins where useful
+   - Type exports for `$inferSelect`/`$inferInsert` so downstream services have strong typing
 2. Export wallet schema from `packages/database/schema/index.ts` and include in the shared `schema` object.
 3. Generate and apply migrations from the shared database package (Drizzle V2), targeting Neon.
 4. Update Honoken to import `db` and `schema` from `database` package and replace local schema imports/usages.
@@ -86,6 +88,11 @@ File: `packages/database/schema/wallet.ts`
   - Composite pk `(passTypeIdentifier, serialNumber)` and fk to `wallet_pass` with cascade delete.
   - Column: `data` JSONB (typed with `$type<PassDataEventTicket>` if desired), timestamps via `timeStamps({ softDelete: true })`.
 - Add Drizzle `relations()` where useful for read convenience (e.g., pass → pass_type, pass → pass_content, registration → device/pass).
+- Add Drizzle `relations()` where useful for read convenience (e.g., pass → pass_type, pass → pass_content, registration → device/pass).
+- Add TypeScript type exports for strong typing downstream:
+  - `export type WalletCert = typeof walletCert.$inferSelect`
+  - `export type NewWalletCert = typeof walletCert.$inferInsert`
+  - (repeat for each table)
 
 File: `packages/database/schema/index.ts`
 
@@ -227,6 +234,17 @@ File: `apps/honoken/src/routes/admin.ts`
 
 ---
 
+## Rollback Plan (greenfield safety net)
+
+If any issues arise during consolidation:
+
+1. Keep the original `apps/honoken/src/db/schema.ts` and related imports intact in version control.
+2. Ensure Drizzle migrations are reversible. If needed, drop the newly created `wallet_*` tables.
+3. Revert Honoken imports back to local schema usage and re‑deploy.
+4. Investigate, adjust schema or code, then re‑apply migrations from the shared package.
+
+---
+
 ## References to Updated Files
 
 - `packages/database/schema/index.ts` (compose wallet tables into `schema`)
@@ -313,6 +331,7 @@ CREATE TABLE wallet_pass (
     ON UPDATE RESTRICT
 );
 CREATE INDEX idx_wallet_pass_updated_at ON wallet_pass (updated_at);
+CREATE INDEX idx_wallet_pass_auth_token ON wallet_pass (authentication_token);
 
 CREATE TABLE wallet_device (
   device_library_identifier TEXT PRIMARY KEY,
@@ -446,6 +465,28 @@ export const walletPassContent = pgTable(
     // Add FK using a separate constraint here or via SQL migration if needed
   })
 );
+
+// Relations examples
+export const walletPassRelations = relations(walletPass, ({ one, many }) => ({
+  passType: one(walletPassType, {
+    fields: [walletPass.passTypeIdentifier],
+    references: [walletPassType.passTypeIdentifier],
+  }),
+  content: one(walletPassContent, {
+    fields: [walletPass.passTypeIdentifier, walletPass.serialNumber],
+    references: [
+      walletPassContent.passTypeIdentifier,
+      walletPassContent.serialNumber,
+    ],
+  }),
+  registrations: many(walletRegistration),
+}));
+
+// Type exports
+export type WalletPass = typeof walletPass.$inferSelect;
+export type NewWalletPass = typeof walletPass.$inferInsert;
+export type WalletPassContent = typeof walletPassContent.$inferSelect;
+export type NewWalletPassContent = typeof walletPassContent.$inferInsert;
 ```
 
 ### C) Alternative: rename path (for future reference — NOT applicable in greenfield)
@@ -479,6 +520,15 @@ Key rules:
 - On any pass metadata change: update fields, then recompute ETag and set `wallet_pass.updated_at = now()` within the SAME transaction.
 - Transitional fallback: if `wallet_pass.etag` is NULL (legacy/older rows), compute ETag on the fly in GET but do not persist.
 - Last-Modified: use only `wallet_pass.updated_at` (we bump it for content changes), so middleware doesn’t need a join.
+- ETag composition (fields, in order):
+  1. serialNumber
+  2. passTypeIdentifier
+  3. authenticationToken
+  4. ticketStyle
+  5. poster
+  6. updatedAt (ISO)
+  7. passContent.data (stable stringified JSON)
+     Hash using SHA‑256; encode as hex (or base64 if preferred, but be consistent).
 
 Example write helper (TypeScript):
 
@@ -664,6 +714,26 @@ if (status === 429 && retryAfter) {
 5. Config sanity
    - No `/api` rewrite issues; Node version aligned; Zod version consistent.
 
+### Testing Requirements (expanded)
+
+#### Unit Tests
+
+- [ ] ETag computation with all field combinations
+- [ ] Composite PK operations (insert, update, delete)
+- [ ] Foreign key cascade behaviors
+
+#### Integration Tests
+
+- [ ] Full pass creation → registration → update flow
+- [ ] Certificate rotation during active operations
+- [ ] Concurrent device registrations for same pass
+
+#### Load Tests
+
+- [ ] 10K devices registering for single pass
+- [ ] APNs push to 5K devices
+- [ ] Concurrent ETag checks under load
+
 ---
 
 ## Open Clarifying Questions
@@ -674,3 +744,17 @@ if (status === 429 && retryAfter) {
 4. Dev push endpoint: should it enqueue (Inngest) or call APNs directly for development convenience?
 5. PostHog policy: make it optional in dev (warn only) and required in prod, or optional everywhere?
 6. Drizzle migrations: confirm that the shared `database` package will own migrations and Honoken’s local drizzle config can be removed.
+
+1) TypeScript strategy: OK to add $inferSelect/$inferInsert type exports for every wallet\_\* table in packages/database/schema/wallet.ts?
+
+2) ETag format: Prefer hex (lowercase) or base64 for the stored etag value? Current middleware quotes the value; I’ll keep quoting consistent.
+
+3) Token index: Are we indexing authentication_token now (as added), or do you want an immediate follow-up to hash tokens and index the hash instead?
+
+4) Relations scope: OK to add full relations for pass → pass_type, pass → content, registration → device, cert ↔ pass_type, apns_key ↔ cert(team_id) now, or keep only minimal ones for the first pass?
+
+5) Migration order: Confirm creation order during greenfield migration: wallet_cert → wallet_apns_key → wallet_pass_type → wallet_pass → wallet_device → wallet_registration → wallet_pass_content.
+
+6) README and code alignment: I will update Honoken README to explicitly mention wallet_pass_content and ETag-on-write; OK?
+
+7) Zod version: Upgrade the monorepo to Zod v4 (and matching @hono/zod-validator), or keep v3 and remove v4-only APIs in the examples?
