@@ -21,7 +21,16 @@ export * from './tax';
 // Build a Drizzle V2-compatible schema object containing tables (and enums)
 // Consumers can import { schema } from "@database/schema" and pass it to drizzle()
 import { address } from './address';
-import { organizations, users } from './better-auth';
+import {
+  account,
+  invitation,
+  jwks,
+  member,
+  organization,
+  session,
+  user,
+  verification,
+} from './better-auth';
 import { currency } from './currency';
 import { fee } from './fee';
 import { location, locationType } from './location';
@@ -64,9 +73,15 @@ import { tags } from './tag';
 import { productVariantTaxRate, taxRate } from './tax';
 
 export const schema = {
-  // shared/auth
-  users,
-  organizations,
+  // auth (Better Auth)
+  user,
+  session,
+  account,
+  verification,
+  organization,
+  member,
+  invitation,
+  jwks,
 
   // reference tables
   currency,
@@ -78,6 +93,7 @@ export const schema = {
 
   // core entities
   address,
+  location,
   salesChannel,
   salesChannelStockLocation,
   organizationSettings,
@@ -90,6 +106,8 @@ export const schema = {
   productGroupProduct,
   productCategoryProduct,
   productTag,
+  promotion,
+  tags,
 
   // pricing
   priceSet,
