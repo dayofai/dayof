@@ -32,6 +32,43 @@ export const auth = betterAuth({
               data: { userId },
             });
           }
+        } else if (ctx.path.startsWith('/sign-up')) {
+          const session = ctx.context.newSession as
+            | { userId?: string }
+            | undefined;
+          const userId = session?.userId;
+          if (userId) {
+            await inngest.send({
+              name: 'user/signed_up',
+              data: { userId },
+            });
+          }
+        } else if (
+          ctx.path.startsWith('/sign-out') ||
+          ctx.path.startsWith('/revoke-session') ||
+          ctx.path.startsWith('/revoke-sessions')
+        ) {
+          const current = ctx.context.session as
+            | { userId?: string }
+            | undefined;
+          const userId = current?.userId;
+          if (userId) {
+            await inngest.send({
+              name: 'session/revoked',
+              data: { userId },
+            });
+          }
+        } else if (ctx.path.startsWith('/user/update')) {
+          const current = ctx.context.session as
+            | { userId?: string }
+            | undefined;
+          const userId = current?.userId;
+          if (userId) {
+            await inngest.send({
+              name: 'user/updated',
+              data: { userId },
+            });
+          }
         }
       } catch {
         // non-blocking: ignore event errors

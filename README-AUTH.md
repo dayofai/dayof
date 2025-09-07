@@ -135,3 +135,59 @@ EXPO_PUBLIC_SERVER_URL=
 - Always keep server and client baseURL paths aligned.
 - In preview/dev do not set `AUTH_COOKIE_DOMAIN`.
 - When calling the auth service cross-origin (no proxy), ensure `credentials: "include"`.
+
+### Inngest Use Cases
+
+- **Analytics and Auditing**: Track sign-ins (IP, user agent, geo) for dashboards, anomaly detection, and SOC2 audit trails.
+- **Onboarding Automation**: Create default entities (organization, roles, wallet), seed user preferences, and send welcome emails or push notifications after first sign-in.
+- **CRM/Marketing Sync**: Integrate with Segment or HubSpot to trigger lifecycle emails and manage attribution.
+- **Cross-App Coordination**: Notify other services or applications (via an events worker) about sign-ins to trigger follow-up jobs.
+- **Security Actions**: Trigger risk scoring, device linking, or step-up authentication when suspicious patterns are detected.
+
+#### Other possible events
+
+##### Core
+
+- `user/failed_sign_in`
+- `user/password_changed`
+- `user/email_verification_sent`
+- `user/email_verified`
+- `user/delete_requested`
+- `user/deleted`
+
+##### Accounts & Sessions
+
+- `account/linked`
+- `account/unlinked`
+- `session/refreshed`
+- `session/expired`
+- `session/active_org_changed`
+
+##### Organization (Plugin)
+
+- `organization/created`
+- `member/invited`
+- `member/accepted_invite`
+- `member/role_changed`
+
+##### Phone & Magic Link (Plugins)
+
+- `phone/otp_sent`
+- `phone/verified`
+- `magic_link/sent`
+- `magic_link/signed_in`
+
+##### 2FA & Passkey (Plugins)
+
+- `two_factor/enrolled`
+- `two_factor/verified`
+- `two_factor/disabled`
+- `passkey/registered`
+- `passkey/signed_in`
+
+##### Admin & JWT (Plugins)
+
+- `admin/banned`
+- `admin/unbanned`
+- `admin/role_changed`
+- `jwks/rotated`
