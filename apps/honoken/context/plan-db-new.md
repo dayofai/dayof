@@ -128,7 +128,7 @@ Composition rules:
 
 Recommended hardening (remaining work):
 
-- Add per-pass concurrency (e.g., key `wallet:${pt}:${sn}`) to prevent interleaving updates.
+- Per-pass concurrency implemented (Sept 9, 2025) — serialize updates per pass.
 - Add idempotency key for APNs step (e.g., `wallet:${pt}:${sn}:${etag}`) to avoid duplicate pushes for identical state.
 - Ensure consistent logger injection and DB client factory usage.
 
@@ -237,3 +237,9 @@ Example ESLint override (if applicable):
 - Fields included: `passTypeIdentifier`, `serialNumber`, `ticketStyle`, `poster`, `updatedAtSec`, and `wallet_pass_content.data`.
 - Fields excluded: `authentication_token`.
 - Hashing: SHA‑256 over a stable stringified JSON payload; stored lowercase hex; always quote in the `ETag` header.
+
+---
+
+## Progress Log
+
+- 2025-09-09: Implemented per-pass concurrency in Inngest `wallet-pass-update` to serialize updates by pass; updated README with a short note; lint clean. Next: consider adding explicit APNs step idempotency key and import path cleanup.

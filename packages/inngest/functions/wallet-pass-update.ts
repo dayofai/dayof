@@ -1,9 +1,9 @@
 import { schema } from 'database/schema';
 import { and, eq } from 'drizzle-orm';
-import { getDbClient } from '../../../apps/honoken/src/db';
-import { pushToMany } from '../../../apps/honoken/src/passkit/apnsFetch';
-import { upsertPassContentWithEtag } from '../../../apps/honoken/src/repo/wallet';
-import type { Env as HonokenEnv } from '../../../apps/honoken/src/types';
+import { getDbClient } from '@honoken/db';
+import { pushToMany } from '@honoken/passkit/apnsFetch';
+import { upsertPassContentWithEtag } from '@honoken/repo/wallet';
+import type { Env as HonokenEnv } from '@honoken/types';
 import { inngest } from '../client';
 
 export const walletPassUpdate = inngest.createFunction(
@@ -21,7 +21,28 @@ export const walletPassUpdate = inngest.createFunction(
     };
 
     const env = process.env as unknown as HonokenEnv;
-    const db = getDbClient(env);
+
+    // Unify logger usage: adapt Inngest logger to Honoken logger shape
+    const loggerAdapter = {
+      info: (message: string, data?: Record<string, unknown>) =>
+        logger.info(message, data),
+      warn: (message: string, data?: Record<string, unknown>) =>
+        logger.warn(message, data),
+      warnAsync: async (message: string, data?: Record<string, unknown>) =>
+        logger.warn(message, data),
+      error: (
+        message: string,
+        error: unknown,
+        data?: Record<string, unknown>
+      ) => logger.error(message, error as Error, data),
+      errorAsync: async (
+        message: string,
+        error: unknown,
+        data?: Record<string, unknown>
+      ) => logger.error(message, error as Error, data),
+    } as const;
+
+    const db = getDbClient(env, loggerAdapter as any);
 
     const write = await step.run('write-etag', async () => {
       const result = await upsertPassContentWithEtag(
@@ -68,31 +89,12 @@ export const walletPassUpdate = inngest.createFunction(
       return { pushed: 0, etag: write.etag } as const;
     }
 
-    const appLogger = {
-      info: (message: string, data?: Record<string, unknown>) =>
-        logger.info(message, data),
-      warn: (message: string, data?: Record<string, unknown>) =>
-        logger.warn(message, data),
-      warnAsync: async (message: string, data?: Record<string, unknown>) =>
-        logger.warn(message, data),
-      error: (
-        message: string,
-        error: unknown,
-        data?: Record<string, unknown>
-      ) => logger.error(message, error as Error, data),
-      errorAsync: async (
-        message: string,
-        error: unknown,
-        data?: Record<string, unknown>
-      ) => logger.error(message, error as Error, data),
-    };
-
     const pushed = await step.run('apns-push', async () => {
       const report = await pushToMany(
         env,
         regs,
         passTypeIdentifier,
-        appLogger as unknown as Parameters<typeof pushToMany>[3]
+        loggerAdapter as unknown as Parameters<typeof pushToMany>[3]
       );
       return report?.summary?.attempted ?? regs.length;
     });
