@@ -42,6 +42,12 @@
           }
         }
       }
+    },
+    {
+      "includes": ["apps/honoken/src/**/*.ts"],
+      "linter": {
+        "rules": {}
+      }
     }
   ]
 }

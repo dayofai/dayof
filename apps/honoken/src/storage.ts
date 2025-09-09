@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 import { schema as sharedSchema } from 'database/schema';
 import { and, eq, gt, SQL } from 'drizzle-orm';
 import type { PostHog } from 'posthog-node';
