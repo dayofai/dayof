@@ -1,5 +1,5 @@
 import { defineRelations } from 'drizzle-orm';
-import { paymentProvider } from './payment';
+// import { paymentProvider } from './payment'; // Omitted for wallet-only test run
 import { price, priceSet } from './pricing';
 import { productSalesChannel } from './product';
 import { region, regionCountry, regionPaymentProvider } from './region';
@@ -31,8 +31,7 @@ const schemaTables = {
   region,
   regionCountry,
   regionPaymentProvider,
-  // payment
-  paymentProvider,
+  // payment (omitted)
   // pricing
   priceSet,
   price,

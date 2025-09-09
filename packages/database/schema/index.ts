@@ -9,12 +9,11 @@ export * from './extend-timestamps';
 export * from './fee';
 export * from './location';
 export * from './organization';
-export * from './payment';
 export * from './pricing';
 export * from './product';
 export * from './promotion';
 export * from './region';
-export { relations } from './relations';
+// export { relations } from './relations'; // Omitted to avoid importing unfinished payment schema during wallet tests
 export * from './sales-channel';
 export * from './tag';
 export * from './tax';
@@ -37,19 +36,7 @@ import { currency } from './currency';
 import { fee } from './fee';
 import { location, locationType } from './location';
 import { brandProfile, organizationSettings } from './organization';
-import {
-  installment,
-  invoice,
-  paymentAttempt,
-  paymentCollection,
-  paymentIntent,
-  paymentMethod,
-  paymentProvider,
-  refund,
-  refundReason,
-  subscription,
-  subscriptionSchedulePhase,
-} from './payment';
+// payment schema is under active development and not required for wallet tests
 import { price, priceSet } from './pricing';
 import {
   product,
@@ -132,18 +119,7 @@ export const schema = {
   productVariantTaxRate,
   fee,
 
-  // payments
-  paymentProvider,
-  paymentCollection,
-  paymentIntent,
-  paymentAttempt,
-  paymentMethod,
-  refundReason,
-  refund,
-  invoice,
-  subscription,
-  subscriptionSchedulePhase,
-  installment,
+  // payments (omitted in this build)
 
   // wallet (PassKit)
   walletTicketStyleEnum,

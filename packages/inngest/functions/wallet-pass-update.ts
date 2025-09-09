@@ -7,7 +7,11 @@ import type { Env as HonokenEnv } from '../../../apps/honoken/src/types';
 import { inngest } from '../client';
 
 export const walletPassUpdate = inngest.createFunction(
-  { id: 'wallet-pass-update' },
+  {
+    id: 'wallet-pass-update',
+    // Per-pass concurrency; keyed by serialNumber (assumed globally unique in practice)
+    concurrency: { limit: 1, key: 'event.data.serialNumber' },
+  },
   { event: 'pass/update.requested' },
   async ({ event, step, logger }) => {
     const { passTypeIdentifier, serialNumber, content } = event.data as {
@@ -29,6 +33,7 @@ export const walletPassUpdate = inngest.createFunction(
     });
 
     if (!write.changed) {
+      // Idempotency: no push when content/metadata did not materially change.
       return { skipped: true, etag: write.etag } as const;
     }
 

@@ -1,51 +1,63 @@
-import { vi } from 'vitest';
 import type { webcrypto } from 'node:crypto';
+import { vi } from 'vitest';
 import type { Env } from '../../src/types';
-import { TEST_CERT_DATA, TEST_PASS_DATA, TEST_DEVICE_DATA, TEST_REGISTRATION_DATA, TEST_APNS_KEY_DATA, TEST_CERT_BUNDLE } from './test-data';
+import {
+  TEST_APNS_KEY_DATA,
+  TEST_CERT_BUNDLE,
+  TEST_CERT_DATA,
+  TEST_DEVICE_DATA,
+  TEST_PASS_DATA,
+  TEST_REGISTRATION_DATA,
+} from './test-data';
 
 /**
  * Creates a mock Env object for testing
  * Addresses the complex authentication and encryption challenges identified
  */
-type EnvOverrides = Partial<Env> & Record<`HONOKEN_ENCRYPTION_KEY_${string}`, string>;
+type EnvOverrides = Partial<Env> &
+  Record<`HONOKEN_ENCRYPTION_KEY_${string}`, string>;
 
-export function createMockEnv(overrides: EnvOverrides = {} as EnvOverrides): Env {
+export function createMockEnv(
+  overrides: EnvOverrides = {} as EnvOverrides
+): Env {
   const mockEnv: Env = {
     // Database URLs
     DATABASE_URL: 'postgresql://test:test@localhost:5432/test_db',
     DEV_DATABASE_URL: 'postgresql://test:test@localhost:5432/test_dev_db',
-    
+
     // Upstash Redis storage (replacing R2)
     UPSTASH_REDIS_REST_URL: 'http://localhost:8079',
     UPSTASH_REDIS_REST_TOKEN: 'test-token',
-    
+
     // Environment
     ENVIRONMENT: 'test',
-    
+
     // Versioned encryption keys
-    HONOKEN_ENCRYPTION_KEY_V1: Buffer.from('test-encryption-key-32-chars-ok!').toString('base64'),
+    HONOKEN_ENCRYPTION_KEY_V1: Buffer.from(
+      'test-encryption-key-32-chars-ok!'
+    ).toString('base64'),
     HONOKEN_ENCRYPTION_KEY_CURRENT: 'v1',
     // Legacy key - deprecated
     HONOKEN_PEM_BUNDLE_ENCRYPTION_KEY: 'test-encryption-key-32-chars-long!',
-    
+
     // Admin auth
     HONOKEN_ADMIN_USERNAME: 'testadmin',
     HONOKEN_ADMIN_PASSWORD: 'testpass123',
-    
+
     // Required env vars
     SERVICE_NAME: 'honoken-test',
     // HONOKEN_BASELIME_API_KEY removed - no longer using Baselime
     HONOKEN_RELEASE_VERSION: '0.0.0-test',
     VERBOSE_LOGGING: 'true', // Enable verbose logging in tests
-    
+
     // PostHog Configuration
     POSTHOG_PROJECT_API_KEY: 'phc_test_key',
     POSTHOG_HOST: 'https://test.posthog.com',
     POSTHOG_BATCH_SIZE: '10', // Smaller batch size for tests
     POSTHOG_FLUSH_INTERVAL: '1000', // Faster flush for tests
-    
+
     // Apply any overrides
-    ...overrides
+    ...overrides,
   };
 
   return mockEnv;
@@ -56,17 +68,29 @@ export function createMockEnv(overrides: EnvOverrides = {} as EnvOverrides): Env
  */
 export function setupMockCrypto() {
   let callCount = 0;
-  
+
   const mockCrypto = {
     subtle: {
-      importKey: vi.fn().mockResolvedValue({} as unknown as webcrypto.CryptoKey),
-      decrypt: vi.fn().mockImplementation(async (algorithm: any, key: webcrypto.CryptoKey, data: ArrayBuffer) => {
-        // Return the test certificate bundle as encrypted JSON when decrypted
-        const bundleJson = JSON.stringify(TEST_CERT_BUNDLE);
-        return new TextEncoder().encode(bundleJson);
-      }),
+      importKey: vi
+        .fn()
+        .mockResolvedValue({} as unknown as webcrypto.CryptoKey),
+      decrypt: vi
+        .fn()
+        .mockImplementation(
+          async (
+            algorithm: any,
+            key: webcrypto.CryptoKey,
+            data: ArrayBuffer
+          ) => {
+            // Return the test certificate bundle as encrypted JSON when decrypted
+            const bundleJson = JSON.stringify(TEST_CERT_BUNDLE);
+            return new TextEncoder().encode(bundleJson);
+          }
+        ),
       encrypt: vi.fn().mockResolvedValue(new ArrayBuffer(32)),
-      generateKey: vi.fn().mockResolvedValue({} as unknown as webcrypto.CryptoKey),
+      generateKey: vi
+        .fn()
+        .mockResolvedValue({} as unknown as webcrypto.CryptoKey),
     },
     getRandomValues: vi.fn().mockImplementation((array: Uint8Array) => {
       for (let i = 0; i < array.length; i++) {
@@ -85,7 +109,7 @@ export function setupMockCrypto() {
   Object.defineProperty(global, 'crypto', {
     value: mockCrypto,
     writable: true,
-    configurable: true
+    configurable: true,
   });
 
   return mockCrypto;
@@ -99,7 +123,7 @@ export function createMockDbClient() {
   return {
     // Mock Hyperdrive connectionString property
     connectionString: 'postgresql://test:test@localhost:5432/test',
-    
+
     // Mock the query builder pattern used throughout the codebase
     query: {
       passes: {
@@ -115,7 +139,7 @@ export function createMockDbClient() {
       passTypes: {
         findFirst: vi.fn().mockResolvedValue({
           passTypeIdentifier: 'pass.com.example.test-event',
-          certRef: 'test-cert-ref'
+          certRef: 'test-cert-ref',
         }),
         findMany: vi.fn().mockResolvedValue([]),
       },
@@ -143,7 +167,7 @@ export function createMockDbClient() {
         }),
       },
     },
-    
+
     // Mock transaction support
     transaction: vi.fn().mockImplementation(async (callback) => {
       const mockTx = {
@@ -178,7 +202,7 @@ export function createMockDbClient() {
       };
       return callback(mockTx);
     }),
-    
+
     // Mock direct query methods
     insert: vi.fn().mockReturnValue({
       values: vi.fn().mockReturnValue({
@@ -206,7 +230,7 @@ export function createMockDbClient() {
     delete: vi.fn().mockReturnValue({
       where: vi.fn().mockResolvedValue(undefined),
     }),
-    
+
     // Mock health check query
     execute: vi.fn().mockResolvedValue([{ result: 1 }]),
   };
@@ -221,7 +245,9 @@ export function createMockContext() {
   return {
     waitUntil: vi.fn(),
     passThroughOnException: vi.fn(),
-  };
+    // minimal shape to satisfy ExecutionContext typing in tests
+    props: {},
+  } as unknown as ExecutionContext;
 }
 
 /**
@@ -234,4 +260,4 @@ export function createMockLogger() {
     error: vi.fn(),
     debug: vi.fn(),
   };
-} 
+}

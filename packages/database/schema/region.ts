@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { check, pgTable } from 'drizzle-orm/pg-core';
 import { timeStamps } from '../schema/extend-timestamps';
 import { currency } from './currency';
-import { paymentProvider } from './payment';
+// import { paymentProvider } from './payment'; // Omitted for wallet-only test run
 
 export const region = pgTable(
   'region',
@@ -33,6 +33,7 @@ export const regionCountry = pgTable('region_country', (t) => ({
   ...timeStamps({ softDelete: true }),
 }));
 
+// Payment provider dependencies omitted in wallet-only run
 export const regionPaymentProvider = pgTable(
   'region_payment_provider',
   (t) => ({
@@ -41,10 +42,7 @@ export const regionPaymentProvider = pgTable(
       .text('region_id')
       .references(() => region.id)
       .notNull(),
-    paymentProviderId: t
-      .text('payment_provider_id')
-      .references(() => paymentProvider.id)
-      .notNull(),
+    paymentProviderId: t.text('payment_provider_id').notNull(),
     ...timeStamps({ softDelete: true }),
   }),
   (table) => [

@@ -113,13 +113,13 @@ sequenceDiagram
     participant Wallet as Apple Wallet
     participant Service as Your PassKit Service
     participant APNs as Apple Push Service
-    
+
     User->>Wallet: Install pass
     Wallet->>Service: Register device (POST /v1/devices/.../registrations/...)
     Service->>Service: Store device token
-    
+
     Note over Service: When pass data changes...
-    
+
     Service->>APNs: Send push notification
     APNs->>Wallet: Wake up Wallet app
     Wallet->>Service: Check for updates (GET /v1/devices/.../registrations/...)
@@ -201,17 +201,17 @@ flowchart TD
     B --> C[Hono Application]
     C --> D[PassKit Web Service Routes]
     C --> E[Admin Management Routes]
-    
+
     D --> F[(Neon PostgreSQL)]
     D --> G[(Upstash Redis)]
     D --> H[Apple Push Notification Service]
-    
+
     E --> F
     E --> I[Certificate Management]
-    
+
     C --> J[PostHog Analytics]
     J --> K[Fluid Compute Optimizations]
-    
+
     style A fill:#000,color:#fff
     style B fill:#0070f3,color:#fff
     style F fill:#00e599,color:#000
@@ -222,7 +222,7 @@ flowchart TD
 ## Core Technologies
 
 - **[Hono](https://hono.dev/)**: Ultra-fast web framework optimized for edge computing
-- **[Vercel](https://vercel.com/)**: Serverless platform with global edge network (Node.js 20.x runtime)
+- **[Vercel](https://vercel.com/)**: Serverless platform with global edge network (Node.js 22.x runtime)
 - **[Neon](https://neon.tech/)**: Serverless PostgreSQL with branching for dev/prod isolation
 - **[Upstash Redis](https://upstash.com/)**: Serverless Redis for pass asset storage
 - **[passkit-generator](https://github.com/alexandercerutti/passkit-generator)**: Pass generation library
@@ -313,26 +313,26 @@ Vercel automatically:
 
 All Apple-required endpoints are implemented with full compliance:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/devices/:deviceId/registrations/:typeId/:serial` | POST | Register device for push notifications |
-| `/api/v1/devices/:deviceId/registrations/:typeId/:serial` | DELETE | Unregister device |
-| `/api/v1/devices/:deviceId/registrations/:typeId` | GET | List updatable passes for device |
-| `/api/v1/passes/:typeId/:serial` | GET | Download pass (with auth & caching) |
-| `/api/v1/log` | POST | Receive device logs |
+| Endpoint                                                  | Method | Description                            |
+| --------------------------------------------------------- | ------ | -------------------------------------- |
+| `/api/v1/devices/:deviceId/registrations/:typeId/:serial` | POST   | Register device for push notifications |
+| `/api/v1/devices/:deviceId/registrations/:typeId/:serial` | DELETE | Unregister device                      |
+| `/api/v1/devices/:deviceId/registrations/:typeId`         | GET    | List updatable passes for device       |
+| `/api/v1/passes/:typeId/:serial`                          | GET    | Download pass (with auth & caching)    |
+| `/api/v1/log`                                             | POST   | Receive device logs                    |
 
 ### Path Prefixes
 
-**Note**: On Vercel, all endpoints are exposed under the `/api` prefix (e.g., `/api/v1/...`). The local development harness and smoke tests address the routes directly at their mounted paths (e.g., `/v1/...`).
+On Vercel, all endpoints are exposed under the `/api` prefix (e.g., `/api/v1/...`). The local development harness and smoke tests address the routes directly at their mounted paths (e.g., `/v1/...`).
 
 ### Admin Management Endpoints
 
 Protected endpoints for operational tasks:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/admin/certs/:certRef` | PUT | Rotate PassKit signing certificate |
-| `/api/admin/invalidate/certs/:certRef` | POST | Invalidate certificate cache |
+| Endpoint                               | Method | Description                        |
+| -------------------------------------- | ------ | ---------------------------------- |
+| `/api/admin/certs/:certRef`            | PUT    | Rotate PassKit signing certificate |
+| `/api/admin/invalidate/certs/:certRef` | POST   | Invalidate certificate cache       |
 
 Authentication via Basic Auth using `HONOKEN_ADMIN_USERNAME` and `HONOKEN_ADMIN_PASSWORD`.
 
@@ -340,13 +340,13 @@ Authentication via Basic Auth using `HONOKEN_ADMIN_USERNAME` and `HONOKEN_ADMIN_
 
 The route handlers in this service are decoupled from the database via a storage adapter contract. The following functions are expected to be implemented by a storage layer (e.g., in `src/storage/index.ts`) to handle persistence.
 
-| Function | Description |
-|----------|-------------|
-| `registerDevice` | Creates or updates a device registration for a pass. Handles `ApplePass` authentication token validation. |
-| `unregisterDevice` | Deactivates or deletes a device registration. Must be idempotent. |
-| `listUpdatedSerials` | Returns a list of serial numbers for a given device that have been updated since a specified timestamp. |
-| `logMessages` | Receives and stores logs from Apple devices for debugging. |
-| `healthCheck` | Verifies the database connection is active. |
+| Function             | Description                                                                                               |
+| -------------------- | --------------------------------------------------------------------------------------------------------- |
+| `registerDevice`     | Creates or updates a device registration for a pass. Handles `ApplePass` authentication token validation. |
+| `unregisterDevice`   | Deactivates or deletes a device registration. Must be idempotent.                                         |
+| `listUpdatedSerials` | Returns a list of serial numbers for a given device that have been updated since a specified timestamp.   |
+| `logMessages`        | Receives and stores logs from Apple devices for debugging.                                                |
+| `healthCheck`        | Verifies the database connection is active.                                                               |
 
 ## Key Features
 
@@ -420,6 +420,7 @@ Custom implementation replacing Cloudflare-specific libraries:
 - Singleton database connections per worker
 - **Optimized Certificate Caching**: Uses a bounded in-memory cache for certificates with built-in request coalescing to prevent "dog-piling" (multiple concurrent requests for the same uncached resource), significantly reducing database load during high-concurrency scenarios.
 - Conditional GET support with `ETag` and `Last-Modified`
+- Inngest per-pass concurrency: updates for the same pass are serialized (keyed by `event.data.serialNumber`) to prevent interleaving writes; other passes run in parallel. Combined with no-change short-circuiting, this yields idempotent APNs behavior.
 
 ### 📊 Observability
 
@@ -451,42 +452,43 @@ Event Types:
 
 ### Required
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `DATABASE_URL` | Neon PostgreSQL connection (set by Vercel integration) | Auto-configured |
-| `DEV_DATABASE_URL` | Development database connection | `postgresql://...` |
-| `UPSTASH_REDIS_REST_URL` | Upstash Redis REST endpoint | `https://...upstash.io` |
-| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis auth token | `AX...` |
-| `HONOKEN_ENCRYPTION_KEY_V1` | Base64 AES-256 key (version 1) | `openssl rand -base64 32` |
-| `HONOKEN_ENCRYPTION_KEY_CURRENT` | Current key version | `v1` |
-| `HONOKEN_ADMIN_USERNAME` | Admin panel username (required) | Choose secure username |
-| `HONOKEN_ADMIN_PASSWORD` | Admin panel password (required) | Choose strong password |
-| `SERVICE_NAME` | Service identifier | `honoken` |
-| `ENVIRONMENT` | Runtime environment | `production` |
-| `HONOKEN_RELEASE_VERSION` | Version for tracking | `1.0.0` |
-| `POSTHOG_PROJECT_API_KEY` | PostHog project API key | `phc_...` |
+| Variable                         | Description                                            | Example                   |
+| -------------------------------- | ------------------------------------------------------ | ------------------------- |
+| `DATABASE_URL`                   | Neon PostgreSQL connection (set by Vercel integration) | Auto-configured           |
+| `DEV_DATABASE_URL`               | Development database connection                        | `postgresql://...`        |
+| `UPSTASH_REDIS_REST_URL`         | Upstash Redis REST endpoint                            | `https://...upstash.io`   |
+| `UPSTASH_REDIS_REST_TOKEN`       | Upstash Redis auth token                               | `AX...`                   |
+| `HONOKEN_ENCRYPTION_KEY_V1`      | Base64 AES-256 key (version 1)                         | `openssl rand -base64 32` |
+| `HONOKEN_ENCRYPTION_KEY_CURRENT` | Current key version                                    | `v1`                      |
+| `HONOKEN_ADMIN_USERNAME`         | Admin panel username (required)                        | Choose secure username    |
+| `HONOKEN_ADMIN_PASSWORD`         | Admin panel password (required)                        | Choose strong password    |
+| `SERVICE_NAME`                   | Service identifier                                     | `honoken`                 |
+| `ENVIRONMENT`                    | Runtime environment                                    | `production`              |
+| `HONOKEN_RELEASE_VERSION`        | Version for tracking                                   | `1.0.0`                   |
+| `POSTHOG_PROJECT_API_KEY`        | PostHog project API key                                | `phc_...`                 |
 
 ### Optional
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `POSTHOG_HOST` | PostHog instance URL | `https://us.i.posthog.com` |
-| `POSTHOG_BATCH_SIZE` | Events before auto-flush | `100` |
-| `POSTHOG_FLUSH_INTERVAL` | Ms between flushes | `30000` |
-| `VERBOSE_LOGGING` | Enable debug logs | `false` |
-| `LOG_SAMPLE_SUCCESS_RATE` | Success log sampling | `0.01` |
-| `GIT_SHA` | Git commit SHA | Auto-detected |
+| Variable                  | Description              | Default                    |
+| ------------------------- | ------------------------ | -------------------------- |
+| `POSTHOG_HOST`            | PostHog instance URL     | `https://us.i.posthog.com` |
+| `POSTHOG_BATCH_SIZE`      | Events before auto-flush | `100`                      |
+| `POSTHOG_FLUSH_INTERVAL`  | Ms between flushes       | `30000`                    |
+| `VERBOSE_LOGGING`         | Enable debug logs        | `false`                    |
+| `LOG_SAMPLE_SUCCESS_RATE` | Success log sampling     | `0.01`                     |
+| `GIT_SHA`                 | Git commit SHA           | Auto-detected              |
 
-## Database Schema
+## Database Schema (shared package)
 
-Key tables managed by Drizzle ORM:
+Wallet tables are provided by the shared `packages/database` schema:
 
-- **`passes`**: Individual pass instances with metadata. A `passData` JSONB column must be added to this table to store dynamic pass content.
-- **`devices`**: Registered Apple devices with push tokens.
-- **`registrations`**: Device-to-pass associations.
-- **`certs`**: Encrypted PassKit signing certificates.
-- **`pass_types`**: Maps pass type IDs to certificates.
-- **`apns_keys`**: Encrypted APNs authentication keys.
+- **`wallet_pass`**: Individual pass instances with metadata and stored `etag`.
+- **`wallet_pass_content`**: 1‑to‑1 JSONB payload for dynamic content used to build the pass.
+- **`wallet_device`**: Registered Apple devices with push tokens.
+- **`wallet_registration`**: Device-to-pass associations (`active` boolean).
+- **`wallet_cert`**: Encrypted PassKit signing certificates.
+- **`wallet_pass_type`**: Maps pass type IDs to certificates.
+- **`wallet_apns_key`**: Encrypted APNs authentication keys.
 
 ## Testing
 
@@ -569,9 +571,15 @@ curl -X PUT https://your-domain.vercel.app/api/admin/certs/YOUR_CERT_REF \
 
 ### Performance Optimization
 
-#### ETag Strategy
+#### ETag Strategy (write-time)
 
-This service computes ETags on-demand during pass retrieval. The computed ETag, which is a hash of the pass's stable content, is then stored asynchronously back to the database. This ensures that subsequent `If-None-Match` requests can be handled efficiently with a `304 Not Modified` response without recomputing the pass, while keeping the critical request path fast.
+ETags are computed and stored on write (when pass metadata or `wallet_pass_content` changes). GET paths are read‑only and return stored ETags. This ensures consistent conditional responses (`If-None-Match` and `If-Modified-Since`) without recomputation on the hot path.
+
+Composition (stable, excludes auth token):
+
+- passTypeIdentifier, serialNumber, ticketStyle, poster
+- updatedAt (rounded to whole seconds)
+- JSONB content from `wallet_pass_content.data`
 
 #### Asset Caching
 
@@ -632,8 +640,9 @@ for (const chunk of chunks) {
 
 ```typescript
 // If asset loading fails, continue with pass generation
-const icon = await storage.retrieve(`${passTypeId}/icon.png`)
-  .catch(() => storage.retrieve('default/icon.png'));
+const icon = await storage
+  .retrieve(`${passTypeId}/icon.png`)
+  .catch(() => storage.retrieve("default/icon.png"));
 ```
 
 #### Device Cleanup
