@@ -1,12 +1,9 @@
-import type { Env } from '../types';
-import { getDbClient } from '../db/index';
+import { schema as sharedSchema } from 'database/schema';
 import { eq } from 'drizzle-orm';
-import { apnsKeys } from '../db/schema';
-import {
-  encryptWithVersion,
-  decryptWithVersion,
-} from '../utils/crypto';
+import { getDbClient } from '../db/index';
+import type { Env } from '../types';
 import { createBoundedMap } from '../utils/bounded-cache';
+import { decryptWithVersion, encryptWithVersion } from '../utils/crypto';
 import type { Logger } from '../utils/logger';
 
 /**
@@ -19,7 +16,10 @@ export type ApnsKeyData = {
 };
 
 // APNs key cache with size limit (max 100 entries, no TTL needed - we do DB timestamp validation)
-export const apnsKeyCache = createBoundedMap<string, { data: ApnsKeyData; dbLastUpdatedAt: Date }>();
+export const apnsKeyCache = createBoundedMap<
+  string,
+  { data: ApnsKeyData; dbLastUpdatedAt: Date }
+>();
 
 /**
  * Loads APNs key data by keyRef from database, with in-memory caching.
@@ -37,21 +37,30 @@ export const apnsKeyCache = createBoundedMap<string, { data: ApnsKeyData; dbLast
  * @returns The loaded APNs key data or null if not found
  * @throws If decryption fails or other errors occur
  */
-export async function loadApnsKeyData(keyRef: string, env: Env, logger: Logger): Promise<ApnsKeyData | null> {
+export async function loadApnsKeyData(
+  keyRef: string,
+  env: Env,
+  logger: Logger
+): Promise<ApnsKeyData | null> {
   const cacheKey = keyRef;
-  
+
   if (apnsKeyCache.has(cacheKey)) {
     const cachedEntry = apnsKeyCache.get(cacheKey)!;
-    
+
     // Verify if cache is still fresh by checking DB timestamp
     const db = getDbClient(env, logger);
-    const latestTimestamp = await db.query.apnsKeys.findFirst({
-      where: (k, { eq }) => eq(k.keyRef, keyRef),
-      columns: { updatedAt: true }
-    });
-    
+    const latestTimestamp = await db
+      .select({ updatedAt: sharedSchema.walletApnsKey.updatedAt })
+      .from(sharedSchema.walletApnsKey)
+      .where(eq(sharedSchema.walletApnsKey.keyRef, keyRef))
+      .limit(1)
+      .then((r) => r[0]);
+
     // If DB has a newer timestamp or no timestamp found, invalidate cache
-    if (!latestTimestamp || !latestTimestamp.updatedAt || cachedEntry.dbLastUpdatedAt < latestTimestamp.updatedAt) {
+    if (
+      !(latestTimestamp && latestTimestamp.updatedAt) ||
+      cachedEntry.dbLastUpdatedAt < latestTimestamp.updatedAt
+    ) {
       apnsKeyCache.delete(cacheKey);
     } else {
       return cachedEntry.data;
@@ -60,16 +69,29 @@ export async function loadApnsKeyData(keyRef: string, env: Env, logger: Logger):
 
   try {
     const db = getDbClient(env, logger);
-    const row = await db.query.apnsKeys.findFirst({
-      where: (k, { eq }) => eq(k.keyRef, keyRef),
-    });
+    const row = await db
+      .select({
+        keyRef: sharedSchema.walletApnsKey.keyRef,
+        teamId: sharedSchema.walletApnsKey.teamId,
+        keyId: sharedSchema.walletApnsKey.keyId,
+        encryptedP8Key: sharedSchema.walletApnsKey.encryptedP8Key,
+        updatedAt: sharedSchema.walletApnsKey.updatedAt,
+      })
+      .from(sharedSchema.walletApnsKey)
+      .where(eq(sharedSchema.walletApnsKey.keyRef, keyRef))
+      .limit(1)
+      .then((r) => r[0]);
 
     if (!row) {
       return null; // Key metadata not found
     }
 
     if (!row.encryptedP8Key) {
-      logger.error('Encrypted key missing for keyRef', new Error('MissingEncryptedData'), { keyRef });
+      logger.error(
+        'Encrypted key missing for keyRef',
+        new Error('MissingEncryptedData'),
+        { keyRef }
+      );
       throw new Error(`Encrypted key missing for keyRef: ${keyRef}`);
     }
 
@@ -82,21 +104,27 @@ export async function loadApnsKeyData(keyRef: string, env: Env, logger: Logger):
     const data: ApnsKeyData = {
       teamId: row.teamId,
       keyId: row.keyId,
-      p8Pem: p8Pem,
+      p8Pem,
     };
 
     // Cache the data with DB last updated timestamp
     // Use current time if updatedAt is null (shouldn't happen with properly configured schema)
     const dbLastUpdatedAt = row.updatedAt || new Date();
-    apnsKeyCache.set(cacheKey, { 
-      data, 
-      dbLastUpdatedAt 
+    apnsKeyCache.set(cacheKey, {
+      data,
+      dbLastUpdatedAt,
     });
-    
+
     return data;
   } catch (error) {
-    logger.error('Failed to load APNs key data', error instanceof Error ? error : new Error(String(error)), { keyRef });
-    throw new Error(`Failed to load APNs key data: ${(error as Error).message}`);
+    logger.error(
+      'Failed to load APNs key data',
+      error instanceof Error ? error : new Error(String(error)),
+      { keyRef }
+    );
+    throw new Error(
+      `Failed to load APNs key data: ${(error as Error).message}`
+    );
   }
 }
 
@@ -135,32 +163,33 @@ export async function storeApnsKey(
 
     // 6. Store in the database
     const db = getDbClient(env, logger);
-    
+
     // Use an upsert operation to insert or update
-    await db.insert(apnsKeys)
+    await db
+      .insert(sharedSchema.walletApnsKey)
       .values({
         keyRef,
         teamId,
         keyId,
         encryptedP8Key: versionedCiphertext,
-        iv: '', // Empty string - IV is now embedded in versioned ciphertext
       })
       .onConflictDoUpdate({
-        target: apnsKeys.keyRef,
+        target: sharedSchema.walletApnsKey.keyRef,
         set: {
           teamId,
           keyId,
           encryptedP8Key: versionedCiphertext,
-          iv: '', // Empty string - IV is now embedded in versioned ciphertext
           // updatedAt will be set automatically by the DB
         },
       });
 
     // 7. Get updated timestamp from DB
-    const updatedRow = await db.query.apnsKeys.findFirst({
-      where: (k, { eq }) => eq(k.keyRef, keyRef),
-      columns: { updatedAt: true }
-    });
+    const updatedRow = await db
+      .select({ updatedAt: sharedSchema.walletApnsKey.updatedAt })
+      .from(sharedSchema.walletApnsKey)
+      .where(eq(sharedSchema.walletApnsKey.keyRef, keyRef))
+      .limit(1)
+      .then((r) => r[0]);
 
     // 8. Update in-memory cache
     const data: ApnsKeyData = {
@@ -168,16 +197,22 @@ export async function storeApnsKey(
       keyId,
       p8Pem,
     };
-    
+
     // Cache with DB last updated timestamp, use current time if not available
     const dbLastUpdatedAt = updatedRow?.updatedAt || new Date();
-    apnsKeyCache.set(keyRef, { 
-      data, 
-      dbLastUpdatedAt 
+    apnsKeyCache.set(keyRef, {
+      data,
+      dbLastUpdatedAt,
     });
   } catch (error) {
-    logger.error('Failed to store APNs key data', error instanceof Error ? error : new Error(String(error)), { keyRef, teamId, keyId });
-    throw new Error(`Failed to store APNs key data: ${(error as Error).message}`);
+    logger.error(
+      'Failed to store APNs key data',
+      error instanceof Error ? error : new Error(String(error)),
+      { keyRef, teamId, keyId }
+    );
+    throw new Error(
+      `Failed to store APNs key data: ${(error as Error).message}`
+    );
   }
 }
 
@@ -189,17 +224,26 @@ export async function storeApnsKey(
  * @param logger - Logger instance
  * @param triggeredByClientCacheInvalidation - Flag to prevent recursion if called from client cache invalidation
  */
-export function invalidateApnsKeyCache(keyRef: string, logger: Logger, triggeredByClientCacheInvalidation: boolean = false): void {
+export function invalidateApnsKeyCache(
+  keyRef: string,
+  logger: Logger,
+  triggeredByClientCacheInvalidation = false
+): void {
   const cachedEntry = apnsKeyCache.get(keyRef);
   apnsKeyCache.delete(keyRef);
-  
+
   if (cachedEntry) {
     logger.info('Invalidated APNs key cache', { keyRef });
     if (!triggeredByClientCacheInvalidation) {
       // Invalidate related APNs client cache entries
       // Import here to avoid circular dependency
       const { invalidateApnsClientCache } = require('./apnsFetch');
-      invalidateApnsClientCache(cachedEntry.data.teamId, cachedEntry.data.keyId, logger, true);
+      invalidateApnsClientCache(
+        cachedEntry.data.teamId,
+        cachedEntry.data.keyId,
+        logger,
+        true
+      );
     }
   }
 }

@@ -12,10 +12,11 @@
 - **Tenancy**: Passes belong to organizations. Use `createdBy()` to attach `org_id` on `wallet_pass` (and derived rows). `wallet_cert` and `wallet_apns_key` remain global (DayOf SaaS). `wallet_pass_type` is universal.
 - **Soft delete**: Use shared `timeStamps({ softDelete: true })` where appropriate; continue `active` boolean for registrations and leave note about future soft-delete.
 - **ETag**: Compute on write (create/update of pass or content), store in `wallet_pass.etag`. GET path reads only; middleware should not write.
-- **Auth token**: Dev-only plaintext token to keep flows simple (do not ship to prod). Next step: switch to deterministic HMAC tokens (no storage) with versioned secrets and rotation; see "Next step — Deterministic ApplePass tokens (prod)" below.
+- **Auth token**: Store plaintext tokens in `wallet_pass.authentication_token` (Apple spec). Add a btree index for lookups.
 - **Logs**: PostHog only; no DB table for `/v1/log` at this time.
 - **APNs dev trigger**: Provide a minimal authenticated endpoint to enqueue/send dev pushes; production orchestration via Inngest.
 - **Naming**: Enforce snake_case for all table and column names in Postgres.
+- **Migrations**: Generate migrations in the shared DB package; defer applying to Neon (handled later).
 
 ---
 
@@ -132,6 +133,10 @@ File: `apps/honoken/drizzle.config.ts`
 
 Tests & build config: verify nothing relies on local schema paths.
 
+See also
+
+- For extended code examples (repo helpers, Inngest workflow, and builder updates), refer to `apps/honoken/context/plan-db-update.md`.
+
 ### 3) Update all Honoken code references
 
 File: `apps/honoken/src/passkit/apnsKeys.ts`
@@ -147,7 +152,7 @@ File: `apps/honoken/src/passkit/certs.ts`
 File: `apps/honoken/src/passkit/passkit.ts`
 
 - Replace `passes`/`passTypes` with `schema.wallet_pass`/`schema.wallet_pass_type`.
-- JOIN stays the same conceptually. No schema change needed for assets logic.
+- JOIN stays the same conceptually. Assets use `VercelBlobAssetStorage` (see `apps/honoken/src/storage/vercel-blob-storage.ts`). No schema change needed for assets logic.
 
 File: `apps/honoken/src/storage.ts`
 
@@ -272,22 +277,7 @@ This section refines the plan with pragmatic changes and concrete code/SQL based
 - Soft delete: Follow shared convention via `timeStamps({ softDelete: true })` where specified in this plan.
 - Enum reuse vs rename: For greenfield creation, define `wallet_ticket_style_enum` directly and use it in `wallet_pass.ticket_style`.
 
-#### Next step — Deterministic ApplePass tokens (prod) NOT NOW, LATER
-
-- Rationale: Avoid storing tokens at rest; simplify verification and rotation.
-- Token format: `v{n}.{base64url(HMAC_SHA256(secret_n, passTypeIdentifier:serialNumber))}`.
-- Env:
-  - `HONOKEN_TOKEN_SECRET_CURRENT` (e.g., `v1`)
-  - `HONOKEN_TOKEN_SECRET_V1`, `HONOKEN_TOKEN_SECRET_V2`, ... (base64 keys)
-  - Optional: `HONOKEN_TOKEN_ALLOWED_VERSIONS` (comma list like `v1,v2`) for grace periods.
-- Verify (server): parse version → pick `secret_n` → recompute HMAC over `${passTypeIdentifier}:${serialNumber}` → constant‑time compare.
-- Issue (build pass): always embed token with `HONOKEN_TOKEN_SECRET_CURRENT`.
-- Rotation:
-  1. Add new secret and set `CURRENT` to new version; keep old in allowed.
-  2. Dual-verify old+new; APNs push to prompt Wallet to fetch refreshed pass carrying new token.
-  3. Observe adoption; retire old version by removing it from allowed list.
-  4. Emergency: remove compromised version immediately; requires re‑issuance for affected passes.
-- Dev note: keep plaintext during development only; switch to deterministic before production cutover.
+<!-- removed: deterministic token plan (we keep stored tokens per decision) -->
 
 Clarifying note: If you later share DB with legacy tables, consider the rename path below instead of fresh creates.
 
@@ -536,15 +526,14 @@ Key rules:
 - On any pass metadata change: update fields, then recompute ETag and set `wallet_pass.updated_at = now()` within the SAME transaction.
 - Transitional fallback: if `wallet_pass.etag` is NULL (legacy/older rows), compute ETag on the fly in GET but do not persist.
 - Last-Modified: use only `wallet_pass.updated_at` (we bump it for content changes), so middleware doesn’t need a join.
-- ETag composition (fields, in order):
-  1. serialNumber
-  2. passTypeIdentifier
-  3. authenticationToken
-  4. ticketStyle
-  5. poster
-  6. updatedAt (ISO)
-  7. passContent.data (stable stringified JSON)
-     Hash using SHA‑256; encode as hex (or base64 if preferred, but be consistent).
+- ETag composition (fields, in order; exclude token):
+  1. passTypeIdentifier
+  2. serialNumber
+  3. ticketStyle
+  4. poster
+  5. updatedAt (rounded to whole seconds)
+  6. passContent.data (stable stringified JSON)
+     Hash using SHA‑256; encode as hex; always quote the header value.
 
 Example write helper (TypeScript):
 
@@ -563,7 +552,7 @@ export async function upsertPassContentWithEtag(
         schema.wallet_pass_content.passTypeIdentifier,
         schema.wallet_pass_content.serialNumber,
       ],
-      set: { data, updatedAt: new Date() },
+      set: { data, updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000) },
     });
 
   const pass = await tx.query.wallet_pass.findFirst({
@@ -575,18 +564,17 @@ export async function upsertPassContentWithEtag(
   });
 
   const etag = await computeEtag({
-    serialNumber: keys.serialNumber,
     passTypeIdentifier: keys.passTypeIdentifier,
-    authenticationToken: pass!.authenticationToken,
+    serialNumber: keys.serialNumber,
     ticketStyle: pass!.ticketStyle,
     poster: pass!.poster,
-    updatedAt: pass!.updatedAt,
+    updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
     passContent: { data },
   });
 
   await tx
     .update(schema.wallet_pass)
-    .set({ etag, updatedAt: new Date() })
+    .set({ etag, updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000) })
     .where((p, { eq, and }) =>
       and(
         eq(p.passTypeIdentifier, keys.passTypeIdentifier),
@@ -600,8 +588,10 @@ Middleware changes (`pkpass-etag`):
 
 - Remove writes; only read `wallet_pass`.
 - If `etag` is null, compute one-time ETag from `wallet_pass` (and optionally loaded content) for header comparison only.
-- Set `ETag`, `Last-Modified` (from `wallet_pass.updated_at`), and `Cache-Control` consistently.
+- Set `ETag`, `Last-Modified` (from `wallet_pass.updated_at` rounded to whole seconds), and `Cache-Control` consistently.
 - Validate params before auth and before ETag to short-circuit fast.
+
+Guardrails: Add a Biome/CI check to block any raw writes to `wallet_pass[_content]` outside `apps/honoken/src/repo/**`.
 
 Example ordering in route:
 
@@ -615,9 +605,10 @@ v1.get(
 );
 ```
 
-### E) Certs/APNs storage & caching refinements
+### E) Certs/APNs storage & caching refinements (and APNs fan‑out)
 
 - DB ping on every cache hit: add a per-entry `lastCheckedAt` and a min recheck interval (e.g., 30–60s). Keep admin invalidation endpoints for instant bust.
+- APNs fan‑out: use bounded concurrency (100–200) and idempotency per `(pass, etag)`.
 
 ```ts
 const MIN_RECHECK_MS = 60_000; // 60s

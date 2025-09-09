@@ -1,28 +1,28 @@
-import type { Env } from "../types";
-import { getDbClient } from "../db/index";
-import { eq } from "drizzle-orm";
-import { certs } from "../db/schema";
-import {
-	encryptWithVersion,
-	decryptWithVersion,
-} from "../utils/crypto";
-import { createBoundedMap } from "../utils/bounded-cache";
+import { schema as sharedSchema } from 'database/schema';
+import { eq } from 'drizzle-orm';
+import { getDbClient } from '../db/index';
+import type { Env } from '../types';
+import { createBoundedMap } from '../utils/bounded-cache';
+import { decryptWithVersion, encryptWithVersion } from '../utils/crypto';
 import type { Logger } from '../utils/logger';
 
 /**
  * Represents a loaded certificate bundle for pass signing.
  */
 export type CertBundle = {
-	wwdr: string;
-	signerCert: string;
-	signerKey: string;
-	signerKeyPassphrase: string;
-	isEnhanced: boolean;
-	teamId: string;
+  wwdr: string;
+  signerCert: string;
+  signerKey: string;
+  signerKeyPassphrase: string;
+  isEnhanced: boolean;
+  teamId: string;
 };
 
 // Certificate cache with size limit (max 100 entries, no TTL needed - we do DB timestamp validation)
-export const certCache = createBoundedMap<string, { bundle: CertBundle; dbLastUpdatedAt: Date | null }>();
+export const certCache = createBoundedMap<
+  string,
+  { bundle: CertBundle; dbLastUpdatedAt: Date | null }
+>();
 const inFlightRequests = new Map<string, Promise<CertBundle>>();
 
 /**
@@ -41,91 +41,120 @@ const inFlightRequests = new Map<string, Promise<CertBundle>>();
  * @returns The loaded CertBundle
  * @throws If the certRef is not found or decryption fails
  */
-export async function loadCertBundle(certRef: string, env: Env, logger: Logger): Promise<CertBundle> {
-	const cacheKey = certRef;
-	
-	if (certCache.has(cacheKey)) {
-		const cachedEntry = certCache.get(cacheKey)!;
-		
-		// Verify if cache is still fresh by checking DB timestamp
-		const db = getDbClient(env, logger);
-		const latestTimestamp = await db.query.certs.findFirst({
-			where: (c, { eq }) => eq(c.certRef, certRef),
-			columns: { updatedAt: true }
-		});
+export async function loadCertBundle(
+  certRef: string,
+  env: Env,
+  logger: Logger
+): Promise<CertBundle> {
+  const cacheKey = certRef;
 
-		// If DB has a newer timestamp or no timestamp found, invalidate cache
-		if (
-			!latestTimestamp?.updatedAt ||
-			!cachedEntry.dbLastUpdatedAt ||
-			cachedEntry.dbLastUpdatedAt < latestTimestamp.updatedAt
-		) {
-			certCache.delete(cacheKey);
-		} else {
-			return cachedEntry.bundle;
-		}
-	}
+  if (certCache.has(cacheKey)) {
+    const cachedEntry = certCache.get(cacheKey)!;
 
-	// 3. Check for in-flight requests to prevent dog-piling
-	if (inFlightRequests.has(cacheKey)) {
-		return inFlightRequests.get(cacheKey)!;
-	}
+    // Verify if cache is still fresh by checking DB timestamp
+    const db = getDbClient(env, logger);
+    const latestTimestamp = await db
+      .select({ updatedAt: sharedSchema.walletCert.updatedAt })
+      .from(sharedSchema.walletCert)
+      .where(eq(sharedSchema.walletCert.certRef, certRef))
+      .limit(1)
+      .then((r) => r[0]);
 
-	// 4. Load from DB
-	const loadPromise = (async () => {
-		try {
-			const db = getDbClient(env, logger);
-			const row = await db.query.certs.findFirst({
-				where: (c, { eq }) => eq(c.certRef, certRef),
-			});
+    // If DB has a newer timestamp or no timestamp found, invalidate cache
+    if (
+      !(latestTimestamp?.updatedAt && cachedEntry.dbLastUpdatedAt) ||
+      cachedEntry.dbLastUpdatedAt < latestTimestamp.updatedAt
+    ) {
+      certCache.delete(cacheKey);
+    } else {
+      return cachedEntry.bundle;
+    }
+  }
 
-			if (!row) {
-				logger.error('Certificate not found for certRef', new Error('CertNotFound'), { certRef });
-				throw new Error(`Certificate not found for certRef: ${certRef}`);
-			}
+  // 3. Check for in-flight requests to prevent dog-piling
+  if (inFlightRequests.has(cacheKey)) {
+    return inFlightRequests.get(cacheKey)!;
+  }
 
-			if (!row.encryptedBundle) {
-				logger.error('Encrypted bundle missing for certRef', new Error('MissingEncryptedData'), { certRef });
-				throw new Error(`Encrypted bundle missing for certRef: ${certRef}`);
-			}
+  // 4. Load from DB
+  const loadPromise = (async () => {
+    try {
+      const db = getDbClient(env, logger);
+      const row = await db
+        .select({
+          certRef: sharedSchema.walletCert.certRef,
+          description: sharedSchema.walletCert.description,
+          isEnhanced: sharedSchema.walletCert.isEnhanced,
+          teamId: sharedSchema.walletCert.teamId,
+          encryptedBundle: sharedSchema.walletCert.encryptedBundle,
+          updatedAt: sharedSchema.walletCert.updatedAt,
+        })
+        .from(sharedSchema.walletCert)
+        .where(eq(sharedSchema.walletCert.certRef, certRef))
+        .limit(1)
+        .then((r) => r[0]);
 
-			// Decrypt using versioned format
-			const decryptedData = await decryptWithVersion(row.encryptedBundle, env);
+      if (!row) {
+        logger.error(
+          'Certificate not found for certRef',
+          new Error('CertNotFound'),
+          { certRef }
+        );
+        throw new Error(`Certificate not found for certRef: ${certRef}`);
+      }
 
-			const decoder = new TextDecoder();
-			const pemBundleJson = decoder.decode(decryptedData);
-			const pemBundle = JSON.parse(pemBundleJson);
+      if (!row.encryptedBundle) {
+        logger.error(
+          'Encrypted bundle missing for certRef',
+          new Error('MissingEncryptedData'),
+          { certRef }
+        );
+        throw new Error(`Encrypted bundle missing for certRef: ${certRef}`);
+      }
 
-			const bundle: CertBundle = {
-				wwdr: pemBundle.wwdr,
-				signerCert: pemBundle.signerCert,
-				signerKey: pemBundle.signerKey,
-				signerKeyPassphrase: pemBundle.signerKeyPassphrase,
-				isEnhanced: row.isEnhanced,
-				teamId: row.teamId,
-			};
+      // Decrypt using versioned format
+      const decryptedData = await decryptWithVersion(row.encryptedBundle, env);
 
-			// Cache the bundle with DB last updated timestamp
-			// Use current time if updated_at is null (shouldn't happen with properly configured schema)
-			const dbLastUpdatedAt = row.updatedAt ?? null;
-			certCache.set(cacheKey, { 
-				bundle, 
-				dbLastUpdatedAt
-			});
-			
-			return bundle;
-		} catch (error) {
-			logger.error('Failed to load certificate bundle', error instanceof Error ? error : new Error(String(error)), { certRef });
-			throw new Error(`Failed to load certificate bundle: ${(error as Error).message}`);
-		} finally {
-			// 5. Clean up in-flight request
-			inFlightRequests.delete(cacheKey);
-		}
-	})();
+      const decoder = new TextDecoder();
+      const pemBundleJson = decoder.decode(decryptedData);
+      const pemBundle = JSON.parse(pemBundleJson);
 
-	inFlightRequests.set(cacheKey, loadPromise);
+      const bundle: CertBundle = {
+        wwdr: pemBundle.wwdr,
+        signerCert: pemBundle.signerCert,
+        signerKey: pemBundle.signerKey,
+        signerKeyPassphrase: pemBundle.signerKeyPassphrase,
+        isEnhanced: row.isEnhanced,
+        teamId: row.teamId,
+      };
 
-	return loadPromise;
+      // Cache the bundle with DB last updated timestamp
+      // Use current time if updated_at is null (shouldn't happen with properly configured schema)
+      const dbLastUpdatedAt = row.updatedAt ?? null;
+      certCache.set(cacheKey, {
+        bundle,
+        dbLastUpdatedAt,
+      });
+
+      return bundle;
+    } catch (error) {
+      logger.error(
+        'Failed to load certificate bundle',
+        error instanceof Error ? error : new Error(String(error)),
+        { certRef }
+      );
+      throw new Error(
+        `Failed to load certificate bundle: ${(error as Error).message}`
+      );
+    } finally {
+      // 5. Clean up in-flight request
+      inFlightRequests.delete(cacheKey);
+    }
+  })();
+
+  inFlightRequests.set(cacheKey, loadPromise);
+
+  return loadPromise;
 }
 
 /**
@@ -147,74 +176,81 @@ export async function loadCertBundle(certRef: string, env: Env, logger: Logger):
  * @throws If encryption or storage fails
  */
 export async function storeCertBundle(
-	certRef: string,
-	bundleData: {
-		wwdr: string;
-		signerCert: string;
-		signerKey: string;
-		signerKeyPassphrase: string;
-	},
-	isEnhanced: boolean,
-	description: string | null,
-	teamId: string,
-	env: Env,
-	logger: Logger
+  certRef: string,
+  bundleData: {
+    wwdr: string;
+    signerCert: string;
+    signerKey: string;
+    signerKeyPassphrase: string;
+  },
+  isEnhanced: boolean,
+  description: string | null,
+  teamId: string,
+  env: Env,
+  logger: Logger
 ): Promise<void> {
-	try {
-		// 1. Convert bundle data to JSON string and encode to ArrayBuffer
-		const encoder = new TextEncoder();
-		const dataBuffer = encoder.encode(JSON.stringify(bundleData));
+  try {
+    // 1. Convert bundle data to JSON string and encode to ArrayBuffer
+    const encoder = new TextEncoder();
+    const dataBuffer = encoder.encode(JSON.stringify(bundleData));
 
-		// 2. Encrypt with versioned format
-		const versionedCiphertext = await encryptWithVersion(dataBuffer, env);
+    // 2. Encrypt with versioned format
+    const versionedCiphertext = await encryptWithVersion(dataBuffer, env);
 
-		// 6. Store in the database
-		const db = getDbClient(env, logger);
+    // 6. Store in the database
+    const db = getDbClient(env, logger);
 
-		await db.insert(certs)
-					.values({
-			certRef,
-			description,
-			isEnhanced,
-			teamId,
-			encryptedBundle: versionedCiphertext,
-			iv: '', // Empty string - IV is now embedded in versioned ciphertext
-		})
-			.onConflictDoUpdate({
-				target: certs.certRef,
-				set: {
-					description,
-					isEnhanced,
-					teamId,
-					encryptedBundle: versionedCiphertext,
-					iv: '', // Empty string - IV is now embedded in versioned ciphertext
-					// updatedAt will be set automatically by the DB
-				},
-			});
+    await db
+      .insert(sharedSchema.walletCert)
+      .values({
+        certRef,
+        description,
+        isEnhanced,
+        teamId,
+        encryptedBundle: versionedCiphertext,
+      })
+      .onConflictDoUpdate({
+        target: sharedSchema.walletCert.certRef,
+        set: {
+          description,
+          isEnhanced,
+          teamId,
+          encryptedBundle: versionedCiphertext,
+          // updatedAt will be set automatically by the DB
+        },
+      });
 
-		// 7. Get updated timestamp from DB
-		const updatedRow = await db.query.certs.findFirst({
-			where: (c, { eq }) => eq(c.certRef, certRef),
-			columns: { updatedAt: true }
-		});
+    // 7. Get updated timestamp from DB
+    const updatedRow = await db
+      .select({ updatedAt: sharedSchema.walletCert.updatedAt })
+      .from(sharedSchema.walletCert)
+      .where(eq(sharedSchema.walletCert.certRef, certRef))
+      .limit(1)
+      .then((r) => r[0]);
 
-		// 8. Update in-memory cache
-		const bundle: CertBundle = {
-			...bundleData,
-			isEnhanced,
-			teamId: teamId,
-		};
-		
-		// Cache with DB last updated timestamp, use current time if not available
-		const dbLastUpdatedAt = updatedRow?.updatedAt ?? null;
-		certCache.set(certRef, { 
-			bundle, 
-			dbLastUpdatedAt
-		});
-	} catch (error) {
-		logger.error('Failed to store certificate bundle', error instanceof Error ? error : new Error(String(error)), { certRef, teamId });
-		throw new Error(`Failed to store certificate bundle: ${(error as Error).message}`);
-	}
+    // 8. Update in-memory cache
+    const bundle: CertBundle = {
+      ...bundleData,
+      isEnhanced,
+      teamId,
+    };
+
+    // Cache with DB last updated timestamp, use current time if not available
+    const dbLastUpdatedAt = updatedRow?.updatedAt ?? null;
+    certCache.set(certRef, {
+      bundle,
+      dbLastUpdatedAt,
+    });
+  } catch (error) {
+    logger.error(
+      'Failed to store certificate bundle',
+      error instanceof Error ? error : new Error(String(error)),
+      { certRef, teamId }
+    );
+    throw new Error(
+      `Failed to store certificate bundle: ${(error as Error).message}`
+    );
+  }
 }
 
 /**
@@ -225,6 +261,6 @@ export async function storeCertBundle(
  * @param logger - Logger instance
  */
 export function invalidateCertCache(certRef: string, logger: Logger): void {
-	certCache.delete(certRef);
-	logger.info('Invalidated cache for certRef', { certRef });
+  certCache.delete(certRef);
+  logger.info('Invalidated cache for certRef', { certRef });
 }

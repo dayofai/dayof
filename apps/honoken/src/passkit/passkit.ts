@@ -18,10 +18,10 @@ if (process.env.VERCEL !== undefined) {
 }
 
 import { Buffer } from 'node:buffer';
+import { schema as sharedSchema } from 'database/schema';
 import { eq } from 'drizzle-orm';
 import { type ZodIssue, z } from 'zod/v4';
 import { getDbClient } from '../db';
-import { passes, passTypes } from '../db/schema';
 import { PassDataEventTicketSchema } from '../schemas';
 import { VercelBlobAssetStorage } from '../storage/vercel-blob-storage';
 import type { Env } from '../types';
@@ -165,13 +165,23 @@ export async function buildPass(
 
     // 1) Fetch pass row
     logger.info('Fetching pass data from database');
-    const passRow = await db.query.passes.findFirst({
-      where: (p, { eq, and }) =>
+    const passRow = await db
+      .select({
+        passTypeIdentifier: sharedSchema.walletPass.passTypeIdentifier,
+        serialNumber: sharedSchema.walletPass.serialNumber,
+        authenticationToken: sharedSchema.walletPass.authenticationToken,
+        ticketStyle: sharedSchema.walletPass.ticketStyle,
+        poster: sharedSchema.walletPass.poster,
+      })
+      .from(sharedSchema.walletPass)
+      .where(
         and(
-          eq(p.passTypeIdentifier, passTypeIdentifier),
-          eq(p.serialNumber, serialNumber)
-        ),
-    });
+          eq(sharedSchema.walletPass.passTypeIdentifier, passTypeIdentifier),
+          eq(sharedSchema.walletPass.serialNumber, serialNumber)
+        )
+      )
+      .limit(1)
+      .then((r) => r[0] as any);
 
     if (!passRow) {
       logger.error('Pass not found', new Error('PASS_NOT_FOUND'), {
@@ -191,9 +201,14 @@ export async function buildPass(
 
     // 2) Find the passType -> certRef
     logger.info('Finding certificate reference for pass type');
-    const passTypeLink = await db.query.passTypes.findFirst({
-      where: (pt) => eq(pt.passTypeIdentifier, passTypeIdentifier),
-    });
+    const passTypeLink = await db
+      .select({ certRef: sharedSchema.walletPassType.certRef })
+      .from(sharedSchema.walletPassType)
+      .where(
+        eq(sharedSchema.walletPassType.passTypeIdentifier, passTypeIdentifier)
+      )
+      .limit(1)
+      .then((r) => r[0]);
 
     if (!passTypeLink) {
       logger.error('No pass type mapping found', new Error('CONFIG_ERROR'), {
@@ -220,21 +235,21 @@ export async function buildPass(
     }
 
     // 4) Prepare and Validate Pass Data from DB
-    let rawPassDataFromDb: any;
-    if (typeof (passRow as any).passData === 'string') {
-      try {
-        rawPassDataFromDb = JSON.parse((passRow as any).passData);
-      } catch (e) {
-        logger.error('Invalid JSON in passData from DB', e, {
-          passTypeIdentifier,
-          serialNumber,
-        });
-        throw new Error('PASS_DATA_INVALID_JSON');
-      }
-    } else {
-      rawPassDataFromDb = (passRow as any).passData;
-    }
-    rawPassDataFromDb = rawPassDataFromDb || {};
+    const contentRow = await db
+      .select({ data: sharedSchema.walletPassContent.data })
+      .from(sharedSchema.walletPassContent)
+      .where(
+        and(
+          eq(
+            sharedSchema.walletPassContent.passTypeIdentifier,
+            passTypeIdentifier
+          ),
+          eq(sharedSchema.walletPassContent.serialNumber, serialNumber)
+        )
+      )
+      .limit(1)
+      .then((r) => r[0]);
+    const rawPassDataFromDb: any = (contentRow?.data ?? {}) as unknown;
 
     let validatedPassData: z.infer<typeof PassDataEventTicketSchema>;
     try {

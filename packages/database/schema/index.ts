@@ -14,9 +14,11 @@ export * from './pricing';
 export * from './product';
 export * from './promotion';
 export * from './region';
+export { relations } from './relations';
 export * from './sales-channel';
 export * from './tag';
 export * from './tax';
+export * from './wallet';
 
 // Build a Drizzle V2-compatible schema object containing tables (and enums)
 // Consumers can import { schema } from "@database/schema" and pass it to drizzle()
@@ -71,6 +73,16 @@ import {
 } from './sales-channel';
 import { tags } from './tag';
 import { productVariantTaxRate, taxRate } from './tax';
+import {
+  walletApnsKey,
+  walletCert,
+  walletDevice,
+  walletPass,
+  walletPassContent,
+  walletPassType,
+  walletRegistration,
+  walletTicketStyleEnum,
+} from './wallet';
 
 export const schema = {
   // auth (Better Auth)
@@ -132,6 +144,17 @@ export const schema = {
   subscription,
   subscriptionSchedulePhase,
   installment,
+
+  // wallet (PassKit)
+  walletTicketStyleEnum,
+  walletCert,
+  walletApnsKey,
+  walletPassType,
+  walletPass,
+  walletDevice,
+  walletRegistration,
+  walletPassContent,
+  // relations are defined centrally in relations.ts
 
   // policy engine (TBD)
 } as const;
