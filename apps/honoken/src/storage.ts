@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { schema as sharedSchema } from 'database/schema';
-import { and, eq, gt, SQL } from 'drizzle-orm';
+import { and, eq, gt } from 'drizzle-orm';
 import type { PostHog } from 'posthog-node';
 import { getDbClient } from './db';
 import type { Env } from './types';
@@ -22,7 +22,7 @@ export async function verifyToken(
 ): Promise<{ valid: boolean; notFound: boolean }> {
   // 1. Strict case-sensitive check for "ApplePass " prefix
   // This handles missing headers, empty headers, wrong schemes, and wrong case
-  if (!(authorizationHeader && authorizationHeader.startsWith('ApplePass '))) {
+  if (!authorizationHeader?.startsWith('ApplePass ')) {
     return { valid: false, notFound: false };
   }
 
@@ -38,21 +38,14 @@ export async function verifyToken(
 
   // 4. Only proceed with database lookup if all preliminary checks pass
   const dbClient = getDbClient(env, logger);
-  const result = await dbClient
-    .select({
-      authenticationToken: sharedSchema.walletPass.authenticationToken,
-    })
-    .from(sharedSchema.walletPass)
-    .where(
-      and(
-        eq(sharedSchema.walletPass.passTypeIdentifier, passTypeIdentifier),
-        eq(sharedSchema.walletPass.serialNumber, serialNumber)
-      )
-    )
-    .limit(1)
-    .then((r) => r[0]);
+  const result = await dbClient.query.walletPass.findFirst({
+    columns: { authenticationToken: true },
+    where: { passTypeIdentifier, serialNumber },
+  });
 
-  if (!result) return { valid: false, notFound: true };
+  if (!result) {
+    return { valid: false, notFound: true };
+  }
   return { valid: result.authenticationToken === token, notFound: false };
 }
 
@@ -89,8 +82,6 @@ export async function registerDevice(
   const dbClient = getDbClient(env, logger);
 
   try {
-    type RegistrationOutcome = 'created' | 'reactivated' | 'already_active';
-
     const outcome = await dbClient.transaction(async (tx) => {
       await tx
         .insert(sharedSchema.walletDevice)
@@ -103,28 +94,13 @@ export async function registerDevice(
           set: { pushToken },
         });
 
-      const existingReg = await dbClient
-        .select({
-          deviceLibraryIdentifier:
-            sharedSchema.walletRegistration.deviceLibraryIdentifier,
-          active: sharedSchema.walletRegistration.active,
-        })
-        .from(sharedSchema.walletRegistration)
-        .where(
-          and(
-            eq(
-              sharedSchema.walletRegistration.deviceLibraryIdentifier,
-              deviceLibraryIdentifier
-            ),
-            eq(
-              sharedSchema.walletRegistration.passTypeIdentifier,
-              passTypeIdentifier
-            ),
-            eq(sharedSchema.walletRegistration.serialNumber, serialNumber)
-          )
-        )
-        .limit(1)
-        .then((r) => r[0]);
+      const existingReg = await tx.query.walletRegistration.findFirst({
+        columns: {
+          deviceLibraryIdentifier: true,
+          active: true,
+        },
+        where: { deviceLibraryIdentifier, passTypeIdentifier, serialNumber },
+      });
 
       if (existingReg) {
         if (existingReg.active) {
@@ -149,9 +125,20 @@ export async function registerDevice(
           );
         return 'reactivated' as const;
       }
+      // Look up the pass to get its id for the registration row
+      const passRow = await tx.query.walletPass.findFirst({
+        columns: { id: true },
+        where: { passTypeIdentifier, serialNumber },
+      });
+
+      if (!passRow) {
+        throw new Error('PASS_NOT_FOUND');
+      }
+
       await tx
         .insert(sharedSchema.walletRegistration)
         .values({
+          passId: passRow.id,
           deviceLibraryIdentifier,
           passTypeIdentifier,
           serialNumber,
@@ -207,7 +194,7 @@ export async function registerDevice(
       status: 500,
       message: 'Internal server error during registration.',
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('Error during device registration transaction', error, {
       deviceLibraryIdentifier,
       passTypeIdentifier,
@@ -276,7 +263,7 @@ export async function unregisterDevice(
       status: 200,
       message: 'Device successfully unregistered.',
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('Error during device unregistration', error, {
       deviceLibraryIdentifier,
       passTypeIdentifier,
@@ -398,8 +385,7 @@ export async function verifyListAccessToken(
         ),
         eq(sharedSchema.walletRegistration.active, true)
       )
-    )
-    .limit(1);
+    );
 
   return Array.isArray(result) ? result.length > 0 : !!result;
 }
@@ -409,22 +395,13 @@ export async function getPassData(
   passTypeIdentifier: string,
   serialNumber: string,
   logger: Logger
-): Promise<{ authenticationToken: string; [key: string]: any } | undefined> {
+): Promise<{ authenticationToken: string } | undefined> {
   const dbClient = getDbClient(env, logger);
 
-  const result = await dbClient
-    .select({
-      authenticationToken: sharedSchema.walletPass.authenticationToken,
-    })
-    .from(sharedSchema.walletPass)
-    .where(
-      and(
-        eq(sharedSchema.walletPass.passTypeIdentifier, passTypeIdentifier),
-        eq(sharedSchema.walletPass.serialNumber, serialNumber)
-      )
-    )
-    .limit(1)
-    .then((r) => r[0] as any);
+  const result = await dbClient.query.walletPass.findFirst({
+    columns: { authenticationToken: true },
+    where: { passTypeIdentifier, serialNumber },
+  });
 
   if (!result) {
     return;
@@ -441,17 +418,10 @@ export async function getPassModificationTime(
 ): Promise<Date | null> {
   const dbClient = getDbClient(env, logger);
 
-  const result = await dbClient
-    .select({ updatedAt: sharedSchema.walletPass.updatedAt })
-    .from(sharedSchema.walletPass)
-    .where(
-      and(
-        eq(sharedSchema.walletPass.passTypeIdentifier, passTypeIdentifier),
-        eq(sharedSchema.walletPass.serialNumber, serialNumber)
-      )
-    )
-    .limit(1)
-    .then((r) => r[0]);
+  const result = await dbClient.query.walletPass.findFirst({
+    columns: { updatedAt: true },
+    where: { passTypeIdentifier, serialNumber },
+  });
 
   if (!result) {
     return null;
@@ -464,10 +434,7 @@ export async function getPassModificationTime(
 }
 
 // Logs messages using the provided logger instance.
-export async function logMessages(
-  logs: string[],
-  logger: Logger
-): Promise<void> {
+export function logMessages(logs: string[], logger: Logger): void {
   for (const msg of logs) {
     logger.info('[PassKit Log]', { messageContent: msg });
   }

@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 import type { DevicePassRegistrationsParams } from '../schemas';
 import { listUpdatedSerials } from '../storage';
 import type { Env } from '../types';
-import { createLogger, type Logger } from '../utils/logger';
+import { createLogger } from '../utils/logger';
 
 export const handleListUpdatedSerials = async (
   c: Context<{ Bindings: Env }>
@@ -33,8 +33,9 @@ export const handleListUpdatedSerials = async (
     }
 
     return c.json(result, 200);
-  } catch (error: any) {
-    logger.error('Error in handleListUpdatedSerials', error);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error('Error in handleListUpdatedSerials', err);
     return c.json(
       {
         error: 'Internal Server Error',

@@ -3,7 +3,8 @@ import type { PostHog } from 'posthog-node';
 import type { PassPathParams, RegisterDevicePayload } from '../schemas';
 import { registerDevice } from '../storage';
 import type { Env } from '../types';
-import { createLogger, type Logger } from '../utils/logger';
+import { toErrorStatus, toOkStatus } from '../utils/http';
+import { createLogger } from '../utils/logger';
 
 export const handleRegisterDevice = async (c: Context<{ Bindings: Env }>) => {
   const logger = createLogger(c);
@@ -30,26 +31,29 @@ export const handleRegisterDevice = async (c: Context<{ Bindings: Env }>) => {
     );
 
     if (result.success) {
+      const okStatus = toOkStatus(result.status);
       return c.json(
         {
           message:
             result.message ||
-            (result.status === 201
+            (okStatus === 201
               ? 'Registration created.'
               : 'Registration active.'),
         },
-        result.status as any
+        okStatus
       );
     }
+    const errStatus = toErrorStatus(result.status);
     return c.json(
       {
         error: 'Registration Failed',
         message: result.message || 'Could not process registration.',
       },
-      result.status as any
+      errStatus
     );
-  } catch (error: any) {
-    logger.error('Critical error in handleRegisterDevice', error);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error('Critical error in handleRegisterDevice', err);
     return c.json(
       {
         error: 'Internal Server Error',

@@ -4,6 +4,7 @@ import type { PassIdParams } from '../schemas';
 import type { Env } from '../types';
 import { createLogger } from '../utils/logger';
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: needed complexity
 export const handleGetPassFile = async (c: Context<{ Bindings: Env }>) => {
   const logger = createLogger(c);
 
@@ -56,16 +57,17 @@ export const handleGetPassFile = async (c: Context<{ Bindings: Env }>) => {
       bufferSize: passBuffer.byteLength,
     });
     return c.body(passBuffer, 200);
-  } catch (error: any) {
-    logger.error('Error in handleGetPassFile', error as Error, {
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error('Error in handleGetPassFile', err, {
       passTypeIdentifier,
       serialNumber,
-      originalErrorMessage: error.message,
+      originalErrorMessage: err.message,
     });
 
     if (
-      error.message === 'PASS_NOT_FOUND' ||
-      error.message === 'PASS_TYPE_MISMATCH'
+      err.message === 'PASS_NOT_FOUND' ||
+      err.message === 'PASS_TYPE_MISMATCH'
     ) {
       return c.json(
         {
@@ -76,10 +78,7 @@ export const handleGetPassFile = async (c: Context<{ Bindings: Env }>) => {
         404
       ); // Or 401 if auth is implied
     }
-    if (
-      error.message &&
-      error.message.startsWith('Server configuration error')
-    ) {
+    if (err.message?.startsWith('Server configuration error')) {
       return c.json(
         {
           error: 'Pass Configuration Error',
@@ -89,7 +88,7 @@ export const handleGetPassFile = async (c: Context<{ Bindings: Env }>) => {
         500
       );
     }
-    if (error.message && error.message.startsWith('CERT_BUNDLE_LOAD_ERROR')) {
+    if (err.message?.startsWith('CERT_BUNDLE_LOAD_ERROR')) {
       return c.json(
         {
           error: 'Pass Security Configuration Error',
@@ -98,7 +97,7 @@ export const handleGetPassFile = async (c: Context<{ Bindings: Env }>) => {
         500
       );
     }
-    if (error.message === 'PASS_DATA_INVALID_JSON') {
+    if (err.message === 'PASS_DATA_INVALID_JSON') {
       return c.json(
         {
           error: 'Invalid Pass Data',
@@ -107,11 +106,8 @@ export const handleGetPassFile = async (c: Context<{ Bindings: Env }>) => {
         500
       );
     }
-    if (
-      error.message &&
-      error.message.startsWith('PASS_DATA_VALIDATION_ERROR:')
-    ) {
-      const userMessage = error.message.substring(
+    if (err.message?.startsWith('PASS_DATA_VALIDATION_ERROR:')) {
+      const userMessage = err.message.substring(
         'PASS_DATA_VALIDATION_ERROR: '.length
       );
       return c.json(
@@ -124,7 +120,7 @@ export const handleGetPassFile = async (c: Context<{ Bindings: Env }>) => {
         400
       ); // Using 400 as per discussion, could be 500 depending on interpretation
     }
-    if (error.message && error.message.startsWith('UNSUPPORTED_TICKET_STYLE')) {
+    if (err.message?.startsWith('UNSUPPORTED_TICKET_STYLE')) {
       return c.json(
         {
           error: 'Unsupported Pass Type',
@@ -135,15 +131,15 @@ export const handleGetPassFile = async (c: Context<{ Bindings: Env }>) => {
       );
     }
     if (
-      error.message &&
-      (error.message.startsWith('Mandatory logo.png not found') ||
-        error.message.startsWith('icon.png is mandatory') ||
-        error.message.includes('has incorrect dimensions'))
+      err.message &&
+      (err.message.startsWith('Mandatory logo.png not found') ||
+        err.message.startsWith('icon.png is mandatory') ||
+        err.message.includes('has incorrect dimensions'))
     ) {
       logger.warn('Pass Asset Error encountered during pass generation', {
         passTypeIdentifier,
         serialNumber,
-        errorDetails: error instanceof Error ? error.message : String(error),
+        errorDetails: err.message,
       });
       return c.json(
         {
@@ -154,8 +150,8 @@ export const handleGetPassFile = async (c: Context<{ Bindings: Env }>) => {
         500
       );
     }
-    if (error.message === 'UNEXPECTED_BUFFER_TYPE') {
-      logger.error('Unexpected buffer type from passkit-generator', error, {
+    if (err.message === 'UNEXPECTED_BUFFER_TYPE') {
+      logger.error('Unexpected buffer type from passkit-generator', err, {
         passTypeIdentifier,
         serialNumber,
       });

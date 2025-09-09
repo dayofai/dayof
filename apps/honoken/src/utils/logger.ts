@@ -14,8 +14,10 @@ function shouldCaptureToPostHog(
   isProd: boolean
 ): boolean {
   // Always capture warnings and errors
-  if (level === 'warn' || level === 'error') return true;
-  
+  if (level === 'warn' || level === 'error') {
+    return true;
+  }
+
   // In production, only capture significant info events
   if (isProd && level === 'info') {
     const significantPatterns = [
@@ -26,9 +28,9 @@ function shouldCaptureToPostHog(
       'device_registered',
       'bulk_update',
     ];
-    return significantPatterns.some(pattern => message.includes(pattern));
+    return significantPatterns.some((pattern) => message.includes(pattern));
   }
-  
+
   // In development, don't spam PostHog with info logs
   return false;
 }
@@ -45,17 +47,19 @@ export function createLogger(c: Context) {
   const isDev = c.env.ENVIRONMENT === 'development';
   const isProd = c.env.ENVIRONMENT === 'production';
   const isVerbose = c.env.VERBOSE_LOGGING === 'true';
-  
+
   // Get PostHog from context - might be null if disabled or circuit broken
   const posthog = c.get('posthog') as PostHog | undefined;
-  
+
   // Extract request metadata for all log entries
   const headers = c.req.raw?.headers;
   const baseLogData = {
     req_id: requestId,
     region: process.env.VERCEL_REGION || 'iad1',
-    country: headers?.get('x-vercel-ip-country') || 
-             headers?.get('cf-ipcountry') || 'unknown',
+    country:
+      headers?.get('x-vercel-ip-country') ||
+      headers?.get('cf-ipcountry') ||
+      'unknown',
     vercel_id: headers?.get('x-vercel-id'),
     platform: 'vercel-fluid',
     pid: process.pid, // Process ID helps track container lifecycle
@@ -71,16 +75,18 @@ export function createLogger(c: Context) {
     if (userContext?.distinctId) {
       return userContext.distinctId;
     }
-    
+
     // Fall through various identifiers
-    return data.userId || 
-           data.attendeeId || 
-           data.tenantId || 
-           data.deviceLibraryIdentifier || 
-           data.serialNumber || 
-           data.passTypeIdentifier ||
-           requestId || 
-           `anonymous-${Date.now()}`;
+    return (
+      data.userId ||
+      data.attendeeId ||
+      data.tenantId ||
+      data.deviceLibraryIdentifier ||
+      data.serialNumber ||
+      data.passTypeIdentifier ||
+      requestId ||
+      `anonymous-${Date.now()}`
+    );
   };
 
   /**
@@ -94,12 +100,12 @@ export function createLogger(c: Context) {
     error?: Error
   ): void => {
     // Skip if PostHog unavailable or event not significant
-    if (!posthog || !shouldCaptureToPostHog(level, eventName, isProd)) {
+    if (!(posthog && shouldCaptureToPostHog(level, eventName, isProd))) {
       return;
     }
-    
+
     const distinctId = getDistinctId(properties);
-    
+
     // Enhance properties with context
     const enhancedProperties: Record<string, any> = {
       ...baseLogData,
@@ -109,7 +115,7 @@ export function createLogger(c: Context) {
       container_uptime: process.uptime(), // How long this container has been running
       memory_usage_mb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
     };
-    
+
     // Add user context if available
     const userContext = c.get('userContext') as any;
     if (userContext) {
@@ -117,7 +123,7 @@ export function createLogger(c: Context) {
       enhancedProperties.tenantId = userContext.tenantId;
       enhancedProperties.attendeeId = userContext.attendeeId;
     }
-    
+
     try {
       if (error && level === 'error') {
         // For errors, use PostHog's exception format
@@ -141,7 +147,7 @@ export function createLogger(c: Context) {
           properties: enhancedProperties,
         });
       }
-      
+
       // NO FLUSH HERE - this is the key difference for Fluid Compute
       // Let PostHog's batching system handle when to send events
     } catch (captureError) {
@@ -152,35 +158,45 @@ export function createLogger(c: Context) {
 
   return {
     info: (message: string, data: Record<string, any> = {}) => {
-      if (!isDev && !isVerbose) return;
-      
-      console.log(JSON.stringify({
-        ts: Date.now(),
-        lvl: 'info',
-        msg: message,
-        ...baseLogData,
-        ...data,
-      }));
-      
+      if (!(isDev || isVerbose)) {
+        return;
+      }
+
+      console.log(
+        JSON.stringify({
+          ts: Date.now(),
+          lvl: 'info',
+          msg: message,
+          ...baseLogData,
+          ...data,
+        })
+      );
+
       // Selectively capture to PostHog based on message importance
       captureToPostHog(`log_${message}`, { message, ...data }, 'info');
     },
 
     warn: (message: string, data: Record<string, any> = {}) => {
-      console.warn(JSON.stringify({
-        ts: Date.now(),
-        lvl: 'warn',
-        msg: message,
-        ...baseLogData,
-        ...data,
-      }));
-      
+      console.warn(
+        JSON.stringify({
+          ts: Date.now(),
+          lvl: 'warn',
+          msg: message,
+          ...baseLogData,
+          ...data,
+        })
+      );
+
       // All warnings go to PostHog for monitoring
-      captureToPostHog('server_warning', { 
-        message, 
-        warning_type: data.type || 'general',
-        ...data 
-      }, 'warn');
+      captureToPostHog(
+        'server_warning',
+        {
+          message,
+          warning_type: data.type || 'general',
+          ...data,
+        },
+        'warn'
+      );
     },
 
     // Async variants no longer need special handling in Fluid Compute
@@ -190,43 +206,61 @@ export function createLogger(c: Context) {
       logger.warn(message, data);
     },
 
-    error: (message: string, error: unknown, data: Record<string, any> = {}) => {
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      
-      console.error(JSON.stringify({
-        ts: Date.now(),
-        lvl: 'error',
-        msg: message,
-        err_msg: errorObj.message,
-        err_stack: errorObj.stack,
-        ...baseLogData,
-        ...data,
-      }));
-      
+    error: (
+      message: string,
+      error: unknown,
+      data: Record<string, any> = {}
+    ) => {
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
+
+      console.error(
+        JSON.stringify({
+          ts: Date.now(),
+          lvl: 'error',
+          msg: message,
+          err_msg: errorObj.message,
+          err_stack: errorObj.stack,
+          ...baseLogData,
+          ...data,
+        })
+      );
+
       // All errors go to PostHog with full context
-      captureToPostHog('server_error', {
-        message,
-        error_name: errorObj.name,
-        error_message: errorObj.message,
-        error_stack: errorObj.stack,
-        ...data,
-      }, 'error', errorObj);
+      captureToPostHog(
+        'server_error',
+        {
+          message,
+          error_name: errorObj.name,
+          error_message: errorObj.message,
+          error_stack: errorObj.stack,
+          ...data,
+        },
+        'error',
+        errorObj
+      );
     },
 
-    errorAsync: async (message: string, error: unknown, data: Record<string, any> = {}) => {
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      
+    errorAsync: async (
+      message: string,
+      error: unknown,
+      data: Record<string, any> = {}
+    ) => {
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
+
       // Log immediately
       const logger = createLogger(c);
       logger.error(message, error, data);
-      
+
       // Only force flush for critical errors
       // This is a Fluid Compute optimization - we're selective about flushing
-      const isCritical = data.severity === 'critical' || 
-                        message.includes('critical') ||
-                        message.includes('unhandled') ||
-                        message.includes('database');
-                        
+      const isCritical =
+        data.severity === 'critical' ||
+        message.includes('critical') ||
+        message.includes('unhandled') ||
+        message.includes('database');
+
       if (posthog && isCritical) {
         try {
           await posthog.flush();

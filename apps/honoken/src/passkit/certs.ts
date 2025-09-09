@@ -1,5 +1,4 @@
 import { schema as sharedSchema } from 'database/schema';
-import { eq } from 'drizzle-orm';
 import { getDbClient } from '../db/index';
 import type { Env } from '../types';
 import { createBoundedMap } from '../utils/bounded-cache';
@@ -48,22 +47,19 @@ export async function loadCertBundle(
 ): Promise<CertBundle> {
   const cacheKey = certRef;
 
-  if (certCache.has(cacheKey)) {
-    const cachedEntry = certCache.get(cacheKey)!;
-
+  const cachedEntry = certCache.get(cacheKey);
+  if (cachedEntry) {
     // Verify if cache is still fresh by checking DB timestamp
     const db = getDbClient(env, logger);
-    const latestTimestamp = await db
-      .select({ updatedAt: sharedSchema.walletCert.updatedAt })
-      .from(sharedSchema.walletCert)
-      .where(eq(sharedSchema.walletCert.certRef, certRef))
-      .limit(1)
-      .then((r) => r[0]);
+    const latestRow = await db.query.walletCert.findFirst({
+      columns: { updatedAt: true },
+      where: { certRef },
+    });
 
     // If DB has a newer timestamp or no timestamp found, invalidate cache
     if (
-      !(latestTimestamp?.updatedAt && cachedEntry.dbLastUpdatedAt) ||
-      cachedEntry.dbLastUpdatedAt < latestTimestamp.updatedAt
+      !(latestRow?.updatedAt && cachedEntry.dbLastUpdatedAt) ||
+      cachedEntry.dbLastUpdatedAt < latestRow.updatedAt
     ) {
       certCache.delete(cacheKey);
     } else {
@@ -72,27 +68,26 @@ export async function loadCertBundle(
   }
 
   // 3. Check for in-flight requests to prevent dog-piling
-  if (inFlightRequests.has(cacheKey)) {
-    return inFlightRequests.get(cacheKey)!;
+  const inFlight = inFlightRequests.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
   }
 
   // 4. Load from DB
   const loadPromise = (async () => {
     try {
       const db = getDbClient(env, logger);
-      const row = await db
-        .select({
-          certRef: sharedSchema.walletCert.certRef,
-          description: sharedSchema.walletCert.description,
-          isEnhanced: sharedSchema.walletCert.isEnhanced,
-          teamId: sharedSchema.walletCert.teamId,
-          encryptedBundle: sharedSchema.walletCert.encryptedBundle,
-          updatedAt: sharedSchema.walletCert.updatedAt,
-        })
-        .from(sharedSchema.walletCert)
-        .where(eq(sharedSchema.walletCert.certRef, certRef))
-        .limit(1)
-        .then((r) => r[0]);
+      const row = await db.query.walletCert.findFirst({
+        columns: {
+          certRef: true,
+          description: true,
+          isEnhanced: true,
+          teamId: true,
+          encryptedBundle: true,
+          updatedAt: true,
+        },
+        where: { certRef },
+      });
 
       if (!row) {
         logger.error(
@@ -221,12 +216,10 @@ export async function storeCertBundle(
       });
 
     // 7. Get updated timestamp from DB
-    const updatedRow = await db
-      .select({ updatedAt: sharedSchema.walletCert.updatedAt })
-      .from(sharedSchema.walletCert)
-      .where(eq(sharedSchema.walletCert.certRef, certRef))
-      .limit(1)
-      .then((r) => r[0]);
+    const updatedRow = await db.query.walletCert.findFirst({
+      columns: { updatedAt: true },
+      where: { certRef },
+    });
 
     // 8. Update in-memory cache
     const bundle: CertBundle = {

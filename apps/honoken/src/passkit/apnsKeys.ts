@@ -44,9 +44,8 @@ export async function loadApnsKeyData(
 ): Promise<ApnsKeyData | null> {
   const cacheKey = keyRef;
 
-  if (apnsKeyCache.has(cacheKey)) {
-    const cachedEntry = apnsKeyCache.get(cacheKey)!;
-
+  const cachedEntry = apnsKeyCache.get(cacheKey);
+  if (cachedEntry) {
     // Verify if cache is still fresh by checking DB timestamp
     const db = getDbClient(env, logger);
     const latestTimestamp = await db
@@ -57,10 +56,8 @@ export async function loadApnsKeyData(
       .then((r) => r[0]);
 
     // If DB has a newer timestamp or no timestamp found, invalidate cache
-    if (
-      !(latestTimestamp && latestTimestamp.updatedAt) ||
-      cachedEntry.dbLastUpdatedAt < latestTimestamp.updatedAt
-    ) {
+    const latestUpdatedAt = latestTimestamp?.updatedAt;
+    if (!latestUpdatedAt || cachedEntry.dbLastUpdatedAt < latestUpdatedAt) {
       apnsKeyCache.delete(cacheKey);
     } else {
       return cachedEntry.data;

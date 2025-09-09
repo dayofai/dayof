@@ -1,10 +1,4 @@
-// Import DbClient AND the schema instance it was created with from ./index.ts
-
-import { and, eq } from 'drizzle-orm';
 import stringify from 'json-stable-stringify';
-import type { Logger } from '../utils/logger';
-import type { DbClient } from './index';
-import { schema } from './index'; // Use the re-exported schema from index.ts
 
 /**
  * Represents combined pass data for ETag computation
@@ -25,7 +19,7 @@ export interface PassWithContent {
     description: string;
     organizationName: string;
     updatedAt: Date;
-    [key: string]: any; // Allow for additional content fields
+    [key: string]: unknown; // Allow for additional content fields
   };
 }
 
@@ -37,18 +31,24 @@ export interface PassWithContent {
 export async function computeEtag(
   passWithContent: PassWithContent
 ): Promise<string> {
-  // Extract pass metadata, excluding volatile fields
-  const { etag, createdAt, updatedAt, ...passStable } = passWithContent as any;
+  // Build pass metadata object excluding volatile fields (createdAt, updatedAt, etag)
+  const passStable = {
+    serialNumber: passWithContent.serialNumber,
+    passTypeIdentifier: passWithContent.passTypeIdentifier,
+    authenticationToken: passWithContent.authenticationToken,
+    ticketStyle: passWithContent.ticketStyle,
+    poster: passWithContent.poster,
+    passContentId: passWithContent.passContentId,
+  };
 
-  // Extract pass content, excluding volatile fields
-  let contentStable = {};
+  // Extract pass content, excluding volatile fields without using delete
+  let contentStable: Record<string, unknown> = {};
   if (passWithContent.passContent) {
-    const {
-      createdAt: contentCreatedAt,
-      updatedAt: contentUpdatedAt,
-      ...restContent
-    } = passWithContent.passContent;
-    contentStable = restContent;
+    contentStable = Object.fromEntries(
+      Object.entries(passWithContent.passContent).filter(
+        ([key]) => key !== 'createdAt' && key !== 'updatedAt'
+      )
+    );
   }
 
   // Combine both pass metadata and content for hashing

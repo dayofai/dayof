@@ -2,7 +2,8 @@ import type { Context } from 'hono';
 import type { PassPathParams } from '../schemas'; // Assuming path params are validated
 import { unregisterDevice } from '../storage';
 import type { Env } from '../types';
-import { createLogger, type Logger } from '../utils/logger';
+import { toErrorStatus } from '../utils/http';
+import { createLogger } from '../utils/logger';
 
 export const handleUnregisterDevice = async (c: Context<{ Bindings: Env }>) => {
   const logger = createLogger(c);
@@ -29,10 +30,11 @@ export const handleUnregisterDevice = async (c: Context<{ Bindings: Env }>) => {
         error: 'Unregistration Failed',
         message: result.message || 'Could not process unregistration.',
       },
-      result.status as any
+      toErrorStatus(result.status)
     );
-  } catch (error: any) {
-    logger.error('Critical error in handleUnregisterDevice', error);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error('Critical error in handleUnregisterDevice', err);
     return c.json(
       {
         error: 'Internal Server Error',

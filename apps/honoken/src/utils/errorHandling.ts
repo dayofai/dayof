@@ -10,8 +10,8 @@ import { createLogger } from './logger';
  */
 export const formatZodError = (
   result:
-    | { success: false; error: $ZodError; data?: any }
-    | { success: true; data: any; error?: $ZodError },
+    | { success: false; error: $ZodError; data?: unknown }
+    | { success: true; data: unknown; error?: $ZodError },
   c: Context
 ) => {
   const logger = createLogger(c);

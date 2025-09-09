@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { Context } from 'hono';
 import { getDbClient } from '../db';
 import type { Env } from '../types';
-import { createLogger, type Logger } from '../utils/logger';
+import { createLogger } from '../utils/logger';
 
 export const handleV1Health = async (c: Context<{ Bindings: Env }>) => {
   const logger = createLogger(c);
