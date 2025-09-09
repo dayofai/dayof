@@ -1,7 +1,7 @@
-import type { Context } from 'hono';
 import { sql } from 'drizzle-orm';
-import type { Env } from '../types';
+import type { Context } from 'hono';
 import { getDbClient } from '../db';
+import type { Env } from '../types';
 import { createLogger, type Logger } from '../utils/logger';
 
 export const handleV1Health = async (c: Context<{ Bindings: Env }>) => {
@@ -12,6 +12,9 @@ export const handleV1Health = async (c: Context<{ Bindings: Env }>) => {
     return c.json({ status: 'ok', timestamp: new Date().toISOString() });
   } catch (error) {
     logger.error('Health check failed', error);
-    return c.json({ status: 'error', message: 'Database connection failed' }, 503);
+    return c.json(
+      { status: 'error', message: 'Database connection failed' },
+      503
+    );
   }
-}; 
+};

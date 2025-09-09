@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
-import type { Env } from '../types';
-import { logMessages as storeLogMessages } from '../storage'; // Alias to avoid conflict if any
 import type { LogMessagesPayload } from '../schemas';
+import { logMessages as storeLogMessages } from '../storage'; // Alias to avoid conflict if any
+import type { Env } from '../types';
 import { createLogger, type Logger } from '../utils/logger';
 
 export const handleLogMessages = async (c: Context<{ Bindings: Env }>) => {
@@ -14,6 +14,9 @@ export const handleLogMessages = async (c: Context<{ Bindings: Env }>) => {
     return c.json({ message: 'Logs received.' }, 200);
   } catch (error: any) {
     logger.error('Error in handleLogMessages', error);
-    return c.json({ error: 'Internal Server Error', message: 'Failed to process logs.' }, 500);
+    return c.json(
+      { error: 'Internal Server Error', message: 'Failed to process logs.' },
+      500
+    );
   }
-}; 
+};

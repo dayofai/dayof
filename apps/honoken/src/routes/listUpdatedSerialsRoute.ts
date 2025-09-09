@@ -1,13 +1,17 @@
 import type { Context } from 'hono';
-import type { Env } from '../types';
-import { listUpdatedSerials } from '../storage';
 import type { DevicePassRegistrationsParams } from '../schemas';
+import { listUpdatedSerials } from '../storage';
+import type { Env } from '../types';
 import { createLogger, type Logger } from '../utils/logger';
 
-export const handleListUpdatedSerials = async (c: Context<{ Bindings: Env }>) => {
+export const handleListUpdatedSerials = async (
+  c: Context<{ Bindings: Env }>
+) => {
   const logger = createLogger(c);
-  const { deviceLibraryIdentifier, passTypeIdentifier } = c.req.valid('param') as DevicePassRegistrationsParams;
-  
+  const { deviceLibraryIdentifier, passTypeIdentifier } = c.req.valid(
+    'param'
+  ) as DevicePassRegistrationsParams;
+
   const passesUpdatedSince = c.req.query('passesUpdatedSince');
 
   const filters: { passesUpdatedSince?: string } = {};
@@ -31,6 +35,12 @@ export const handleListUpdatedSerials = async (c: Context<{ Bindings: Env }>) =>
     return c.json(result, 200);
   } catch (error: any) {
     logger.error('Error in handleListUpdatedSerials', error);
-    return c.json({ error: 'Internal Server Error', message: 'An unexpected error occurred.' }, 500);
+    return c.json(
+      {
+        error: 'Internal Server Error',
+        message: 'An unexpected error occurred.',
+      },
+      500
+    );
   }
-}; 
+};

@@ -166,7 +166,18 @@ export function createMockDbClient() {
           return Promise.resolve(TEST_APNS_KEY_DATA);
         }),
       },
-    },
+      walletPassType: {
+        findFirst: vi.fn().mockResolvedValue({
+          passTypeIdentifier: 'pass.com.example.test-event',
+          certRef: 'test-cert-ref',
+        }),
+      },
+      walletApnsKey: {
+        findFirst: vi.fn().mockImplementation((options) => {
+          return Promise.resolve(TEST_APNS_KEY_DATA);
+        }),
+      },
+    } as any, // Add type assertion to bypass strict type checking for mocks
 
     // Mock transaction support
     transaction: vi.fn().mockImplementation(async (callback) => {

@@ -1,146 +1,124 @@
 # dayof
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Start, Hono, ORPC, and more.
+A full-stack monorepo for "DayOf", an event management platform. Built with a modern TypeScript stack including React (TanStack Start), React Native (Expo), Hono, Drizzle, and Inngest.
 
-## Features
+## Core Technologies
 
-- **TypeScript** - For type safety and improved developer experience
-- **TanStack Start** - SSR framework with TanStack Router
-- **React Native** - Build mobile apps using React
-- **Expo** - Tools for React Native development
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **shadcn/ui** - Reusable UI components
-- **Hono** - Lightweight, performant server framework
-- **oRPC** - End-to-end type-safe APIs with OpenAPI integration
-- **Node.js** - Runtime environment
-- **Drizzle** - TypeScript-first ORM
-- **PostgreSQL** - Database engine
-- **Authentication** - Email & password authentication with Better Auth
-- **Husky** - Git hooks for code quality
-- **Turborepo** - Optimized monorepo build system
+- **Frameworks**: TanStack Start (React), Expo (React Native), Hono
+- **UI**: TailwindCSS, shadcn/ui, NativeWind
+- **API**: oRPC, Better Auth
+- **Database**: PostgreSQL with Drizzle ORM (Neon)
+- **Background Jobs**: Inngest
+- **Tooling**: Turborepo, Bun, TypeScript, Biome, Ultracite
+
+---
+
+## Project Structure
+
+This repository is a monorepo managed by Turborepo, organized into `apps` and `packages`.
+
+### Apps
+
+The `apps` directory contains the individual, deployable applications of the platform.
+
+| Application | Description                                                       | Framework      |
+| ----------- | ----------------------------------------------------------------- | -------------- |
+| `auth`      | Authentication service using Better Auth.                         | Hono           |
+| `backstage` | Admin web dashboard for managing events and operations.           | TanStack Start |
+| `crew`      | React Native mobile application for event staff.                  | Expo           |
+| `events`    | Central service for handling and serving Inngest background jobs. | Hono           |
+| `frontrow`  | Customer-facing web application.                                  | TanStack Start |
+| `handbook`  | Internal documentation site.                                      | Fumadocs       |
+| `honoken`   | Apple Wallet PassKit web service for digital tickets.             | Hono           |
+
+### Packages
+
+The `packages` directory contains shared libraries and configurations used across the applications.
+
+| Package       | Description                                                                |
+| ------------- | -------------------------------------------------------------------------- |
+| `database`    | Shared Drizzle schema, client, and types for the Neon PostgreSQL database. |
+| `inngest-kit` | Shared Inngest client, functions, and event definitions.                   |
+
+---
 
 ## Getting Started
 
-First, install the dependencies:
+### Prerequisites
+
+- [Bun](https://bun.sh/) (v1.0 or higher)
+- Access to a Neon PostgreSQL database.
+- Vercel account and [Vercel CLI](https://vercel.com/cli) for local development and deployment.
+
+### 1. Installation
+
+Install all dependencies from the root of the monorepo:
 
 ```bash
 bun install
 ```
 
-## Database Setup
+### 2. Environment Setup
 
-This project uses PostgreSQL with Drizzle ORM.
+Each application in the `apps/` directory may require its own `.env` file for local development. Copy the corresponding `.env.example` file (if it exists) to `.env` and fill in the required environment variables, such as database connection strings and API keys.
 
-1. Make sure you have a PostgreSQL database set up.
-2. Update your `apps/server/.env` file with your PostgreSQL connection details.
+---
 
-3. Apply the schema to your database:
+## Development
 
-```bash
-bun db:push
-```
+### Running Applications
 
-Then, run the development server:
+You can run all applications simultaneously or individually.
 
 ```bash
+# Run all web apps and services in development mode
 bun dev
+
+# Run a specific application (e.g., backstage)
+bun run dev:backstage
+
+# Available app-specific dev scripts:
+# bun run dev:events
+# bun run dev:backstage
+# bun run dev:frontrow
+# bun run dev:handbook
+# bun run dev:crew
+# bun run dev:honoken
 ```
 
-## Project Structure
+### Inngest & Events Service
 
-```text
-dayof/
-├── apps/
-```
+This repo uses Inngest for background jobs, orchestrated through the `apps/events` service.
 
-## Available Scripts
-
-- `bun dev`: Start all applications in development mode
-- `bun build`: Build all applications
-- `bun check-types`: Check TypeScript types across all apps
-- `bun db:push`: Push schema changes to database
-- `bun db:studio`: Open database studio UI
-
-## Inngest & Events Service
-
-This repo uses Inngest for background jobs and workflows. We centralize Inngest functions in a shared package and expose a single serve endpoint from the `events` app.
-
-### Structure
-
-- `packages/inngest` (published in-workspace as `inngest-kit`)
-  - **Client**: shared Inngest client
-
-    ```1:3:packages/inngest/client.ts
-    import { Inngest } from 'inngest';
-
-    export const inngest = new Inngest({ id: 'dayof' });
+1.  **Start the Events service** (serves `/api/inngest` on port 3001):
+    ```bash
+    bun run dev:events
     ```
-
-  - **Functions**: all functions exported in a single array
-
-    ```1:5:packages/inngest/functions/index.ts
-    import { exampleEffect } from './exampleEffect';
-    import { userSignedIn } from './userSignedIn';
-    import { walletPassUpdate } from './wallet-pass-update';
-
-    export const functions = [userSignedIn, exampleEffect, walletPassUpdate];
+2.  In a **separate terminal**, start the Inngest Dev Server, pointing to the events service:
+    ```bash
+    bun run dev:inngest:events
     ```
+3.  Open the Inngest Dev UI at `http://localhost:8288` to monitor and trigger functions.
 
-  - **Adapter**: mounts the Inngest serve handler for Hono
+Refer to the [Inngest & Events Service](#inngest--events-service) section in the main `README.md` for more details on the architecture.
 
-    ```6:8:packages/inngest/adapters/hono.ts
-    export function mountInngest(app: Hono, path = '/api/inngest') {
-      app.on(['GET', 'POST', 'PUT'], path, serve({ client: inngest, functions }));
-    }
-    ```
+---
 
-- `apps/events` (orchestrator service)
-  - Hono server that mounts the Inngest endpoint at `/api/inngest` and runs on port 3001 in dev
+## Database Management
 
-    ```4:11:apps/events/src/index.ts
-    import { mountInngest } from 'inngest-kit/adapters/hono';
-    const app = new Hono();
-    app.use('*', logger());
-    app.get('/', (c) => c.text('OK'));
-    mountInngest(app, '/api/inngest');
-    ```
+The database schema is centrally managed in the `packages/database` workspace using Drizzle ORM.
 
-  - This is the only app that serves Inngest HTTP; other apps just send events.
+- **Generate Migrations**: After making changes to the schema in `packages/database/schema/`, run the generate command from the root. This requires a `DEV_DATABASE_URL` variable in `packages/database/.env`.
+  ```bash
+  bun run db:generate
+  ```
+- **Apply Migrations**: Apply generated migrations to your database.
+  ```bash
+  bun run db:push
+  ```
+- **Drizzle Studio**: To open a local GUI for the database, run:
+  ```bash
+  bun run db:studio
+  ```
 
-### Local development
-
-1. Start the Events service (serves `/api/inngest` on port 3001):
-
-   ```bash
-   bun run dev:events
-   ```
-
-2. In another terminal, start the Inngest Dev Server (targets the events endpoint):
-
-   ```bash
-   bun run dev:inngest:events
-   # or
-   npx inngest-cli@latest dev -u http://localhost:3001/api/inngest
-   ```
-
-3. Open the Dev UI: `http://localhost:8288` → Functions tab → invoke or send events.
-
-The script used by the Dev Server points to the Events app serve URL defined above. You can adjust the `-u` flag if you change ports or paths. See the official Inngest quick start for reference: [Node.js Quick Start](https://www.inngest.com/docs/getting-started/nodejs-quick-start).
-
-### Sending events from other apps
-
-- Server-side: import `inngest` from `inngest-kit` and call `send({ name, data })` in API routes or handlers.
-- Browser-side: use `createBrowserInngest(eventKey)` from `inngest-kit/client.browser` when sending directly from the client.
-
-All functions live in `packages/inngest/functions` and are automatically picked up via the exported `functions` array.
-
-### Environment
-
-- Local: no special keys required for the Dev Server.
-- Production: set `INNGEST_SIGNING_KEY` in the Events service. If sending from the browser, configure an event key and use `createBrowserInngest(eventKey)` appropriately.
-
-### Why this layout?
-
-- Single serve endpoint reduces duplication and avoids routing conflicts.
-- Shared package keeps functions, client, and event contracts centralized and type-safe across apps.
-- Matches Inngest guidance for framework adapters and function discovery while fitting a monorepo.
+_Note: The `db:_`scripts in the root`package.json`are configured to run these commands within the`packages/database` workspace.\*

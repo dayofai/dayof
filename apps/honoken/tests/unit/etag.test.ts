@@ -72,6 +72,39 @@ describe('ETag computation (write-time semantics)', () => {
     expect(etag1).not.toBe(etag2);
   });
 
+  it('does not change ETag when updatedAt changes within the same second', async () => {
+    const base = new Date('2024-01-01T00:00:00.100Z');
+    const meta1 = {
+      passTypeIdentifier: 'pass.com.example.test',
+      serialNumber: 'TEST-001',
+      ticketStyle: 'event' as const,
+      poster: false,
+      updatedAt: base,
+    };
+    const meta2 = { ...meta1, updatedAt: new Date(base.getTime() + 800) }; // +0.8s, same second
+    const content = { description: 'Same', organizationName: 'Same' };
+
+    const etag1 = await computeEtagFrom(meta1, content);
+    const etag2 = await computeEtagFrom(meta2, content);
+    expect(etag1).toBe(etag2);
+  });
+
+  it('changes ETag when poster flag changes', async () => {
+    const meta1 = {
+      passTypeIdentifier: 'pass.com.example.test',
+      serialNumber: 'TEST-001',
+      ticketStyle: 'event' as const,
+      poster: false,
+      updatedAt: new Date('2024-01-01T00:00:00Z'),
+    };
+    const meta2 = { ...meta1, poster: true };
+    const content = { description: 'Same', organizationName: 'Same' };
+
+    const etag1 = await computeEtagFrom(meta1, content);
+    const etag2 = await computeEtagFrom(meta2, content);
+    expect(etag1).not.toBe(etag2);
+  });
+
   it('ignores authentication token (not part of payload)', async () => {
     const meta = {
       passTypeIdentifier: 'pass.com.example.test',

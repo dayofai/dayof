@@ -243,3 +243,5 @@ Example ESLint override (if applicable):
 ## Progress Log
 
 - 2025-09-09: Implemented per-pass concurrency in Inngest `wallet-pass-update` to serialize updates by pass; updated README with a short note; lint clean. Next: consider adding explicit APNs step idempotency key and import path cleanup.
+- 2025-09-09: Unified DB client factory usage in Inngest by adapting logger and passing it to `getDbClient`; reused the same adapter for APNs pushes.
+- 2025-09-09: Added unit tests for ETag helpers covering stable order, content change, seconds rounding (same-second unchanged), and poster flag changes.

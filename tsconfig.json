@@ -1,15 +1,5 @@
 {
   "compilerOptions": {
-    "strictNullChecks": true,
-    "baseUrl": ".",
-    "paths": {
-      "@honoken/*": ["apps/honoken/src/*"],
-      "@backstage/*": ["apps/backstage/src/*"],
-      "@frontrow/*": ["apps/frontrow/src/*"],
-      "@handbook/*": ["apps/handbook/src/*"],
-      "@auth/*": ["apps/auth/src/*"],
-      "@events/*": ["apps/events/src/*"],
-      "@crew/*": ["apps/crew/*"]
-    }
+    "strictNullChecks": true
   }
 }

@@ -23,5 +23,9 @@
       "@/*": ["./src/*"]
     }
   },
-  "references": []
+  "references": [
+    {
+      "path": "../packages/database"
+    }
+  ]
 }

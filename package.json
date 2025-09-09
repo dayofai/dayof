@@ -16,11 +16,11 @@
     "dev:handbook": "turbo -F handbook dev",
     "dev:crew": "turbo -F crew dev",
     "dev:honoken": "turbo -F honoken dev",
-    "db:push": "turbo -F server db:push",
-    "db:studio": "turbo -F server db:studio",
-    "db:generate": "turbo -F server db:generate",
-    "db:migrate": "turbo -F server db:migrate",
-    "dev:inngest:events": "inngest-cli dev -u http://localhost:3001/api/inngest"
+    "db:push": "turbo db:push --filter=database",
+    "db:studio": "turbo db:studio --filter=database",
+    "db:generate": "turbo db:generate --filter=database",
+    "db:migrate": "turbo db:migrate --filter=database",
+    "dev:inngest:events": "npx inngest-cli@latest dev -u http://localhost:3001/api/inngest"
   },
   "dependencies": {
     "@effect/schema": "^0.75.5",
