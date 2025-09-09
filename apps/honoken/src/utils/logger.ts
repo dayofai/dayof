@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 import type { PostHog } from 'posthog-node';
-import { truncateMiddle } from './crypto';
+// (no console) – route logs to stdout/stderr writers
 
 export type Logger = ReturnType<typeof createLogger>;
 
@@ -65,25 +65,50 @@ export function createLogger(c: Context) {
     pid: process.pid, // Process ID helps track container lifecycle
   };
 
+  // Structured line writers
+  const write = (stream: 'out' | 'err') => (entry: Record<string, unknown>) => {
+    const line = `${JSON.stringify(entry)}\n`;
+    if (stream === 'out') {
+      process.stdout.write(line);
+    } else {
+      process.stderr.write(line);
+    }
+  };
+  const logOut = write('out');
+  const logErr = write('err');
+
   /**
    * Determines the best distinctId for PostHog events.
    * Prioritizes authenticated user IDs, falls back to device/request IDs.
    */
-  const getDistinctId = (data: Record<string, any>): string => {
+  type UserContext = {
+    distinctId?: string;
+    userId?: string;
+    tenantId?: string;
+    attendeeId?: string;
+  };
+  type LogData = Record<string, unknown>;
+
+  const getDistinctId = (data: LogData): string => {
     // Check for user context (set by auth middleware)
-    const userContext = c.get('userContext') as any;
+    const userContext = c.get('userContext') as UserContext | undefined;
     if (userContext?.distinctId) {
       return userContext.distinctId;
     }
 
     // Fall through various identifiers
+    const d = data as Record<string, unknown>;
+    const candidates = [
+      d.userId,
+      d.attendeeId,
+      d.tenantId,
+      d.deviceLibraryIdentifier,
+      d.serialNumber,
+      d.passTypeIdentifier,
+    ];
+    const firstString = candidates.find((v) => typeof v === 'string');
     return (
-      data.userId ||
-      data.attendeeId ||
-      data.tenantId ||
-      data.deviceLibraryIdentifier ||
-      data.serialNumber ||
-      data.passTypeIdentifier ||
+      (firstString as string | undefined) ||
       requestId ||
       `anonymous-${Date.now()}`
     );
@@ -95,7 +120,7 @@ export function createLogger(c: Context) {
    */
   const captureToPostHog = (
     eventName: string,
-    properties: Record<string, any>,
+    properties: LogData,
     level: 'info' | 'warn' | 'error',
     error?: Error
   ): void => {
@@ -107,7 +132,7 @@ export function createLogger(c: Context) {
     const distinctId = getDistinctId(properties);
 
     // Enhance properties with context
-    const enhancedProperties: Record<string, any> = {
+    const enhancedProperties: Record<string, unknown> = {
       ...baseLogData,
       ...properties,
       level,
@@ -117,7 +142,7 @@ export function createLogger(c: Context) {
     };
 
     // Add user context if available
-    const userContext = c.get('userContext') as any;
+    const userContext = c.get('userContext') as UserContext | undefined;
     if (userContext) {
       enhancedProperties.userId = userContext.userId;
       enhancedProperties.tenantId = userContext.tenantId;
@@ -152,40 +177,49 @@ export function createLogger(c: Context) {
       // Let PostHog's batching system handle when to send events
     } catch (captureError) {
       // Log locally but don't throw - logging should never break the app
-      console.error('Failed to capture to PostHog:', captureError);
+      logErr({
+        ts: Date.now(),
+        lvl: 'error',
+        msg: 'posthog_capture_failed',
+        error:
+          captureError instanceof Error
+            ? {
+                name: captureError.name,
+                message: captureError.message,
+                stack: captureError.stack,
+              }
+            : String(captureError),
+        ...baseLogData,
+      });
     }
   };
 
   return {
-    info: (message: string, data: Record<string, any> = {}) => {
+    info: (message: string, data: LogData = {}) => {
       if (!(isDev || isVerbose)) {
         return;
       }
 
-      console.log(
-        JSON.stringify({
-          ts: Date.now(),
-          lvl: 'info',
-          msg: message,
-          ...baseLogData,
-          ...data,
-        })
-      );
+      logOut({
+        ts: Date.now(),
+        lvl: 'info',
+        msg: message,
+        ...baseLogData,
+        ...data,
+      });
 
       // Selectively capture to PostHog based on message importance
       captureToPostHog(`log_${message}`, { message, ...data }, 'info');
     },
 
-    warn: (message: string, data: Record<string, any> = {}) => {
-      console.warn(
-        JSON.stringify({
-          ts: Date.now(),
-          lvl: 'warn',
-          msg: message,
-          ...baseLogData,
-          ...data,
-        })
-      );
+    warn: (message: string, data: LogData = {}) => {
+      logErr({
+        ts: Date.now(),
+        lvl: 'warn',
+        msg: message,
+        ...baseLogData,
+        ...data,
+      });
 
       // All warnings go to PostHog for monitoring
       captureToPostHog(
@@ -200,31 +234,26 @@ export function createLogger(c: Context) {
     },
 
     // Async variants no longer need special handling in Fluid Compute
-    warnAsync: async (message: string, data: Record<string, any> = {}) => {
+    warnAsync: async (message: string, data: LogData = {}) => {
       // In Fluid Compute, this is just an alias since we don't flush
       const logger = createLogger(c);
       logger.warn(message, data);
+      await Promise.resolve();
     },
 
-    error: (
-      message: string,
-      error: unknown,
-      data: Record<string, any> = {}
-    ) => {
+    error: (message: string, error: unknown, data: LogData = {}) => {
       const errorObj =
         error instanceof Error ? error : new Error(String(error));
 
-      console.error(
-        JSON.stringify({
-          ts: Date.now(),
-          lvl: 'error',
-          msg: message,
-          err_msg: errorObj.message,
-          err_stack: errorObj.stack,
-          ...baseLogData,
-          ...data,
-        })
-      );
+      logErr({
+        ts: Date.now(),
+        lvl: 'error',
+        msg: message,
+        err_msg: errorObj.message,
+        err_stack: errorObj.stack,
+        ...baseLogData,
+        ...data,
+      });
 
       // All errors go to PostHog with full context
       captureToPostHog(
@@ -241,14 +270,7 @@ export function createLogger(c: Context) {
       );
     },
 
-    errorAsync: async (
-      message: string,
-      error: unknown,
-      data: Record<string, any> = {}
-    ) => {
-      const errorObj =
-        error instanceof Error ? error : new Error(String(error));
-
+    errorAsync: async (message: string, error: unknown, data: LogData = {}) => {
       // Log immediately
       const logger = createLogger(c);
       logger.error(message, error, data);
@@ -264,9 +286,28 @@ export function createLogger(c: Context) {
       if (posthog && isCritical) {
         try {
           await posthog.flush();
-          console.log(`Flushed PostHog due to critical error: ${message}`);
+          logOut({
+            ts: Date.now(),
+            lvl: 'info',
+            msg: 'posthog_flush_on_critical',
+            message,
+            ...baseLogData,
+          });
         } catch (flushError) {
-          console.error('Critical error flush failed:', flushError);
+          logErr({
+            ts: Date.now(),
+            lvl: 'error',
+            msg: 'posthog_flush_failed',
+            error:
+              flushError instanceof Error
+                ? {
+                    name: flushError.name,
+                    message: flushError.message,
+                    stack: flushError.stack,
+                  }
+                : String(flushError),
+            ...baseLogData,
+          });
         }
       }
     },

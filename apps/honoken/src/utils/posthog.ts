@@ -1,7 +1,8 @@
 import type { Context } from 'hono';
 import { PostHog } from 'posthog-node';
 import type { Env } from '../types';
-import { createLogger } from './logger';
+
+// Use stdout/stderr writers instead of console
 
 /**
  * Module-level singleton that persists for the container lifetime.
@@ -29,19 +30,29 @@ const CIRCUIT_BREAKER_TIMEOUT = 60_000; // 1 minute
  * - Circuit breaker for resilience
  */
 export function getPostHogClient(env: Env): PostHog | null {
+  const write =
+    (s: 'out' | 'err') => (msg: string, extra?: Record<string, unknown>) => {
+      const line = `${JSON.stringify({ ts: Date.now(), lvl: s === 'out' ? 'info' : 'error', msg, ...(extra || {}) })}\n`;
+      s === 'out' ? process.stdout.write(line) : process.stderr.write(line);
+    };
+  const sysOut = write('out');
+  const sysErr = write('err');
   // Circuit breaker: if we've had too many failures recently, don't try
   if (consecutiveFailures >= MAX_FAILURES) {
     const timeSinceLastFailure = Date.now() - lastFailureTime;
     if (timeSinceLastFailure < CIRCUIT_BREAKER_TIMEOUT) {
-      console.warn(
-        `PostHog circuit breaker OPEN: ${consecutiveFailures} consecutive failures, events will be dropped for ${Math.ceil((CIRCUIT_BREAKER_TIMEOUT - timeSinceLastFailure) / 1000)}s`
-      );
+      sysErr('posthog_circuit_open', {
+        failures: consecutiveFailures,
+        drop_seconds: Math.ceil(
+          (CIRCUIT_BREAKER_TIMEOUT - timeSinceLastFailure) / 1000
+        ),
+      });
       return null; // Circuit is open, skip PostHog
     }
     // Reset circuit breaker after timeout
-    console.log(
-      `PostHog circuit breaker CLOSED: resetting after ${Math.ceil(timeSinceLastFailure / 1000)}s timeout`
-    );
+    sysOut('posthog_circuit_closed', {
+      after_seconds: Math.ceil(timeSinceLastFailure / 1000),
+    });
     consecutiveFailures = 0;
   }
 
@@ -81,17 +92,23 @@ export function getPostHogClient(env: Env): PostHog | null {
       fetchRetryDelay: 1000, // 1 second between retries
     });
 
-    console.log(`PostHog client initialized for Fluid Compute:
-      - Batch size: ${batchSize} events
-      - Flush interval: ${flushInterval}ms
-      - Host: ${env.POSTHOG_HOST || 'https://us.i.posthog.com'}`);
+    sysOut('posthog_client_initialized', {
+      batch_size: batchSize,
+      flush_interval_ms: flushInterval,
+      host: env.POSTHOG_HOST || 'https://us.i.posthog.com',
+    });
 
     // Reset failure tracking on successful init
     consecutiveFailures = 0;
 
     return posthogClient;
   } catch (error) {
-    console.error('Failed to initialize PostHog client:', error);
+    sysErr('posthog_init_failed', {
+      error:
+        error instanceof Error
+          ? { name: error.name, message: error.message, stack: error.stack }
+          : String(error),
+    });
     consecutiveFailures++;
     lastFailureTime = Date.now();
     return null;
@@ -119,9 +136,11 @@ export async function posthogMiddleware(
   if (client && c.res && c.res.status >= 500) {
     try {
       await client.flush();
-      console.log('Flushed PostHog events due to server error');
+      const line = `${JSON.stringify({ ts: Date.now(), lvl: 'info', msg: 'posthog_flush_on_5xx' })}\n`;
+      process.stdout.write(line);
     } catch (error) {
-      console.error('PostHog flush failed for error response:', error);
+      const line = `${JSON.stringify({ ts: Date.now(), lvl: 'error', msg: 'posthog_flush_failed_on_5xx', error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : String(error) })}\n`;
+      process.stderr.write(line);
       consecutiveFailures++;
       lastFailureTime = Date.now();
     }
@@ -153,13 +172,16 @@ export async function posthogMiddleware(
  * Use sparingly - only for critical events or shutdown.
  */
 export async function flushPostHog(): Promise<void> {
-  if (!posthogClient) return;
+  if (!posthogClient) {
+    return;
+  }
 
   try {
     await posthogClient.flush();
     consecutiveFailures = 0; // Reset on successful flush
   } catch (error) {
-    console.error('PostHog flush error:', error);
+    const line = `${JSON.stringify({ ts: Date.now(), lvl: 'error', msg: 'posthog_flush_error', error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : String(error) })}\n`;
+    process.stderr.write(line);
     consecutiveFailures++;
     lastFailureTime = Date.now();
   }
@@ -170,15 +192,20 @@ export async function flushPostHog(): Promise<void> {
  * This is CRITICAL in Fluid Compute to avoid losing batched events.
  */
 export async function shutdownPostHog(): Promise<void> {
-  if (!posthogClient) return;
+  if (!posthogClient) {
+    return;
+  }
 
   try {
-    console.log('Shutting down PostHog client...');
+    const lineStart = `${JSON.stringify({ ts: Date.now(), lvl: 'info', msg: 'posthog_shutdown_start' })}\n`;
+    process.stdout.write(lineStart);
     await posthogClient.shutdown();
     posthogClient = null;
-    console.log('PostHog shutdown complete');
+    const lineEnd = `${JSON.stringify({ ts: Date.now(), lvl: 'info', msg: 'posthog_shutdown_complete' })}\n`;
+    process.stdout.write(lineEnd);
   } catch (error) {
-    console.error('PostHog shutdown error:', error);
+    const line = `${JSON.stringify({ ts: Date.now(), lvl: 'error', msg: 'posthog_shutdown_error', error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : String(error) })}\n`;
+    process.stderr.write(line);
   }
 }
 
@@ -189,13 +216,17 @@ export async function shutdownPostHog(): Promise<void> {
 if (typeof process !== 'undefined') {
   // SIGTERM is sent by Vercel before container recycling
   process.once('SIGTERM', async () => {
-    console.log('SIGTERM received, flushing PostHog events...');
+    process.stdout.write(
+      `${JSON.stringify({ ts: Date.now(), lvl: 'info', msg: 'sigterm_flush_posthog' })}\n`
+    );
     await shutdownPostHog();
   });
 
   // beforeExit catches normal process termination
   process.once('beforeExit', async () => {
-    console.log('Process exiting, flushing PostHog events...');
+    process.stdout.write(
+      `${JSON.stringify({ ts: Date.now(), lvl: 'info', msg: 'beforeexit_flush_posthog' })}\n`
+    );
     await shutdownPostHog();
   });
 }
@@ -207,10 +238,14 @@ if (typeof process !== 'undefined') {
 let healthCheckInterval: NodeJS.Timeout | null = null;
 
 export function startPeriodicHealthCheck(intervalMs = 60_000): void {
-  if (healthCheckInterval) return; // Already running
+  if (healthCheckInterval) {
+    return; // Already running
+  }
 
   healthCheckInterval = setInterval(async () => {
-    if (!posthogClient) return;
+    if (!posthogClient) {
+      return;
+    }
 
     try {
       // Check if we have pending events (PostHog doesn't expose this directly,
@@ -218,7 +253,8 @@ export function startPeriodicHealthCheck(intervalMs = 60_000): void {
       await posthogClient.flush();
       consecutiveFailures = 0;
     } catch (error) {
-      console.error('Periodic PostHog health check failed:', error);
+      const line = `${JSON.stringify({ ts: Date.now(), lvl: 'error', msg: 'posthog_health_check_failed', error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : String(error) })}\n`;
+      process.stderr.write(line);
       consecutiveFailures++;
       lastFailureTime = Date.now();
     }
