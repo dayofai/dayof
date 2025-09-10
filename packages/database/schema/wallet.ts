@@ -150,6 +150,7 @@ export const walletRegistration = pgTable(
       t.deviceLibraryIdentifier,
       t.passId
     ),
+    passIdIdx: index('wallet_registration_pass_id_idx').on(t.passId),
   })
 );
 

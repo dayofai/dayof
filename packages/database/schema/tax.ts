@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, pgTable, unique } from 'drizzle-orm/pg-core';
+import { check, index, pgTable, unique } from 'drizzle-orm/pg-core';
 import { dineroType } from './custom-types';
 import { createdBy } from './extend-created-by';
 import { timeStamps } from './extend-timestamps';
@@ -85,5 +85,14 @@ export const productVariantTaxRate = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => [unique().on(table.taxRateId, table.productVariantId)]
+  (table) => ({
+    taxRateProductVariantUnique: unique().on(
+      table.taxRateId,
+      table.productVariantId
+    ),
+    taxRateIdIdx: index('pvtr_tax_rate_id_idx').on(table.taxRateId),
+    productVariantIdIdx: index('pvtr_product_variant_id_idx').on(
+      table.productVariantId
+    ),
+  })
 );

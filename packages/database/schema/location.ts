@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import { pgTable, unique } from 'drizzle-orm/pg-core';
+import { index, pgTable, unique } from 'drizzle-orm/pg-core';
 import { ianaTimezone } from './custom-types';
 import { createdBy } from './extend-created-by';
 import { timeStamps } from './extend-timestamps';
@@ -38,5 +38,13 @@ export const location = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (t) => [unique('location_handle_org_unique').on(t.handle, t.orgId)]
+  (t) => ({
+    handleOrgUnique: unique('location_handle_org_unique').on(t.handle, t.orgId),
+    locationParentIdIdx: index('location_location_parent_id_idx').on(
+      t.locationParentId
+    ),
+    locationTypeIdIdx: index('location_location_type_id_idx').on(
+      t.locationTypeId
+    ),
+  })
 );

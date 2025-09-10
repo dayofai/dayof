@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, unique } from 'drizzle-orm/pg-core';
+import { index, pgTable, unique } from 'drizzle-orm/pg-core';
 import { address } from './address';
 import { organization } from './better-auth';
 import { currency } from './currency';
@@ -62,50 +62,80 @@ export const organizationSettings = pgTable(
     metadata: t.jsonb('metadata'),
     ...timeStamps({ softDelete: true }),
   }),
-  (table) => [unique('org_settings_org_unique').on(table.orgId)]
+  (table) => ({
+    orgSettingsOrgUnique: unique('org_settings_org_unique').on(table.orgId),
+    defaultCurrencyCodeIdx: index('org_settings_default_currency_code_idx').on(
+      table.defaultCurrencyCode
+    ),
+    defaultCountryCodeIdx: index('org_settings_default_country_code_idx').on(
+      table.defaultCountryCode
+    ),
+    defaultTaxRateIdIdx: index('org_settings_default_tax_rate_id_idx').on(
+      table.defaultTaxRateId
+    ),
+    businessAddressIdIdx: index('org_settings_business_address_id_idx').on(
+      table.businessAddressId
+    ),
+  })
 );
 
 // brand profiles for different identities within an organization
 // I'll need to link this up on the event level
 
-export const brandProfile = pgTable('brand_profile', (t) => ({
-  id: t.text('id').primaryKey().default(sql`nanoid()`),
+export const brandProfile = pgTable(
+  'brand_profile',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
 
-  // profile
-  name: t.text('name').notNull(),
-  handle: t.text('handle').notNull(),
-  description: t.text('description'),
+    // profile
+    name: t.text('name').notNull(),
+    handle: t.text('handle').notNull(),
+    description: t.text('description'),
 
-  // brand identity
-  brandIdentity: t.jsonb('brand_identity').default({
-    //   need to define the schema for this e.g.:
-    //   logo: null,
-    //   banner: null,
-    //   colors: {
-    //     primary: "#000000",
-    //     secondary: "#ffffff"
-    //   }
+    // brand identity
+    brandIdentity: t.jsonb('brand_identity').default({
+      //   need to define the schema for this e.g.:
+      //   logo: null,
+      //   banner: null,
+      //   colors: {
+      //     primary: "#000000",
+      //     secondary: "#ffffff"
+      //   }
+    }),
+
+    // contact / social
+    email: t.text('email'),
+    phone: t.text('phone'),
+    website: t.text('website'),
+    socialLinks: t.jsonb('social_links'), // need to define schema for this
+
+    // optional overrides of org settings
+    currencyCode: t.text('currency_code').references(() => currency.code),
+    countryCode: t.text('country_code').references(() => regionCountry.iso2),
+
+    // tax & fee settings
+    // null by default - use org default if null
+    defaultTaxRateId: t
+      .text('default_tax_rate_id')
+      .references(() => taxRate.id),
+    defaultIsTaxInclusive: t.boolean('default_is_tax_inclusive'),
+    defaultIsFeeInclusive: t.boolean('default_is_fee_inclusive'),
+
+    isDefault: t.boolean('is_default').default(false).notNull(),
+
+    metadata: t.jsonb('metadata'),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
   }),
-
-  // contact / social
-  email: t.text('email'),
-  phone: t.text('phone'),
-  website: t.text('website'),
-  socialLinks: t.jsonb('social_links'), // need to define schema for this
-
-  // optional overrides of org settings
-  currencyCode: t.text('currency_code').references(() => currency.code),
-  countryCode: t.text('country_code').references(() => regionCountry.iso2),
-
-  // tax & fee settings
-  // null by default - use org default if null
-  defaultTaxRateId: t.text('default_tax_rate_id').references(() => taxRate.id),
-  defaultIsTaxInclusive: t.boolean('default_is_tax_inclusive'),
-  defaultIsFeeInclusive: t.boolean('default_is_fee_inclusive'),
-
-  isDefault: t.boolean('is_default').default(false).notNull(),
-
-  metadata: t.jsonb('metadata'),
-  ...timeStamps({ softDelete: true }),
-  ...createdBy(),
-}));
+  (table) => ({
+    currencyCodeIdx: index('brand_profile_currency_code_idx').on(
+      table.currencyCode
+    ),
+    countryCodeIdx: index('brand_profile_country_code_idx').on(
+      table.countryCode
+    ),
+    defaultTaxRateIdIdx: index('brand_profile_default_tax_rate_id_idx').on(
+      table.defaultTaxRateId
+    ),
+  })
+);

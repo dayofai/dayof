@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, pgEnum, pgTable, unique } from 'drizzle-orm/pg-core';
+import { check, index, pgEnum, pgTable, unique } from 'drizzle-orm/pg-core';
 import { cart } from './cart';
 import { currency } from './currency';
 import { dineroType } from './custom-types';
@@ -132,68 +132,93 @@ export const paymentCollection = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => [
-    check(
+  (table) => ({
+    cartOrOrderCheck: check(
       'payment_collection_cart_or_order_check',
       sql`${table.cartId} IS NOT NULL OR ${table.orderId} IS NOT NULL`
     ),
-  ]
+    cartIdIdx: index('payment_collection_cart_id_idx').on(table.cartId),
+    orderIdIdx: index('payment_collection_order_id_idx').on(table.orderId),
+  })
 );
 
-export const paymentIntent = pgTable('payment_intent', (t) => ({
-  id: t.text('id').primaryKey().default(sql`nanoid()`),
+export const paymentIntent = pgTable(
+  'payment_intent',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
 
-  // Add checkout session ID
-  providerCheckoutSessionId: t.text('provider_checkout_session_id'), // Stripe Checkout Session ID, null if no Checkout Session
+    // Add checkout session ID
+    providerCheckoutSessionId: t.text('provider_checkout_session_id'), // Stripe Checkout Session ID, null if no Checkout Session
 
-  paymentCollectionId: t
-    .text('payment_collection_id')
-    .references(() => paymentCollection.id)
-    .notNull(),
-  subscriptionId: t.text('subscription_id').references(() => subscription.id),
-  invoiceId: t.text('invoice_id').references(() => invoice.id),
-  paymentProviderId: t
-    .text('payment_provider_id')
-    .references(() => paymentProvider.id)
-    .notNull(),
+    paymentCollectionId: t
+      .text('payment_collection_id')
+      .references(() => paymentCollection.id)
+      .notNull(),
+    subscriptionId: t.text('subscription_id').references(() => subscription.id),
+    invoiceId: t.text('invoice_id').references(() => invoice.id),
+    paymentProviderId: t
+      .text('payment_provider_id')
+      .references(() => paymentProvider.id)
+      .notNull(),
 
-  amount: dineroType('amount').notNull(),
+    amount: dineroType('amount').notNull(),
 
-  type: paymentIntentTypeEnum('type').notNull(),
+    type: paymentIntentTypeEnum('type').notNull(),
 
-  status: paymentIntentStatusEnum('status')
-    .default('requires_payment_method')
-    .notNull(),
+    status: paymentIntentStatusEnum('status')
+      .default('requires_payment_method')
+      .notNull(),
 
-  providerPaymentIntentId: t.text('provider_payment_intent_id'), // Stripe charge ID or HyperSwitch payment ID
-  data: t.jsonb('data'), // full provider response
+    providerPaymentIntentId: t.text('provider_payment_intent_id'), // Stripe charge ID or HyperSwitch payment ID
+    data: t.jsonb('data'), // full provider response
 
-  metadata: t.jsonb('metadata'),
-  ...timeStamps({ softDelete: true }),
-  ...createdBy(),
-}));
+    metadata: t.jsonb('metadata'),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (table) => ({
+    paymentCollectionIdIdx: index(
+      'payment_intent_payment_collection_id_idx'
+    ).on(table.paymentCollectionId),
+    subscriptionIdIdx: index('payment_intent_subscription_id_idx').on(
+      table.subscriptionId
+    ),
+    invoiceIdIdx: index('payment_intent_invoice_id_idx').on(table.invoiceId),
+    paymentProviderIdIdx: index('payment_intent_payment_provider_id_idx').on(
+      table.paymentProviderId
+    ),
+  })
+);
 
 // represents a single attempt to capture a payment
 // we do not update attempts, they are immutable
-export const paymentAttempt = pgTable('payment_attempt', (t) => ({
-  id: t.text('id').primaryKey().default(sql`nanoid()`),
+export const paymentAttempt = pgTable(
+  'payment_attempt',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
 
-  paymentIntentId: t
-    .text('payment_intent_id')
-    .references(() => paymentIntent.id)
-    .notNull(),
+    paymentIntentId: t
+      .text('payment_intent_id')
+      .references(() => paymentIntent.id)
+      .notNull(),
 
-  amount: dineroType('amount').notNull(),
-  status: paymentAttemptStatusEnum('status').default('pending').notNull(),
+    amount: dineroType('amount').notNull(),
+    status: paymentAttemptStatusEnum('status').default('pending').notNull(),
 
-  // provider specific
-  providerTransactionId: t.text('provider_transaction_id'), // Stripe charge ID or HyperSwitch payment ID
-  data: t.jsonb('data'), // full provider response
+    // provider specific
+    providerTransactionId: t.text('provider_transaction_id'), // Stripe charge ID or HyperSwitch payment ID
+    data: t.jsonb('data'), // full provider response
 
-  metadata: t.jsonb('metadata'),
-  ...timeStamps({ softDelete: true }),
-  ...createdBy(),
-}));
+    metadata: t.jsonb('metadata'),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (table) => ({
+    paymentIntentIdIdx: index('payment_attempt_payment_intent_id_idx').on(
+      table.paymentIntentId
+    ),
+  })
+);
 
 export const paymentMethod = pgTable(
   'payment_method',
@@ -226,13 +251,16 @@ export const paymentMethod = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => [
-    // ensure uniqueness of provider payment method
-    unique('payment_method_provider_unique').on(
+  (table) => ({
+    providerUnique: unique('payment_method_provider_unique').on(
       table.providerPaymentMethodId,
       table.providerCustomerId
     ),
-  ]
+    paymentProviderIdIdx: index('payment_method_payment_provider_id_idx').on(
+      table.paymentProviderId
+    ),
+    customerIdIdx: index('payment_method_customer_id_idx').on(table.customerId),
+  })
 );
 
 export const refundReason = pgTable(
@@ -248,69 +276,100 @@ export const refundReason = pgTable(
   (table) => [unique('refund_reason_label_unique').on(table.label)]
 );
 
-export const refund = pgTable('refund', (t) => ({
-  id: t.text('id').primaryKey().default(sql`nanoid()`),
+export const refund = pgTable(
+  'refund',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
 
-  // relationships
-  paymentIntentId: t
-    .text('payment_intent_id')
-    .references(() => paymentIntent.id)
-    .notNull(),
-  installmentId: t.text('installment_id').references(() => installment.id), // optional - for linking to specific installment
-  invoiceId: t.text('invoice_id').references(() => invoice.id), // optional - for linking to specific invoice
+    // relationships
+    paymentIntentId: t
+      .text('payment_intent_id')
+      .references(() => paymentIntent.id)
+      .notNull(),
+    installmentId: t.text('installment_id').references(() => installment.id), // optional - for linking to specific installment
+    invoiceId: t.text('invoice_id').references(() => invoice.id), // optional - for linking to specific invoice
 
-  // destination provider & details
-  destinationProviderId: t
-    .text('destination_provider_id')
-    .references(() => paymentProvider.id)
-    .notNull(), // could be Stripe, gift card provider, a merchant account, etc.
-  destinationPaymentMethodId: t
-    .text('destination_payment_method_id')
-    .references(() => paymentMethod.id), // optional - if null, refund to source payment method
+    // destination provider & details
+    destinationProviderId: t
+      .text('destination_provider_id')
+      .references(() => paymentProvider.id)
+      .notNull(), // could be Stripe, gift card provider, a merchant account, etc.
+    destinationPaymentMethodId: t
+      .text('destination_payment_method_id')
+      .references(() => paymentMethod.id), // optional - if null, refund to source payment method
 
-  refundReasonId: t.text('refund_reason_id').references(() => refundReason.id),
+    refundReasonId: t
+      .text('refund_reason_id')
+      .references(() => refundReason.id),
 
-  // refund details
-  amount: dineroType('amount').notNull(),
-  note: t.text('note'), // additional context beyond standard reason
-  status: refundStatusEnum('status').default('pending').notNull(),
+    // refund details
+    amount: dineroType('amount').notNull(),
+    note: t.text('note'), // additional context beyond standard reason
+    status: refundStatusEnum('status').default('pending').notNull(),
 
-  // provider specifics
-  providerRefundId: t.text('provider_refund_id'), // Stripe refund ID or HyperSwitch refund ID
-  data: t.jsonb('data'), // full provider refund object
+    // provider specifics
+    providerRefundId: t.text('provider_refund_id'), // Stripe refund ID or HyperSwitch refund ID
+    data: t.jsonb('data'), // full provider refund object
 
-  metadata: t.jsonb('metadata'),
-  ...timeStamps({ softDelete: true }),
-  ...createdBy(),
-}));
+    metadata: t.jsonb('metadata'),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (table) => ({
+    paymentIntentIdIdx: index('refund_payment_intent_id_idx').on(
+      table.paymentIntentId
+    ),
+    installmentIdIdx: index('refund_installment_id_idx').on(
+      table.installmentId
+    ),
+    invoiceIdIdx: index('refund_invoice_id_idx').on(table.invoiceId),
+    destinationProviderIdIdx: index('refund_destination_provider_id_idx').on(
+      table.destinationProviderId
+    ),
+    destinationPaymentMethodIdIdx: index(
+      'refund_destination_payment_method_id_idx'
+    ).on(table.destinationPaymentMethodId),
+    refundReasonIdIdx: index('refund_refund_reason_id_idx').on(
+      table.refundReasonId
+    ),
+  })
+);
 
 // need to check this against our actual current invoice data for subscriptions!
-export const invoice = pgTable('invoice', (t) => ({
-  id: t.text('id').primaryKey().default(sql`nanoid()`),
+export const invoice = pgTable(
+  'invoice',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
 
-  // Relationships
-  subscriptionId: t
-    .text('subscription_id')
-    .references(() => subscription.id)
-    .notNull(),
+    // Relationships
+    subscriptionId: t
+      .text('subscription_id')
+      .references(() => subscription.id)
+      .notNull(),
 
-  // Invoice details
-  amount: dineroType('amount').notNull(),
-  status: invoiceStatusEnum('status').default('draft').notNull(),
+    // Invoice details
+    amount: dineroType('amount').notNull(),
+    status: invoiceStatusEnum('status').default('draft').notNull(),
 
-  // Billing period
-  periodStart: t.timestamp('period_start', { withTimezone: true }).notNull(),
-  periodEnd: t.timestamp('period_end', { withTimezone: true }).notNull(),
-  dueDate: t.timestamp('due_date', { withTimezone: true }).notNull(),
+    // Billing period
+    periodStart: t.timestamp('period_start', { withTimezone: true }).notNull(),
+    periodEnd: t.timestamp('period_end', { withTimezone: true }).notNull(),
+    dueDate: t.timestamp('due_date', { withTimezone: true }).notNull(),
 
-  // Provider specific
-  providerInvoiceId: t.text('provider_invoice_id'), // e.g., Stripe invoice ID
-  data: t.jsonb('data'),
+    // Provider specific
+    providerInvoiceId: t.text('provider_invoice_id'), // e.g., Stripe invoice ID
+    data: t.jsonb('data'),
 
-  metadata: t.jsonb('metadata'),
-  ...timeStamps({ softDelete: true }),
-  ...createdBy(),
-}));
+    metadata: t.jsonb('metadata'),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (table) => ({
+    subscriptionIdIdx: index('invoice_subscription_id_idx').on(
+      table.subscriptionId
+    ),
+  })
+);
 
 export const subscriptionTypeEnum = pgEnum('subscription_type_enum', [
   'recurring', // continues until canceled
@@ -412,12 +471,18 @@ export const subscription = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => [
-    check(
+  (table) => ({
+    idCheck: check(
       'subscription_id_check',
       sql`${table.id} SIMILAR TO 'sub_[0-9a-zA-Z]{12}'`
     ),
-  ]
+    paymentCollectionIdIdx: index('subscription_payment_collection_id_idx').on(
+      table.paymentCollectionId
+    ),
+    paymentProviderIdIdx: index('subscription_payment_provider_id_idx').on(
+      table.paymentProviderId
+    ),
+  })
 );
 
 export const subscriptionSchedulePhase = pgTable(
@@ -451,30 +516,45 @@ export const subscriptionSchedulePhase = pgTable(
     metadata: t.jsonb('metadata'),
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
+  }),
+  (table) => ({
+    subscriptionIdIdx: index('ssp_subscription_id_idx').on(
+      table.subscriptionId
+    ),
   })
 );
 
-export const installment = pgTable('installment', (t) => ({
-  id: t.text('id').primaryKey().default(sql`nanoid()`),
+export const installment = pgTable(
+  'installment',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
 
-  subscriptionId: t
-    .text('subscription_id')
-    .references(() => subscription.id)
-    .notNull(),
-  phaseId: t
-    .text('phase_id')
-    .references(() => subscriptionSchedulePhase.id)
-    .notNull(),
-  invoiceId: t.text('invoice_id').references(() => invoice.id), // null until invoice created
+    subscriptionId: t
+      .text('subscription_id')
+      .references(() => subscription.id)
+      .notNull(),
+    phaseId: t
+      .text('phase_id')
+      .references(() => subscriptionSchedulePhase.id)
+      .notNull(),
+    invoiceId: t.text('invoice_id').references(() => invoice.id), // null until invoice created
 
-  amount: dineroType('amount').notNull(),
-  installmentNumber: t.integer('installment_number').notNull(),
-  billingDate: t.timestamp('billing_date', { withTimezone: true }).notNull(),
-  status: installmentStatusEnum('status').default('scheduled').notNull(),
+    amount: dineroType('amount').notNull(),
+    installmentNumber: t.integer('installment_number').notNull(),
+    billingDate: t.timestamp('billing_date', { withTimezone: true }).notNull(),
+    status: installmentStatusEnum('status').default('scheduled').notNull(),
 
-  refundedAmount: dineroType('refunded_amount'),
+    refundedAmount: dineroType('refunded_amount'),
 
-  metadata: t.jsonb('metadata'),
-  ...timeStamps({ softDelete: true }),
-  ...createdBy(),
-}));
+    metadata: t.jsonb('metadata'),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (table) => ({
+    subscriptionIdIdx: index('installment_subscription_id_idx').on(
+      table.subscriptionId
+    ),
+    phaseIdIdx: index('installment_phase_id_idx').on(table.phaseId),
+    invoiceIdIdx: index('installment_invoice_id_idx').on(table.invoiceId),
+  })
+);
