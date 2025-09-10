@@ -1,5 +1,5 @@
-import { integer, pgTable, text } from "drizzle-orm/pg-core";
-import { timeStamps } from "../schema/extend-timestamps";
+import { integer, pgTable, text } from 'drizzle-orm/pg-core';
+import { timeStamps } from './extend-timestamps';
 
 /**
  * Currency Configuration for Dinero.js
@@ -19,11 +19,11 @@ import { timeStamps } from "../schema/extend-timestamps";
  * })
  *
  */
-export const currency = pgTable("currency", {
-	code: text("code").primaryKey(), // ISO 4217 code
-	base: integer("base").default(10).notNull(), // decimal-based currencies only
-	exponent: integer("exponent").default(2).notNull(), // 2 for cents
-	symbol: text("symbol").notNull(), // e.g., "$"
-	name: text("name").notNull(), // e.g., "US Dollar"
-	...timeStamps({ softDelete: true }),
+export const currency = pgTable('currency', {
+  code: text('code').primaryKey(), // ISO 4217 code
+  base: integer('base').default(10).notNull(), // decimal-based currencies only
+  exponent: integer('exponent').default(2).notNull(), // 2 for cents
+  symbol: text('symbol').notNull(), // e.g., "$"
+  name: text('name').notNull(), // e.g., "US Dollar"
+  ...timeStamps({ softDelete: true }),
 });

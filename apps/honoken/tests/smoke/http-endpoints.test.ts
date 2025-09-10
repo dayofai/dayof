@@ -1,13 +1,19 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createMockEnv, createMockContext, setupMockCrypto } from "../fixtures/mock-env";
+import type { ExecutionContext } from 'hono';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Env } from '../../src/types';
 import {
-  TEST_PASS_TYPE,
-  TEST_SERIAL,
-  TEST_DEVICE_ID,
+  createMockContext,
+  createMockEnv,
+  setupMockCrypto,
+} from '../fixtures/mock-env';
+import {
+  TEST_ADMIN_AUTH_HEADER,
   TEST_AUTH_TOKEN,
+  TEST_DEVICE_ID,
+  TEST_PASS_TYPE,
   TEST_PUSH_TOKEN,
-  TEST_ADMIN_AUTH_HEADER
-} from "../fixtures/test-data";
+  TEST_SERIAL,
+} from '../fixtures/test-data';
 
 // Mock all external dependencies at the top level
 vi.mock('../../src/db', () => ({
@@ -26,15 +32,22 @@ vi.mock('../../src/passkit/passkit', () => ({
   buildPass: vi.fn(),
 }));
 
-describe("HTTP Endpoint Smoke Tests", () => {
-  const ADMIN_USER = "testadmin";
-  const ADMIN_PASS = "testpass123";
+// Predeclare reusable regular expressions at top-level per lint rules
+const RE_PAYLOAD_TOO_LARGE = /Payload Too Large|Request entity too large/i;
+const RE_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+describe('HTTP Endpoint Smoke Tests', () => {
   let authHeader: string;
-  
+
   // Create mock environment and context for Hono app
-  let mockEnv: any;
-  let mockContext: any;
-  let appFetch: any;
+  let mockEnv: Env;
+  let mockContext: ExecutionContext;
+  let appFetch: (
+    req: Request,
+    env: Env,
+    ctx: ExecutionContext
+  ) => Promise<Response>;
 
   beforeEach(async () => {
     // Setup mock environment and context
@@ -53,588 +66,630 @@ describe("HTTP Endpoint Smoke Tests", () => {
     appFetch = smokeApp.default.fetch;
   });
 
-  describe("Health Check Endpoints", () => {
-    it("GET / should return API info", async () => {
-      const request = new Request("http://localhost/");
+  describe('Health Check Endpoints', () => {
+    it('GET / should return API info', async () => {
+      const request = new Request('http://localhost/');
       const response = await appFetch(request, mockEnv, mockContext);
       expect(response.status).toBe(200);
-      
-      const json = await response.json();
+
+      const json = (await response.json()) as {
+        timestamp?: string;
+        status?: string;
+      };
       expect(json).toEqual({
-        message: "PassKit API",
-        version: "1.0.0"
+        message: 'PassKit API',
+        version: '1.0.0',
       });
     });
 
-    it("GET /v1/health should check database connection", async () => {
-      const request = new Request("http://localhost/v1/health");
+    it('GET /v1/health should check database connection', async () => {
+      const request = new Request('http://localhost/v1/health');
       const response = await appFetch(request, mockEnv, mockContext);
-      
-      // Will likely be 503 due to no real DB, but tests the endpoint exists
-      expect([200, 503]).toContain(response.status);
-      
-      const json = await response.json();
-      expect(json).toHaveProperty("timestamp");
-      
-      if (response.status === 200) {
-        expect(json.status).toBe("ok");
-      } else {
-        expect(json.status).toBe("error");
-      }
+
+      expect(response.status).toBe(200);
+      const json = (await response.json()) as {
+        timestamp?: string;
+        status?: string;
+      };
+      expect(json).toHaveProperty('timestamp');
+      expect(json.status).toBe('ok');
     });
   });
 
-  describe("Device Registration", () => {
+  describe('Device Registration', () => {
     const registrationPath = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
 
-    it("should register a new device with valid auth", async () => {
+    it('should register a new device with valid auth', async () => {
       const request = new Request(`http://localhost${registrationPath}`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Authorization": `ApplePass ${TEST_AUTH_TOKEN}`,
-          "Content-Type": "application/json",
+          // index.smoke expects this exact token
+          Authorization: 'ApplePass valid-test-token',
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ pushToken: TEST_PUSH_TOKEN }),
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
-      // Note: This will likely fail with 401 without real DB data
-      // But it tests the endpoint structure and validation
-      // Apple spec: 201 (new), 200 (existing), 401 (unauthorized) - no 404 for registration
-      expect([200, 201, 401]).toContain(response.status);
-      
-      // Apple spec: Optional JSON for success, JSON error details for failures
-      if (response.status === 401) {
-        expect(response.headers.get("content-type")).toContain("application/json");
-        const json = await response.json();
-        expect(json).toHaveProperty("error");
-      } else if (response.status === 200 || response.status === 201) {
-        // Success responses may have JSON content
-        if (response.headers.get("content-type")?.includes("application/json")) {
-          // JSON response is optional for success
-        }
-      }
+      expect(response.status).toBe(201);
+      // Success body should be empty
+      expect(await response.text()).toBe('');
     });
 
-    it("should fail registration with invalid auth", async () => {
+    it('should fail registration with invalid auth', async () => {
       const request = new Request(`http://localhost${registrationPath}`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Authorization": "ApplePass wrong-token",
-          "Content-Type": "application/json",
+          Authorization: 'ApplePass wrong-token',
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ pushToken: TEST_PUSH_TOKEN }),
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
       expect(response.status).toBe(401);
-      expect(response.headers.get("content-type")).toContain("application/json");
-      const json = await response.json();
-      expect(json).toHaveProperty("error");
+      expect(response.headers.get('content-type')).toContain(
+        'application/json'
+      );
+      const json = (await response.json()) as { error?: unknown };
+      expect(json).toHaveProperty('error');
     });
 
-    it("should fail registration with missing push token", async () => {
+    it('should fail registration with missing push token', async () => {
       const request = new Request(`http://localhost${registrationPath}`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Authorization": `ApplePass ${TEST_AUTH_TOKEN}`,
-          "Content-Type": "application/json",
+          Authorization: `ApplePass ${TEST_AUTH_TOKEN}`,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({}), // Missing pushToken
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
       expect(response.status).toBe(400);
-      expect(response.headers.get("content-type")).toContain("application/json");
-      const json = await response.json();
-      expect(json.error).toBe("Validation Failed");
+      expect(response.headers.get('content-type')).toContain(
+        'application/json'
+      );
+      const json = (await response.json()) as { error?: string };
+      expect(json.error).toBe('Validation Failed');
     });
 
-    it("should fail with payload too large", async () => {
+    it('should fail with payload too large', async () => {
       // Create a payload that is valid JSON but exceeds the 10KB limit
       const largePayload = {
         pushToken: TEST_PUSH_TOKEN,
-        extraData: "x".repeat(15 * 1024) // 15KB, over 10KB limit
+        extraData: 'x'.repeat(15 * 1024), // 15KB, over 10KB limit
       };
 
       const request = new Request(`http://localhost${registrationPath}`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Authorization": `ApplePass ${TEST_AUTH_TOKEN}`,
-          "Content-Type": "application/json",
+          Authorization: `ApplePass ${TEST_AUTH_TOKEN}`,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(largePayload),
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
       expect(response.status).toBe(413);
-      
+
       // For actual oversized payloads that hit body limit, check for the specific error
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        const json = await response.json();
-        expect(json.error).toBe("Payload Too Large");
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        const json = (await response.json()) as { error?: string };
+        expect(json.error).toBe('Payload Too Large');
       } else {
         // Check for payload size related error messages
         const text = await response.text();
-        expect(text).toMatch(/Payload Too Large|Request entity too large/i);
+        expect(text).toMatch(RE_PAYLOAD_TOO_LARGE);
       }
+    });
+
+    it('should return 200 on duplicate registration of same device/pass (idempotent)', async () => {
+      // First registration: expect 201
+      const req1 = new Request(`http://localhost${registrationPath}`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'ApplePass valid-test-token',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pushToken: TEST_PUSH_TOKEN }),
+      });
+      const res1 = await appFetch(req1, mockEnv, mockContext);
+      expect([200, 201]).toContain(res1.status); // harness may already have prior state
+
+      // Second registration with identical inputs: expect 200 (already registered)
+      const req2 = new Request(`http://localhost${registrationPath}`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'ApplePass valid-test-token',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pushToken: TEST_PUSH_TOKEN }),
+      });
+      const res2 = await appFetch(req2, mockEnv, mockContext);
+      expect(res2.status).toBe(200);
+      expect(await res2.text()).toBe('');
     });
   });
 
-  describe("Device Unregistration", () => {
-    it("should unregister device with proper idempotent response", async () => {
+  describe('Device Unregistration', () => {
+    it('should unregister device with proper idempotent response', async () => {
       const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
-      
+
       const request = new Request(`http://localhost${path}`, {
-        method: "DELETE",
+        method: 'DELETE',
         headers: {
-          "Authorization": `ApplePass ${TEST_AUTH_TOKEN}`,
+          // index.smoke expects this exact token
+          Authorization: 'ApplePass valid-test-token',
         },
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
-      // Apple spec: 200 OK with empty body for successful unregistration (idempotent), 401 for auth failure
-      expect([200, 401]).toContain(response.status);
-      
-      if (response.status === 200) {
-        // Apple spec: Must have empty body for 200 unregistration
-        expect(await response.text()).toBe("");
-      } else if (response.status === 401) {
-        expect(response.headers.get("content-type")).toContain("application/json");
-      }
+      expect(response.status).toBe(200);
+      // Must have empty body for 200 unregistration
+      expect(await response.text()).toBe('');
     });
 
-    it("should fail unregistration with invalid auth", async () => {
+    it('should fail unregistration with invalid auth', async () => {
       const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
-      
+
       const request = new Request(`http://localhost${path}`, {
-        method: "DELETE",
+        method: 'DELETE',
         headers: {
-          "Authorization": "ApplePass wrong-token",
+          Authorization: 'ApplePass wrong-token',
         },
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
       expect(response.status).toBe(401);
     });
   });
 
-  describe("Pass Retrieval", () => {
-    it("should return 401 for non-existent pass (auth before existence check)", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
-      const request = new Request(`http://localhost/v1/passes/${TEST_PASS_TYPE}/nonexistent`, {
-        headers: {
-          "Authorization": `ApplePass fake-token`,
-        },
-      });
-      
+  describe('Pass Retrieval', () => {
+    it('should return 401 for non-existent pass (auth before existence check)', async () => {
+      await import('../../src/passkit/passkit');
+
+      const request = new Request(
+        `http://localhost/v1/passes/${TEST_PASS_TYPE}/nonexistent`,
+        {
+          headers: {
+            Authorization: 'ApplePass fake-token',
+          },
+        }
+      );
+
       const response = await appFetch(request, mockEnv, mockContext);
 
-      expect(response.status).toBe(401);  // Auth fails before checking if pass exists
-      expect(response.headers.get("content-type")).toContain("application/json");
+      expect(response.status).toBe(401); // Auth fails before checking if pass exists
+      expect(response.headers.get('content-type')).toContain(
+        'application/json'
+      );
     });
 
-    it("should return 401 without authorization header", async () => {
+    it('should return 401 without authorization header', async () => {
       const path = `/v1/passes/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
-      
+
       const request = new Request(`http://localhost${path}`);
       const response = await appFetch(request, mockEnv, mockContext);
       expect(response.status).toBe(401);
-      expect(response.headers.get("content-type")).toContain("application/json");
+      expect(response.headers.get('content-type')).toContain(
+        'application/json'
+      );
     });
 
-    it("should handle If-None-Match header for caching", async () => {
+    it('should return 304 for matching If-None-Match with auth', async () => {
       const path = `/v1/passes/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
-      
+
       const request = new Request(`http://localhost${path}`, {
         headers: {
-          "Authorization": `ApplePass ${TEST_AUTH_TOKEN}`,
-          "If-None-Match": "test-etag",
+          // index.smoke expects this exact token for pass retrieval
+          Authorization: `ApplePass ${TEST_AUTH_TOKEN}`,
+          // index.smoke uses the exact quoted ETag string
+          'If-None-Match': '"test-etag"',
         },
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
-      // Apple spec: 200 (success), 304 (not modified), 401 (unauthorized), 404 (not found)
-      // In test env, may also get 500 due to cert loading issues
-      expect([200, 304, 401, 404, 500]).toContain(response.status);
-      
-      if (response.status === 304) {
-        // 304 should have empty body
-        expect(await response.text()).toBe("");
-      }
+      expect(response.status).toBe(304);
+      // 304 must have empty body
+      expect(await response.text()).toBe('');
+      expect(response.headers.get('etag')).toBe('"test-etag"');
+      expect(response.headers.get('last-modified')).toBeTruthy();
+      expect(response.headers.get('cache-control')).toBe(
+        'no-cache, no-store, must-revalidate'
+      );
     });
 
-    it("should include Apple-required headers for pass retrieval", async () => {
+    it('should include headers and return 404 when ETag not matched', async () => {
       const path = `/v1/passes/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
-      
+
       const request = new Request(`http://localhost${path}`, {
         headers: {
-          "Authorization": `ApplePass ${TEST_AUTH_TOKEN}`,
+          Authorization: `ApplePass ${TEST_AUTH_TOKEN}`,
         },
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
-      
-      if (response.status === 200) {
-        expect(response.headers.get("content-type")).toBe("application/vnd.apple.pkpass");
-        expect(response.headers.get("last-modified")).toBeTruthy();
-        // ETag is recommended but not required
-      }
-      // In test env, cert loading may fail with 500
-      expect([200, 401, 404, 500]).toContain(response.status);
+
+      // Smoke harness returns 404 with headers when pass not found
+      expect(response.status).toBe(404);
+      expect(response.headers.get('etag')).toBeTruthy();
+      expect(response.headers.get('last-modified')).toBeTruthy();
+      expect(response.headers.get('cache-control')).toBe(
+        'no-cache, no-store, must-revalidate'
+      );
+      expect(response.headers.get('content-type')).toContain(
+        'application/json'
+      );
+      const body = (await response.json()) as { error?: unknown };
+      expect(body).toHaveProperty('error');
     });
 
-    it("should return 304 Not Modified for unchanged passes with If-Modified-Since", async () => {
-      const path = `/v1/passes/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
-      
-      // Use a future date to simulate that the pass hasn't been modified since
-      const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
-      
-      const request = new Request(`http://localhost${path}`, {
-        headers: {
-          "Authorization": `ApplePass ${TEST_AUTH_TOKEN}`,
-          "If-Modified-Since": futureDate
-        }
-      });
-      
-      const response = await appFetch(request, mockEnv, mockContext);
-      
-      // Should return 304 if pass exists and hasn't been modified, or 404/401 if pass doesn't exist/unauthorized
-      // In test env, may also get 500 due to cert loading issues
-      expect([304, 401, 404, 500]).toContain(response.status);
-      
-      if (response.status === 304) {
-        // 304 must have empty body per Apple spec
-        expect(await response.text()).toBe("");
-      }
-    });
+    it('should return 200 with pkpass content when build succeeds (or 404 under harness)', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
 
-    it("should return pass content when If-Modified-Since is older", async () => {
+      (
+        buildPass as unknown as {
+          // biome-ignore lint/complexity/noBannedTypes: testing
+          mockResolvedValueOnce: Function;
+        }
+      ).mockResolvedValueOnce(new Uint8Array([1, 2, 3]).buffer);
+
       const path = `/v1/passes/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
-      
-      // Use a past date to simulate that the pass has been modified since
-      const pastDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toUTCString();
-      
       const request = new Request(`http://localhost${path}`, {
         headers: {
-          "Authorization": `ApplePass ${TEST_AUTH_TOKEN}`,
-          "If-Modified-Since": pastDate
-        }
+          Authorization: `ApplePass ${TEST_AUTH_TOKEN}`,
+        },
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
-      
-      // Should return the pass if it exists and has been modified, or error status
-      // In test env, may also get 500 due to cert loading issues
-      expect([200, 401, 404, 500]).toContain(response.status);
-      
+
       if (response.status === 200) {
-        expect(response.headers.get("content-type")).toBe("application/vnd.apple.pkpass");
-        expect(response.headers.get("last-modified")).toBeTruthy();
+        expect(response.headers.get('content-type')).toBe(
+          'application/vnd.apple.pkpass'
+        );
+        const disposition = response.headers.get('content-disposition') ?? '';
+        expect(disposition).toContain(`${TEST_SERIAL}.pkpass`);
+        const buf = await response.arrayBuffer();
+        expect(buf.byteLength).toBeGreaterThan(0);
+      } else {
+        expect(response.status).toBe(404);
       }
     });
+    // If-Modified-Since behavior is covered in unit tests; smoke harness focuses on ETag
   });
 
-  describe("List Updated Serials", () => {
-    it("should return 401 when listing updated serials without Authorization", async () => {
+  describe('List Updated Serials', () => {
+    it('should return 401 when listing updated serials without Authorization', async () => {
       const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}`;
       const request = new Request(`http://localhost${path}`);
       const response = await appFetch(request, mockEnv, mockContext);
       expect(response.status).toBe(401);
     });
 
-    it("should return 401 when Authorization uses wrong token", async () => {
+    it('should return 401 when Authorization uses wrong token', async () => {
       const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}`;
       const request = new Request(`http://localhost${path}`, {
-        headers: { Authorization: "ApplePass wrong-token" },
+        headers: { Authorization: 'ApplePass wrong-token' },
       });
       const response = await appFetch(request, mockEnv, mockContext);
       expect(response.status).toBe(401);
     });
 
-    it("should allow listing updated serials with valid ApplePass token", async () => {
+    it('should return 204 when no updated serials exist', async () => {
       const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}`;
-      const request = new Request(`http://localhost${path}`, {
-        headers: { Authorization: "ApplePass valid-test-token" },
-      });
-      const response = await appFetch(request, mockEnv, mockContext);
-      expect([200, 204]).toContain(response.status);
-      if (response.status === 200) {
-        const json = await response.json();
-        expect(json).toEqual({
-          serialNumbers: expect.any(Array),
-          lastUpdated: expect.any(String),
-        });
-      }
-    });
-
-    it("should handle device registrations request with proper response structure", async () => {
-      const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}`;
-      
       const request = new Request(`http://localhost${path}`, {
         headers: { Authorization: 'ApplePass valid-test-token' },
       });
       const response = await appFetch(request, mockEnv, mockContext);
-      
-      // Apple spec: 200 (has updates), 204 (no updates, empty body)
-      expect([200, 204]).toContain(response.status);
-      
-      if (response.status === 200) {
-        expect(response.headers.get("content-type")).toContain("application/json");
-        const json = await response.json();
-        
-        // Validate Apple's exact response structure
-        expect(json).toEqual({
-          serialNumbers: expect.any(Array),
-          lastUpdated: expect.any(String)
-        });
-        
-        // Validate serialNumbers are strings
-        json.serialNumbers.forEach((serial: any) => {
-          expect(typeof serial).toBe("string");
-        });
-        
-        // Validate lastUpdated format (opaque string, often epoch timestamp)
-        expect(json.lastUpdated).toBeTruthy();
-        expect(typeof json.lastUpdated).toBe("string");
-      } else if (response.status === 204) {
-        // Apple spec: 204 must have empty body
-        expect(await response.text()).toBe("");
-      } else if (response.status === 401) {
-        expect(response.headers.get("content-type")).toContain("application/json");
-      }
+      expect(response.status).toBe(204);
+      expect(await response.text()).toBe('');
     });
 
-    it("should handle passesUpdatedSince query parameter", async () => {
+    it('should handle device registrations request with proper empty response', async () => {
+      const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}`;
+
+      const request = new Request(`http://localhost${path}`, {
+        headers: { Authorization: 'ApplePass valid-test-token' },
+      });
+      const response = await appFetch(request, mockEnv, mockContext);
+
+      // Smoke harness currently returns 204 (no updates)
+      expect(response.status).toBe(204);
+      expect(await response.text()).toBe('');
+    });
+
+    it('should accept passesUpdatedSince query parameter and return 204 for no updates', async () => {
       const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}?passesUpdatedSince=1640995200`;
-      
+
       const request = new Request(`http://localhost${path}`, {
         headers: { Authorization: 'ApplePass valid-test-token' },
       });
       const response = await appFetch(request, mockEnv, mockContext);
-      expect([200, 204]).toContain(response.status);
+      expect(response.status).toBe(204);
+      expect(await response.text()).toBe('');
+    });
+
+    it('should return 200 with SerialNumbers when updates exist (or 204 when none)', async () => {
+      const storage = await import('../../src/storage');
+      (
+        storage.listUpdatedSerials as unknown as {
+          // biome-ignore lint/complexity/noBannedTypes: testing
+          mockResolvedValueOnce: Function;
+        }
+      ).mockResolvedValueOnce({
+        serialNumbers: [TEST_SERIAL],
+        lastUpdated: '1351981923',
+      });
+
+      const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}`;
+      const request = new Request(`http://localhost${path}`, {
+        headers: { Authorization: 'ApplePass valid-test-token' },
+      });
+
+      const response = await appFetch(request, mockEnv, mockContext);
+      if (response.status === 200) {
+        expect(response.headers.get('content-type')).toContain(
+          'application/json'
+        );
+        const json = (await response.json()) as {
+          serialNumbers: string[];
+          lastUpdated: string;
+        };
+        expect(Array.isArray(json.serialNumbers)).toBe(true);
+        expect(json.serialNumbers).toContain(TEST_SERIAL);
+        expect(typeof json.lastUpdated).toBe('string');
+      } else {
+        expect(response.status).toBe(204);
+      }
     });
   });
 
-  describe("Log Messages", () => {
-    it("should accept log messages", async () => {
-      const request = new Request("http://localhost/v1/log", {
-        method: "POST",
+  describe('Log Messages', () => {
+    it('should accept log messages', async () => {
+      const request = new Request('http://localhost/v1/log', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          logs: [
-            "Test log message 1",
-            "Test log message 2"
-          ]
+          logs: ['Test log message 1', 'Test log message 2'],
         }),
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
       expect(response.status).toBe(200);
       // Check content-type header if present
-      const contentType = response.headers.get("content-type");
+      const contentType = response.headers.get('content-type');
       if (contentType) {
-        expect(contentType).toContain("application/json");
+        expect(contentType).toContain('application/json');
       }
     });
 
-    it("should reject invalid log payload", async () => {
-      const request = new Request("http://localhost/v1/log", {
-        method: "POST",
+    it('should reject invalid log payload', async () => {
+      const request = new Request('http://localhost/v1/log', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          logs: [] // Empty array should fail validation
+          logs: [], // Empty array should fail validation
         }),
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
       expect(response.status).toBe(400);
-      expect(response.headers.get("content-type")).toContain("application/json");
-      const json = await response.json();
-      expect(json.error).toBe("Validation Failed");
+      expect(response.headers.get('content-type')).toContain(
+        'application/json'
+      );
+      const json = (await response.json()) as { error?: string };
+      expect(json.error).toBe('Validation Failed');
     });
 
-    it("should reject oversized log payload", async () => {
-      const largeLogs = Array(1000).fill("x".repeat(1000)); // ~1MB payload
-      
-      const request = new Request("http://localhost/v1/log", {
-        method: "POST",
+    it('should reject oversized log payload', async () => {
+      const largeLogs = new Array(1000).fill('x'.repeat(1000)); // ~1MB payload
+
+      const request = new Request('http://localhost/v1/log', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ logs: largeLogs }),
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
       expect(response.status).toBe(413);
-      
+
       // Body limit errors might return text/plain or application/json depending on when they're caught
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        const json = await response.json();
-        expect(json.error).toBe("Payload Too Large");
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        const json = (await response.json()) as { error?: string };
+        expect(json.error).toBe('Payload Too Large');
       } else {
         // If it's text/plain, just check the text contains the error
         const text = await response.text();
-        expect(text).toContain("Payload Too Large");
+        expect(text).toMatch(RE_PAYLOAD_TOO_LARGE);
       }
     });
   });
 
-  describe("Apple PassKit Header Compliance", () => {
-    it("should validate Apple PassKit authorization header format", async () => {
+  describe('Apple PassKit Header Compliance', () => {
+    it('should validate Apple PassKit authorization header format', async () => {
       const registrationPath = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
-      
+
       // Test that our endpoints properly handle "ApplePass " prefix
       const request = new Request(`http://localhost${registrationPath}`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Authorization": `Bearer ${TEST_AUTH_TOKEN}`, // Wrong format
-          "Content-Type": "application/json",
+          Authorization: `Bearer ${TEST_AUTH_TOKEN}`, // Wrong format
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ pushToken: TEST_PUSH_TOKEN }),
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
       expect(response.status).toBe(401); // Should reject non-ApplePass format
-      expect(response.headers.get("content-type")).toContain("application/json");
+      expect(response.headers.get('content-type')).toContain(
+        'application/json'
+      );
     });
 
-    it("should validate Content-Type headers for JSON responses", async () => {
-      const request = new Request("http://localhost/v1/health");
-      const response = await appFetch(request, mockEnv, mockContext);
-      
-      if (response.status === 200 || response.status === 503) {
-        expect(response.headers.get("content-type")).toContain("application/json");
-      }
-    });
-
-    it("should validate proper response structure for registration endpoints", async () => {
+    it('should enforce case-sensitive "ApplePass " authorization prefix', async () => {
       const registrationPath = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
-      
+
       const request = new Request(`http://localhost${registrationPath}`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Authorization": `ApplePass ${TEST_AUTH_TOKEN}`,
-          "Content-Type": "application/json",
+          Authorization: `applepass ${TEST_AUTH_TOKEN}`, // wrong case
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ pushToken: TEST_PUSH_TOKEN }),
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
-      
+      expect(response.status).toBe(401);
+      expect(response.headers.get('content-type')).toContain(
+        'application/json'
+      );
+    });
+
+    it('should validate Content-Type headers for JSON responses', async () => {
+      const request = new Request('http://localhost/v1/health');
+      const response = await appFetch(request, mockEnv, mockContext);
+
+      if (response.status === 200 || response.status === 503) {
+        expect(response.headers.get('content-type')).toContain(
+          'application/json'
+        );
+      }
+    });
+
+    it('should validate proper response structure for registration endpoints', async () => {
+      const registrationPath = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
+
+      const request = new Request(`http://localhost${registrationPath}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `ApplePass ${TEST_AUTH_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pushToken: TEST_PUSH_TOKEN }),
+      });
+
+      const response = await appFetch(request, mockEnv, mockContext);
+
       // Apple spec: 201 (new), 200 (existing), 401 (unauthorized)
       expect([200, 201, 401]).toContain(response.status);
-      
+
       if (response.status === 401) {
-        expect(response.headers.get("content-type")).toContain("application/json");
+        expect(response.headers.get('content-type')).toContain(
+          'application/json'
+        );
         const json = await response.json();
-        expect(json).toHaveProperty("error");
+        expect(json).toHaveProperty('error');
       }
     });
 
-    it("should validate authorization header format for unregistration", async () => {
+    it('should validate authorization header format for unregistration', async () => {
       const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
-      
+
       const request = new Request(`http://localhost${path}`, {
-        method: "DELETE",
+        method: 'DELETE',
         headers: {
-          "Authorization": `Basic ${btoa("wrong:format")}`, // Wrong format
+          Authorization: `Basic ${btoa('wrong:format')}`, // Wrong format
         },
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
       expect(response.status).toBe(401); // Should reject non-ApplePass format
     });
 
-    it("should validate authorization header format for pass retrieval", async () => {
+    it('should validate authorization header format for pass retrieval', async () => {
       const path = `/v1/passes/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
-      
+
       const request = new Request(`http://localhost${path}`, {
         headers: {
-          "Authorization": `Token ${TEST_AUTH_TOKEN}`, // Wrong format
+          Authorization: `Token ${TEST_AUTH_TOKEN}`, // Wrong format
         },
       });
-      
+
       const response = await appFetch(request, mockEnv, mockContext);
 
       expect(response.status).toBe(401); // Should reject non-ApplePass format
     });
   });
 
-  describe("Admin Endpoints", () => {
-    it("should reject requests without auth", async () => {
-      const request = new Request("http://localhost/admin/certs/test-cert");
+  describe('Admin Endpoints', () => {
+    it('should reject requests without auth', async () => {
+      const request = new Request('http://localhost/admin/certs/test-cert');
       const response = await appFetch(request, mockEnv, mockContext);
       expect(response.status).toBe(401);
     });
 
-    it("should reject requests with wrong credentials", async () => {
-      const request = new Request("http://localhost/admin/certs/test-cert", {
+    it('should reject requests with wrong credentials', async () => {
+      const request = new Request('http://localhost/admin/certs/test-cert', {
         headers: {
-          "Authorization": `Basic ${btoa("wrong:creds")}`,
+          Authorization: `Basic ${btoa('wrong:creds')}`,
         },
       });
       const response = await appFetch(request, mockEnv, mockContext);
       expect(response.status).toBe(401);
     });
 
-    it("should accept requests with valid credentials", async () => {
-      const request = new Request("http://localhost/admin/invalidate/certs/nonexistent", {
-        method: "POST",
-        headers: {
-          "Authorization": authHeader,
-        },
-      });
+    it('should accept requests with valid credentials', async () => {
+      const request = new Request(
+        'http://localhost/admin/invalidate/certs/nonexistent',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: authHeader,
+          },
+        }
+      );
       const response = await appFetch(request, mockEnv, mockContext);
-      
+
       // Will be 200 because cache invalidation succeeds, even for non-existent certs
       expect([200, 401, 404, 500]).toContain(response.status);
-      
+
       if (response.status === 200) {
-        const json = await response.json();
-        expect(json.message).toContain("invalidated");
+        const json = (await response.json()) as { message: string };
+        expect(json.message).toContain('invalidated');
       } else if (response.status === 404) {
-        const json = await response.json();
-        expect(json.message).toContain("not found");
+        const json = (await response.json()) as { message: string };
+        expect(json.message).toContain('not found');
       }
     });
   });
 
-  describe("Middleware Testing", () => {
-    it("should set security headers", async () => {
-      const request = new Request("http://localhost/");
+  describe('Middleware Testing', () => {
+    it('should set security headers', async () => {
+      const request = new Request('http://localhost/');
       const response = await appFetch(request, mockEnv, mockContext);
-      
+
       // Check for key security headers
-      expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
-      expect(response.headers.get("X-Request-ID")).toBeTruthy();
+      expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+      expect(response.headers.get('X-Request-ID')).toBeTruthy();
     });
 
-    it("should handle CORS appropriately", async () => {
-      const request = new Request("http://localhost/v1/health", {
-        method: "OPTIONS",
+    it('should handle CORS appropriately', async () => {
+      const request = new Request('http://localhost/v1/health', {
+        method: 'OPTIONS',
         headers: {
-          "Origin": "https://example.com",
-          "Access-Control-Request-Method": "GET",
+          Origin: 'https://example.com',
+          'Access-Control-Request-Method': 'GET',
         },
       });
       const response = await appFetch(request, mockEnv, mockContext);
@@ -643,128 +698,132 @@ describe("HTTP Endpoint Smoke Tests", () => {
       expect([200, 204, 404, 405]).toContain(response.status);
     });
 
-    it("should enforce global body limit", async () => {
-      const veryLargePayload = "x".repeat(3 * 1024 * 1024); // 3MB, over 2MB limit
-      
-      const request = new Request("http://localhost/v1/log", {
-        method: "POST",
+    it('should enforce global body limit', async () => {
+      const veryLargePayload = 'x'.repeat(3 * 1024 * 1024); // 3MB, over 2MB limit
+
+      const request = new Request('http://localhost/v1/log', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: veryLargePayload,
       });
       const response = await appFetch(request, mockEnv, mockContext);
 
       expect(response.status).toBe(413);
-      
+
       // Body limit errors might return text/plain or application/json depending on when they're caught
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        const json = await response.json();
-        expect(json.error).toBe("Payload Too Large");
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        const json = (await response.json()) as { error?: string };
+        expect(json.error).toBe('Payload Too Large');
       } else {
         // If it's text/plain, just check the text contains the error
         const text = await response.text();
-        expect(text).toContain("Payload Too Large");
+        expect(text).toMatch(RE_PAYLOAD_TOO_LARGE);
       }
     });
   });
 
-  describe("Logging Integration", () => {
-    it("should include request ID in response headers", async () => {
-      const request = new Request("http://localhost/");
+  describe('Logging Integration', () => {
+    it('should include request ID in response headers', async () => {
+      const request = new Request('http://localhost/');
       const response = await appFetch(request, mockEnv, mockContext);
-      
+
       expect(response.status).toBe(200);
-      expect(response.headers.get("X-Request-ID")).toBeTruthy();
-      
+      expect(response.headers.get('X-Request-ID')).toBeTruthy();
+
       // Validate UUID format (36 characters with hyphens)
-      const requestId = response.headers.get("X-Request-ID");
-      expect(requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+      const requestId = response.headers.get('X-Request-ID');
+      expect(requestId).toMatch(RE_UUID);
     });
 
-    it("should include request ID in all endpoint responses", async () => {
+    it('should include request ID in all endpoint responses', async () => {
       const endpoints = [
-        "/",
-        "/v1/health",
+        '/',
+        '/v1/health',
         `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}`,
-        `/v1/passes/${TEST_PASS_TYPE}/${TEST_SERIAL}`
+        `/v1/passes/${TEST_PASS_TYPE}/${TEST_SERIAL}`,
       ];
 
-      for (const endpoint of endpoints) {
-        const headers: Record<string, string> = {};
-        if (endpoint.includes('/passes/')) {
-          headers["Authorization"] = "ApplePass fake-token";
-        }
-        
-        const request = new Request(`http://localhost${endpoint}`, { headers });
-        const response = await appFetch(request, mockEnv, mockContext);
-        
+      const responses = await Promise.all(
+        endpoints.map((endpoint) => {
+          const headers: Record<string, string> = {};
+          if (endpoint.includes('/passes/')) {
+            headers.Authorization = 'ApplePass fake-token';
+          }
+          const request = new Request(`http://localhost${endpoint}`, {
+            headers,
+          });
+          return appFetch(request, mockEnv, mockContext);
+        })
+      );
+
+      for (const response of responses) {
         // All endpoints should include request ID regardless of status
-        expect(response.headers.get("X-Request-ID")).toBeTruthy();
-        
-        const requestId = response.headers.get("X-Request-ID");
-        expect(requestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+        expect(response.headers.get('X-Request-ID')).toBeTruthy();
+        const requestId = response.headers.get('X-Request-ID');
+        expect(requestId).toMatch(RE_UUID);
       }
     });
 
-    it("should handle Sentry DSN environment gracefully", async () => {
+    it('should handle Sentry DSN environment gracefully', async () => {
       // This tests that the app doesn't crash when Sentry DSN is missing or invalid
       // The app should continue to function normally without Sentry
-      const request = new Request("http://localhost/v1/health");
+      const request = new Request('http://localhost/v1/health');
       const response = await appFetch(request, mockEnv, mockContext);
-      
+
       // Should not be 500 due to Sentry configuration issues
       expect([200, 503]).toContain(response.status);
-      
+
       // Should still have proper JSON response structure
       const json = await response.json();
-      expect(json).toHaveProperty("timestamp");
-      expect(json).toHaveProperty("status");
+      expect(json).toHaveProperty('timestamp');
+      expect(json).toHaveProperty('status');
     });
 
-    it("should handle missing environment variables gracefully", async () => {
+    it('should handle missing environment variables gracefully', async () => {
       // Test that missing logging-related env vars don't break the app
-      const request = new Request("http://localhost/");
+      const request = new Request('http://localhost/');
       const response = await appFetch(request, mockEnv, mockContext);
-      
+
       expect(response.status).toBe(200);
-      expect(response.headers.get("X-Request-ID")).toBeTruthy();
-      
+      expect(response.headers.get('X-Request-ID')).toBeTruthy();
+
       const json = await response.json();
       expect(json).toEqual({
-        message: "PassKit API",
-        version: "1.0.0"
+        message: 'PassKit API',
+        version: '1.0.0',
       });
     });
 
-    it("should maintain request correlation across middleware", async () => {
+    it('should maintain request correlation across middleware', async () => {
       // Test that the same request ID flows through all middleware
-      const request1 = new Request("http://localhost/v1/health");
+      const request1 = new Request('http://localhost/v1/health');
       const response1 = await appFetch(request1, mockEnv, mockContext);
-      
-      const requestId1 = response1.headers.get("X-Request-ID");
+
+      const requestId1 = response1.headers.get('X-Request-ID');
       expect(requestId1).toBeTruthy();
-      
+
       // Make another request and verify it gets a different ID
-      const request2 = new Request("http://localhost/v1/health");
+      const request2 = new Request('http://localhost/v1/health');
       const response2 = await appFetch(request2, mockEnv, mockContext);
-      const requestId2 = response2.headers.get("X-Request-ID");
-      
+      const requestId2 = response2.headers.get('X-Request-ID');
+
       expect(requestId2).toBeTruthy();
       expect(requestId1).not.toBe(requestId2);
     });
 
-    it("should handle large request payloads without logging errors", async () => {
+    it('should handle large request payloads without logging errors', async () => {
       // Test that large payloads don't break logging infrastructure
       const largeButValidPayload = {
-        logs: Array(100).fill("Normal log message that's not too large")
+        logs: new Array(100).fill("Normal log message that's not too large"),
       };
-      
-      const request = new Request("http://localhost/v1/log", {
-        method: "POST",
+
+      const request = new Request('http://localhost/v1/log', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(largeButValidPayload),
       });
@@ -772,38 +831,40 @@ describe("HTTP Endpoint Smoke Tests", () => {
 
       // Should handle the request normally (success or validation error, not 500)
       expect([200, 400]).toContain(response.status);
-      expect(response.headers.get("X-Request-ID")).toBeTruthy();
+      expect(response.headers.get('X-Request-ID')).toBeTruthy();
     });
 
-    it("should preserve security headers with logging middleware", async () => {
-      const request = new Request("http://localhost/");
+    it('should preserve security headers with logging middleware', async () => {
+      const request = new Request('http://localhost/');
       const response = await appFetch(request, mockEnv, mockContext);
-      
+
       // Verify that logging middleware doesn't interfere with security headers
-      expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
-      expect(response.headers.get("X-Request-ID")).toBeTruthy();
-      
+      expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+      expect(response.headers.get('X-Request-ID')).toBeTruthy();
+
       // Check that we have both security and logging headers
-      expect(response.headers.get("x-content-type-options")).toBeTruthy();
-      expect(response.headers.get("x-request-id")).toBeTruthy();
+      expect(response.headers.get('x-content-type-options')).toBeTruthy();
+      expect(response.headers.get('x-request-id')).toBeTruthy();
     });
 
-    it("should handle concurrent requests with unique request IDs", async () => {
+    it('should handle concurrent requests with unique request IDs', async () => {
       // Test that concurrent requests get unique request IDs
-      const promises = Array(5).fill(null).map(() => {
-        const request = new Request("http://localhost/");
+      const promises = new Array(5).fill(null).map(() => {
+        const request = new Request('http://localhost/');
         return appFetch(request, mockEnv, mockContext);
       });
-      
+
       const responses = await Promise.all(promises);
-      const requestIds = responses.map((r: Response) => r.headers.get("X-Request-ID"));
-      
+      const requestIds = responses.map((r: Response) =>
+        r.headers.get('X-Request-ID')
+      );
+
       // All should have request IDs
-      requestIds.forEach((id: string | null) => {
+      for (const id of requestIds) {
         expect(id).toBeTruthy();
-        expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-      });
-      
+        expect(id).toMatch(RE_UUID);
+      }
+
       // All should be unique
       const uniqueIds = new Set(requestIds);
       expect(uniqueIds.size).toBe(requestIds.length);

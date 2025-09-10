@@ -1,72 +1,142 @@
 # dayof
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Start, Hono, ORPC, and more.
+A full-stack monorepo for "DayOf", an event management platform. Built with a modern TypeScript stack including React (TanStack Start), React Native (Expo), Hono, Drizzle, and Inngest.
 
-## Features
+## Core Technologies
 
-- **TypeScript** - For type safety and improved developer experience
-- **TanStack Start** - SSR framework with TanStack Router
-- **React Native** - Build mobile apps using React
-- **Expo** - Tools for React Native development
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **shadcn/ui** - Reusable UI components
-- **Hono** - Lightweight, performant server framework
-- **oRPC** - End-to-end type-safe APIs with OpenAPI integration
-- **Node.js** - Runtime environment
-- **Drizzle** - TypeScript-first ORM
-- **PostgreSQL** - Database engine
-- **Authentication** - Email & password authentication with Better Auth
-- **Husky** - Git hooks for code quality
-- **Turborepo** - Optimized monorepo build system
+- **Frameworks**: TanStack Start (React), Expo (React Native), Hono
+- **UI**: TailwindCSS, shadcn/ui, NativeWind
+- **API**: oRPC, Better Auth
+- **Database**: PostgreSQL with Drizzle ORM (Neon)
+- **Background Jobs**: Inngest
+- **Tooling**: Turborepo, Bun, TypeScript, Biome, Ultracite
+
+---
+
+## Project Structure
+
+This repository is a monorepo managed by Turborepo, organized into `apps` and `packages`.
+
+### Apps
+
+The `apps` directory contains the individual, deployable applications of the platform.
+
+| Application | Description                                                       | Framework      |
+| ----------- | ----------------------------------------------------------------- | -------------- |
+| `auth`      | Authentication service using Better Auth.                         | Hono           |
+| `backstage` | Admin web dashboard for managing events and operations.           | TanStack Start |
+| `crew`      | React Native mobile application for event staff.                  | Expo           |
+| `events`    | Central service for handling and serving Inngest background jobs. | Hono           |
+| `frontrow`  | Customer-facing web application.                                  | TanStack Start |
+| `handbook`  | Internal documentation site.                                      | Fumadocs       |
+| `honoken`   | Apple Wallet PassKit web service for digital tickets.             | Hono           |
+
+### Packages
+
+The `packages` directory contains shared libraries and configurations used across the applications.
+
+| Package       | Description                                                                |
+| ------------- | -------------------------------------------------------------------------- |
+| `database`    | Shared Drizzle schema, client, and types for the Neon PostgreSQL database. |
+| `inngest-kit` | Shared Inngest client, functions, and event definitions.                   |
+
+---
 
 ## Getting Started
 
-First, install the dependencies:
+### Prerequisites
+
+- [Bun](https://bun.sh/) (v1.0 or higher)
+- Access to a Neon PostgreSQL database.
+- Vercel account and [Vercel CLI](https://vercel.com/cli) for local development and deployment.
+
+### 1. Installation
+
+Install all dependencies from the root of the monorepo:
 
 ```bash
 bun install
 ```
 
-## Database Setup
+### 2. Environment Setup
 
-This project uses PostgreSQL with Drizzle ORM.
+Each application in the `apps/` directory may require its own `.env` file for local development. Copy the corresponding `.env.example` file (if it exists) to `.env` and fill in the required environment variables, such as database connection strings and API keys.
 
-1. Make sure you have a PostgreSQL database set up.
-2. Update your `apps/server/.env` file with your PostgreSQL connection details.
+---
 
-3. Apply the schema to your database:
+## Development
 
-```bash
-bun db:push
-```
+### Running Applications
 
-Then, run the development server:
+You can run all applications simultaneously or individually.
 
 ```bash
+# Run all web apps and services in development mode
 bun dev
+
+# Run a specific application (e.g., backstage)
+bun run dev:backstage
+
+# Available app-specific dev scripts:
+# bun run dev:events
+# bun run dev:backstage
+# bun run dev:frontrow
+# bun run dev:handbook
+# bun run dev:crew
+# bun run dev:honoken
 ```
 
-Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
-Use the Expo Go app to run the mobile application.
-The API is running at [http://localhost:3000](http://localhost:3000).
+### Inngest & Events Service
 
-## Project Structure
+This repo uses Inngest for background jobs, orchestrated through the `apps/events` service.
 
-```text
-dayof/
-├── apps/
-│   ├── web/         # Frontend application (React + TanStack Start)
-│   ├── native/      # Mobile application (React Native, Expo)
-│   └── server/      # Backend API (Hono, ORPC)
-```
+1. **Start the Events service** (serves `/api/inngest` on port 3001):
 
-## Available Scripts
+   ```bash
+   bun run dev:events
+   ```
 
-- `bun dev`: Start all applications in development mode
-- `bun build`: Build all applications
-- `bun dev:web`: Start only the web application
-- `bun dev:server`: Start only the server
-- `bun check-types`: Check TypeScript types across all apps
-- `bun dev:native`: Start the React Native/Expo development server
-- `bun db:push`: Push schema changes to database
-- `bun db:studio`: Open database studio UI
+2. In a **separate terminal**, start the Inngest Dev Server, pointing to the events service:
+
+   ```bash
+   bun run dev:inngest:events
+   ```
+
+3. Open the Inngest Dev UI at `http://localhost:8288` to monitor and trigger functions.
+
+Refer to the [Inngest & Events Service](#inngest--events-service) section in the main `README.md` for more details on the architecture.
+
+---
+
+## Database Management
+
+The database schema is centrally managed in the `packages/database` workspace using Drizzle ORM.
+
+- **Generate Migrations**: After making changes to the schema in `packages/database/schema/`, run the generate command from the root. This requires a `DEV_DATABASE_URL` variable in `packages/database/.env`.
+
+  ```bash
+  bun run db:generate
+  ```
+
+- **Apply Migrations**: Apply generated migrations to your database.
+
+  ```bash
+  bun run db:push
+  ```
+
+- **Drizzle Studio**: To open a local GUI for the database, run:
+
+  ```bash
+  bun run db:studio
+  ```
+
+_Note: The `db:_`scripts in the root`package.json`are configured to run these commands within the`packages/database` workspace.\*
+
+### Schema barrel and Drizzle Kit
+
+- **Single entrypoint for schema**: We expose the schema through a barrel file at `packages/database/schema/index.ts`. The package root also re-exports that barrel via `packages/database/index.ts`.
+  - Import surfaces:
+    - `@database/schema`: full schema barrel, including the composed `schema` object and `relations`.
+    - `@database`: re-exports the same barrel for a flatter import path.
+- **Drizzle Kit config uses the barrel**: `packages/database/drizzle.config.ts` sets `schema: './schema/index.ts'`, so only what the barrel exports is considered when generating and pushing migrations.
+- **Omitting experimental modules**: To exclude a table/module (e.g., payments) from generation and push, do not export it from `packages/database/schema/index.ts`. Because Drizzle Kit reads only from the barrel, omitted modules will not be included in migrations.

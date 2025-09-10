@@ -1,11 +1,16 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createMockEnv, createMockDbClient, createMockLogger, setupMockCrypto } from "../fixtures/mock-env";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  TEST_PASS_TYPE,
-  TEST_SERIAL,
+  createMockDbClient,
+  createMockEnv,
+  createMockLogger,
+  setupMockCrypto,
+} from '../fixtures/mock-env';
+import {
   TEST_AUTH_TOKEN,
   TEST_CERT_DATA,
-} from "../fixtures/test-data";
+  TEST_PASS_TYPE,
+  TEST_SERIAL,
+} from '../fixtures/test-data';
 
 // Mock the database module
 vi.mock('../../src/db', () => ({
@@ -20,10 +25,20 @@ vi.mock('../../src/db', () => ({
   },
 }));
 
+// Mock Vercel Blob SDK; default head() returns 404 (not found)
+vi.mock('@vercel/blob', () => {
+  return {
+    head: vi.fn(),
+    put: vi.fn(),
+    del: vi.fn(),
+    BlobAccessError: class BlobAccessError extends Error {},
+  };
+});
+
 // Mock fetch globally
 global.fetch = vi.fn();
 
-describe("PassKit Pass Generation Tests", () => {
+describe('PassKit Pass Generation Tests', () => {
   let mockEnv: any;
   let mockDbClient: any;
   let mockLogger: any;
@@ -35,29 +50,45 @@ describe("PassKit Pass Generation Tests", () => {
 
     // Setup mock crypto for certificate operations
     setupMockCrypto();
-    
+
     // Create mock database client
     mockDbClient = createMockDbClient();
-    
+
     // Setup the getDbClient mock to return our mock DB
     const { getDbClient } = await import('../../src/db');
     (getDbClient as any).mockReturnValue(mockDbClient);
-    
+
     // Mock fetch for R2 asset fetching to simulate missing assets
     global.fetch = vi.fn();
+
+    // Reset pass content override
+    const { setWalletPassContentOverride } = await import(
+      '../fixtures/mock-env'
+    );
+    setWalletPassContentOverride(undefined);
+
+    // Default Blob.head() to 404 for all keys
+    const { head } = await import('@vercel/blob');
+    (head as any).mockReset();
+    (head as any).mockImplementation((_path: string) => {
+      const e: any = new Error('BlobNotFoundError');
+      e.name = 'BlobNotFoundError';
+      e.status = 404;
+      return Promise.reject(e);
+    });
   });
 
-  describe("buildPass error handling", () => {
-    it("should handle missing pass gracefully", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
+  describe('buildPass error handling', () => {
+    it('should handle missing pass gracefully', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+
       // Mock pass not found
       mockDbClient.query.passes.findFirst.mockResolvedValueOnce(null);
 
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
-      ).rejects.toThrow("PASS_NOT_FOUND");
-      
+      ).rejects.toThrow('PASS_NOT_FOUND');
+
       expect(mockLogger.error).toHaveBeenCalledWith(
         'Pass not found',
         expect.any(Error),
@@ -65,48 +96,48 @@ describe("PassKit Pass Generation Tests", () => {
       );
     });
 
-    it("should handle pass type mismatch", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
+    it('should handle pass type mismatch', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+
       // Mock pass with wrong type
       mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
-        passTypeIdentifier: "wrong.pass.type",
+        passTypeIdentifier: 'wrong.pass.type',
         serialNumber: TEST_SERIAL,
-        authenticationToken: TEST_AUTH_TOKEN
+        authenticationToken: TEST_AUTH_TOKEN,
       });
 
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
-      ).rejects.toThrow("PASS_TYPE_MISMATCH");
-      
+      ).rejects.toThrow('PASS_TYPE_MISMATCH');
+
       expect(mockLogger.error).toHaveBeenCalledWith(
         'Pass type mismatch',
         expect.any(Error),
-        { 
+        {
           expectedType: TEST_PASS_TYPE,
-          actualType: "wrong.pass.type"
+          actualType: 'wrong.pass.type',
         }
       );
     });
 
-    it("should handle missing pass type mapping", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
+    it('should handle missing pass type mapping', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+
       // Mock pass exists
       mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
         passTypeIdentifier: TEST_PASS_TYPE,
         serialNumber: TEST_SERIAL,
         authenticationToken: TEST_AUTH_TOKEN,
-        passData: { description: "Test Pass" }
+        passData: { description: 'Test Pass' },
       });
-      
+
       // Mock no pass type mapping
       mockDbClient.query.passTypes.findFirst.mockResolvedValueOnce(null);
 
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
-      ).rejects.toThrow("Server configuration error");
-      
+      ).rejects.toThrow('Server configuration error');
+
       expect(mockLogger.error).toHaveBeenCalledWith(
         'No pass type mapping found',
         expect.any(Error),
@@ -114,210 +145,290 @@ describe("PassKit Pass Generation Tests", () => {
       );
     });
 
-    it("should handle certificate loading failure", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
+    it('should handle certificate loading failure', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+
       // Mock pass and pass type exist
       setupSuccessfulPassMocks(mockEnv, mockDbClient);
-      
+
       // Mock cert loading failure by making certs query return null
       mockDbClient.query.certs.findFirst.mockResolvedValueOnce(null);
 
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
-      ).rejects.toThrow("CERT_BUNDLE_LOAD_ERROR");
+      ).rejects.toThrow('CERT_BUNDLE_LOAD_ERROR');
     });
 
-    it("should handle missing required icon asset", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
+    it('should handle missing required icon asset', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+
       // Setup all the mocks for a successful flow until images
       setupSuccessfulPassMocks(mockEnv, mockDbClient);
       setupSuccessfulCertMocks(mockEnv, mockDbClient);
-      
+
       // Mock R2 to return null for all icon images (pass-specific and global fallback)
       (fetch as any).mockImplementation((url: string | URL | Request) => {
         const urlStr = url.toString();
         if (urlStr.includes('icon.png')) {
           return Promise.resolve(new Response(null, { status: 404 }));
         }
-        return Promise.resolve(new Response("mock-image-data"));
+        return Promise.resolve(new Response('mock-image-data'));
       });
 
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
-      ).rejects.toThrow("icon.png is mandatory and could not be found");
+      ).rejects.toThrow('icon.png is mandatory and could not be found');
     });
 
-    it("should handle missing mandatory logo asset", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
+    it('should handle missing mandatory logo asset', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+
       // Setup successful flow until logo
       setupSuccessfulPassMocks(mockEnv, mockDbClient);
       setupSuccessfulCertMocks(mockEnv, mockDbClient);
-      
-      // Mock icon.png to succeed but logo.png to fail
+
+      // Make icon available via Blob.head(), but logo not found
+      const { head } = await import('@vercel/blob');
+      (head as any).mockImplementation((path: string) => {
+        if (
+          path.endsWith('/icon.png') ||
+          path.includes('brand-assets/icon.png')
+        ) {
+          return Promise.resolve({ url: 'https://blob/icon.png' });
+        }
+        const e: any = new Error('BlobNotFoundError');
+        e.name = 'BlobNotFoundError';
+        e.status = 404;
+        return Promise.reject(e);
+      });
+
+      // Mock icon.png to succeed but logo.png to fail (404)
       (fetch as any).mockImplementation((url: string | URL | Request) => {
         const urlStr = url.toString();
         if (urlStr.includes('logo.png')) {
           return Promise.resolve(new Response(null, { status: 404 }));
         }
-        // Icon succeeds, logo fails
-        return Promise.resolve(new Response("mock-image-data"));
+        if (urlStr.includes('icon.png')) {
+          const png = createValidPngBuffer(29, 29);
+          return Promise.resolve(new Response(png, { status: 200 }));
+        }
+        return Promise.resolve(new Response(null, { status: 404 }));
       });
 
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
-      ).rejects.toThrow("icon.png is mandatory and could not be found");
+        // biome-ignore lint/performance/useTopLevelRegex: needed for test
+      ).rejects.toThrow(/Mandatory logo\.png/);
     });
 
-    it("should handle invalid pass data JSON", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
-      // Mock invalid JSON in pass data
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
-        passTypeIdentifier: TEST_PASS_TYPE,
-        serialNumber: TEST_SERIAL,
-        authenticationToken: TEST_AUTH_TOKEN,
-        passData: "invalid-json-data"  // This will cause JSON.parse to fail
-      });
+    it('should handle invalid pass data JSON', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+
+      // Current implementation reads structured JSON from walletPassContent; simulate invalid structure
+      const { setWalletPassContentOverride } = await import(
+        '../fixtures/mock-env'
+      );
+      setWalletPassContentOverride({ invalidField: 'test' });
 
       mockDbClient.query.passTypes.findFirst.mockResolvedValueOnce({
         passTypeIdentifier: TEST_PASS_TYPE,
-        certRef: "test-cert-ref"
+        certRef: 'test-cert-ref',
+      });
+
+      // Also make icon fetch succeed so validation triggers before asset errors
+      const { head } = await import('@vercel/blob');
+      (head as any).mockImplementation((path: string) => {
+        if (path.includes('icon.png')) {
+          return Promise.resolve({ url: 'https://blob/icon.png' });
+        }
+        const e: any = new Error('BlobNotFoundError');
+        e.name = 'BlobNotFoundError';
+        e.status = 404;
+        return Promise.reject(e);
+      });
+      (fetch as any).mockImplementation((url: string | URL | Request) => {
+        const urlStr = url.toString();
+        if (urlStr.includes('icon.png')) {
+          const png = createValidPngBuffer(29, 29);
+          return Promise.resolve(new Response(png, { status: 200 }));
+        }
+        return Promise.resolve(new Response(null, { status: 404 }));
       });
 
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
-      ).rejects.toThrow("PASS_DATA_INVALID_JSON");
+      ).rejects.toThrow('PASS_DATA_VALIDATION_ERROR');
     });
 
-    it("should handle pass data validation errors", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
-      // Mock invalid pass data structure (missing required fields)
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
-        passTypeIdentifier: TEST_PASS_TYPE,
-        serialNumber: TEST_SERIAL,
-        authenticationToken: TEST_AUTH_TOKEN,
-        passData: JSON.stringify({
-          // Missing required fields like description, organizationName, etc.
-          invalidField: "test"
-        })
-      });
+    it('should handle pass data validation errors', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+
+      // Mock invalid pass data via walletPassContent to trigger schema validator first
+      const { setWalletPassContentOverride } = await import(
+        '../fixtures/mock-env'
+      );
+      setWalletPassContentOverride({ invalidField: 'test' });
 
       mockDbClient.query.passTypes.findFirst.mockResolvedValueOnce({
         passTypeIdentifier: TEST_PASS_TYPE,
-        certRef: "test-cert-ref"
+        certRef: 'test-cert-ref',
+      });
+
+      // Also make icon fetch succeed so validation triggers before asset errors
+      const { head } = await import('@vercel/blob');
+      (head as any).mockImplementation((path: string) => {
+        if (path.includes('icon.png')) {
+          return Promise.resolve({ url: 'https://blob/icon.png' });
+        }
+        const e: any = new Error('BlobNotFoundError');
+        e.name = 'BlobNotFoundError';
+        e.status = 404;
+        return Promise.reject(e);
+      });
+      (fetch as any).mockImplementation((url: string | URL | Request) => {
+        const urlStr = url.toString();
+        if (urlStr.includes('icon.png')) {
+          const png = createValidPngBuffer(29, 29);
+          return Promise.resolve(new Response(png, { status: 200 }));
+        }
+        return Promise.resolve(new Response(null, { status: 404 }));
       });
 
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
-      ).rejects.toThrow("PASS_DATA_VALIDATION_ERROR");
+      ).rejects.toThrow('PASS_DATA_VALIDATION_ERROR');
     });
   });
 
-  describe("buildPass image handling", () => {
-    it("should fail gracefully when assets cannot be loaded", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
+  describe('buildPass image handling', () => {
+    it('should fail gracefully when assets cannot be loaded', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+
       setupSuccessfulPassMocks(mockEnv, mockDbClient);
       setupSuccessfulCertMocks(mockEnv, mockDbClient);
-      
+
       // Without proper asset mocking, this will fail at icon loading
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
-      ).rejects.toThrow("icon.png is mandatory and could not be found");
+      ).rejects.toThrow('icon.png is mandatory and could not be found');
     });
   });
 
-  describe("buildPass field transformation", () => {
-    it("should fail at asset loading stage (expected for unmocked assets)", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
+  describe('buildPass field transformation', () => {
+    it('should fail at asset loading stage (expected for unmocked assets)', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+
       setupSuccessfulPassMocks(mockEnv, mockDbClient);
       setupSuccessfulCertMocks(mockEnv, mockDbClient);
 
       // This test verifies the pass data transformation works by ensuring it gets to asset loading
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
-      ).rejects.toThrow("icon.png is mandatory and could not be found");
+      ).rejects.toThrow('icon.png is mandatory and could not be found');
     });
 
-    it("should fail at asset loading stage with pre-structured data", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
+    it('should fail at asset loading stage with pre-structured data', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+
       setupSuccessfulPassMocks(mockEnv, mockDbClient); // This has pre-structured eventTicket
       setupSuccessfulCertMocks(mockEnv, mockDbClient);
 
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
-      ).rejects.toThrow("icon.png is mandatory and could not be found");
+      ).rejects.toThrow('icon.png is mandatory and could not be found');
     });
 
-    it("should fail at asset loading stage with minimal data", async () => {
-      const { buildPass } = await import("../../src/passkit/passkit");
-      
+    it('should fail at asset loading stage with minimal data', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+
       setupSuccessfulPassMocks(mockEnv, mockDbClient);
       setupSuccessfulCertMocks(mockEnv, mockDbClient);
 
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
-      ).rejects.toThrow("icon.png is mandatory and could not be found");
+      ).rejects.toThrow('icon.png is mandatory and could not be found');
     });
   });
 });
 
 // Helper functions for setting up successful mocks
+// biome-ignore lint/correctness/noUnusedFunctionParameters: testing
 function setupSuccessfulPassMocks(mockEnv: any, mockDbClient: any) {
   mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
     passTypeIdentifier: TEST_PASS_TYPE,
     serialNumber: TEST_SERIAL,
     authenticationToken: TEST_AUTH_TOKEN,
     passData: JSON.stringify({
-      description: "Test Event Ticket",
-      organizationName: "Test Organization",
-      logoText: "TEST EVENT",
-      foregroundColor: "rgb(255, 255, 255)",
-      backgroundColor: "rgb(0, 0, 0)",
+      description: 'Test Event Ticket',
+      organizationName: 'Test Organization',
+      logoText: 'TEST EVENT',
+      foregroundColor: 'rgb(255, 255, 255)',
+      backgroundColor: 'rgb(0, 0, 0)',
       barcode: {
         message: TEST_SERIAL,
-        format: "PKBarcodeFormatQR",
-        messageEncoding: "iso-8859-1"
+        format: 'PKBarcodeFormatQR',
+        messageEncoding: 'iso-8859-1',
       },
-      eventName: "Test Event",
-      venueName: "Test Venue"
-    })
+      eventName: 'Test Event',
+      venueName: 'Test Venue',
+    }),
   });
 
   mockDbClient.query.passTypes.findFirst.mockResolvedValueOnce({
     passTypeIdentifier: TEST_PASS_TYPE,
-    certRef: "test-cert-ref"
+    certRef: 'test-cert-ref',
   });
+
+  // Ensure walletPassContent has minimally valid pass data so image tests reach asset stage
+  if (mockDbClient?.query?.walletPassContent?.findFirst) {
+    mockDbClient.query.walletPassContent.findFirst.mockResolvedValueOnce({
+      data: {
+        description: 'Test Event Ticket',
+        organizationName: 'Test Organization',
+        logoText: 'TEST EVENT',
+        foregroundColor: 'rgb(255, 255, 255)',
+        backgroundColor: 'rgb(0, 0, 0)',
+        barcode: {
+          message: TEST_SERIAL,
+          format: 'PKBarcodeFormatQR',
+          messageEncoding: 'iso-8859-1',
+        },
+        eventName: 'Test Event',
+        venueName: 'Test Venue',
+      },
+    });
+  }
 }
 
+// biome-ignore lint/correctness/noUnusedFunctionParameters: testing
 function setupSuccessfulCertMocks(mockEnv: any, mockDbClient: any) {
   mockDbClient.query.certs.findFirst.mockResolvedValueOnce(TEST_CERT_DATA);
-  
+
   // The crypto is already set up by setupMockCrypto() in beforeEach
   // No need to manually mock crypto here anymore
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: testing
+// biome-ignore lint/correctness/noUnusedFunctionParameters: testing
 function setupSuccessfulImageMocks(mockEnv: any) {
   // Mock fetch to return valid images for required assets
   (fetch as any).mockImplementation((url: string | URL | Request) => {
     const urlStr = url.toString();
     if (urlStr.includes('icon.png')) {
-      return Promise.resolve(new Response(new ArrayBuffer(100), { 
-        status: 200,
-        headers: { 'content-type': 'image/png' }
-      }));
+      return Promise.resolve(
+        new Response(new ArrayBuffer(100), {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        })
+      );
     }
     if (urlStr.includes('logo.png')) {
-      return Promise.resolve(new Response(new ArrayBuffer(100), { 
-        status: 200,
-        headers: { 'content-type': 'image/png' }
-      }));
+      return Promise.resolve(
+        new Response(new ArrayBuffer(100), {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        })
+      );
     }
     // Return 404 for other assets
     return Promise.resolve(new Response(null, { status: 404 }));
@@ -327,25 +438,53 @@ function setupSuccessfulImageMocks(mockEnv: any) {
 function createValidPngBuffer(width: number, height: number): ArrayBuffer {
   // Create a minimal valid PNG buffer with correct dimensions
   const buffer = new Uint8Array(32);
-  
+
   // PNG signature
-  buffer[0] = 0x89; buffer[1] = 0x50; buffer[2] = 0x4E; buffer[3] = 0x47;
-  buffer[4] = 0x0D; buffer[5] = 0x0A; buffer[6] = 0x1A; buffer[7] = 0x0A;
-  
+  buffer[0] = 0x89;
+  buffer[1] = 0x50;
+  buffer[2] = 0x4e;
+  buffer[3] = 0x47;
+  buffer[4] = 0x0d;
+  buffer[5] = 0x0a;
+  buffer[6] = 0x1a;
+  buffer[7] = 0x0a;
+
   // IHDR chunk length (13 bytes)
-  buffer[8] = 0; buffer[9] = 0; buffer[10] = 0; buffer[11] = 13;
-  
+  buffer[8] = 0;
+  buffer[9] = 0;
+  buffer[10] = 0;
+  buffer[11] = 13;
+
   // IHDR chunk name
-  buffer[12] = 0x49; buffer[13] = 0x48; buffer[14] = 0x44; buffer[15] = 0x52;
-  
+  buffer[12] = 0x49;
+  buffer[13] = 0x48;
+  buffer[14] = 0x44;
+  buffer[15] = 0x52;
+
   // Width and height (big-endian)
-  buffer[16] = (width >> 24) & 0xFF; buffer[17] = (width >> 16) & 0xFF;
-  buffer[18] = (width >> 8) & 0xFF; buffer[19] = width & 0xFF;
-  buffer[20] = (height >> 24) & 0xFF; buffer[21] = (height >> 16) & 0xFF;
-  buffer[22] = (height >> 8) & 0xFF; buffer[23] = height & 0xFF;
-  
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
+  buffer[16] = (width >> 24) & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
+  buffer[17] = (width >> 16) & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
+  buffer[18] = (width >> 8) & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
+  buffer[19] = width & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
+  buffer[20] = (height >> 24) & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
+  buffer[21] = (height >> 16) & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
+  buffer[22] = (height >> 8) & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
+  buffer[23] = height & 0xff;
+
   // Other IHDR fields
-  buffer[24] = 8; buffer[25] = 6; buffer[26] = 0; buffer[27] = 0; buffer[28] = 0;
-  
+  buffer[24] = 8;
+  buffer[25] = 6;
+  buffer[26] = 0;
+  buffer[27] = 0;
+  buffer[28] = 0;
+
   return buffer.buffer;
-} 
+}

@@ -7,8 +7,14 @@
   "exports": {
     ".": "./index.ts",
     "./schema": "./schema/index.ts",
-    "./db": "./db/index.ts"
+    "./db": "./db/index.ts",
+    "./zod": "./runtime/zod.ts",
+    "./effect": "./runtime/effect.ts"
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   }
 }
-
-

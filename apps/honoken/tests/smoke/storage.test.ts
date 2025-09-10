@@ -1,19 +1,19 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createMockEnv, createMockLogger } from "../fixtures/mock-env";
-import { 
-  TEST_PASS_TYPE, 
-  TEST_SERIAL, 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockEnv, createMockLogger } from '../fixtures/mock-env';
+import {
   TEST_AUTH_TOKEN,
   TEST_DEVICE_ID,
-  TEST_PUSH_TOKEN 
-} from "../fixtures/test-data";
+  TEST_PASS_TYPE,
+  TEST_PUSH_TOKEN,
+  TEST_SERIAL,
+} from '../fixtures/test-data';
 
 // Mock the db module before importing storage
 vi.mock('../../src/db', () => ({
-  getDbClient: vi.fn()
+  getDbClient: vi.fn(),
 }));
 
-describe("Storage Layer Behavior Tests", () => {
+describe('Storage Layer Behavior Tests', () => {
   let mockEnv: any;
   let mockLogger: any;
   let mockDbClient: any;
@@ -22,23 +22,23 @@ describe("Storage Layer Behavior Tests", () => {
     mockEnv = createMockEnv();
     mockLogger = createMockLogger();
     vi.clearAllMocks();
-    
+
     // Create mock database client
     const { createMockDbClient } = await import('../fixtures/mock-env');
     mockDbClient = createMockDbClient();
-    
+
     // Setup the getDbClient mock to return our mock DB
     const { getDbClient } = await import('../../src/db');
     (getDbClient as any).mockReturnValue(mockDbClient);
   });
 
-  describe("verifyToken", () => {
-    it("should verify valid ApplePass token", async () => {
-      const { verifyToken } = await import("../../src/storage");
-      
+  describe('verifyToken', () => {
+    it('should verify valid ApplePass token', async () => {
+      const { verifyToken } = await import('../../src/storage');
+
       // Setup mock to return our test pass
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
-        authenticationToken: TEST_AUTH_TOKEN
+      mockDbClient.query.walletPass.findFirst.mockResolvedValueOnce({
+        authenticationToken: TEST_AUTH_TOKEN,
       });
 
       const result = await verifyToken(
@@ -51,43 +51,49 @@ describe("Storage Layer Behavior Tests", () => {
 
       expect(result.valid).toBe(true);
       expect(result.notFound).toBe(false);
-      
+
       // Verify the query was called correctly
-      expect(mockDbClient.query.passes.findFirst).toHaveBeenCalledWith({
+      expect(mockDbClient.query.walletPass.findFirst).toHaveBeenCalledWith({
         columns: { authenticationToken: true },
-        where: expect.any(Function)
+        where: {
+          passTypeIdentifier: TEST_PASS_TYPE,
+          serialNumber: TEST_SERIAL,
+        },
       });
     });
 
-    it("should reject invalid token format", async () => {
-      const { verifyToken } = await import("../../src/storage");
-      
+    it('should reject invalid token format', async () => {
+      const { verifyToken } = await import('../../src/storage');
+
       // Mock DB to return a pass but with different token
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
-        authenticationToken: TEST_AUTH_TOKEN
+      mockDbClient.query.walletPass.findFirst.mockResolvedValueOnce({
+        authenticationToken: TEST_AUTH_TOKEN,
       });
-      
+
       const result = await verifyToken(
         mockEnv,
         TEST_PASS_TYPE,
         TEST_SERIAL,
-        `ApplePass wrong-token`, // Correct prefix but wrong token
+        'ApplePass wrong-token', // Correct prefix but wrong token
         mockLogger
       );
 
       expect(result.valid).toBe(false);
       expect(result.notFound).toBe(false);
-      
+
       // Should query DB because token extraction resulted in non-empty string
-      expect(mockDbClient.query.passes.findFirst).toHaveBeenCalledWith({
+      expect(mockDbClient.query.walletPass.findFirst).toHaveBeenCalledWith({
         columns: { authenticationToken: true },
-        where: expect.any(Function)
+        where: {
+          passTypeIdentifier: TEST_PASS_TYPE,
+          serialNumber: TEST_SERIAL,
+        },
       });
     });
 
-    it("should handle missing authorization header", async () => {
-      const { verifyToken } = await import("../../src/storage");
-      
+    it('should handle missing authorization header', async () => {
+      const { verifyToken } = await import('../../src/storage');
+
       const result = await verifyToken(
         mockEnv,
         TEST_PASS_TYPE,
@@ -98,15 +104,15 @@ describe("Storage Layer Behavior Tests", () => {
 
       expect(result.valid).toBe(false);
       expect(result.notFound).toBe(false);
-      
+
       // Should not query DB for missing auth header
-      expect(mockDbClient.query.passes.findFirst).not.toHaveBeenCalled();
+      expect(mockDbClient.query.walletPass.findFirst).not.toHaveBeenCalled();
     });
 
-    it("should handle pass not found", async () => {
-      const { verifyToken } = await import("../../src/storage");
-      
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce(null);
+    it('should handle pass not found', async () => {
+      const { verifyToken } = await import('../../src/storage');
+
+      mockDbClient.query.walletPass.findFirst.mockResolvedValueOnce(null);
 
       const result = await verifyToken(
         mockEnv,
@@ -120,11 +126,11 @@ describe("Storage Layer Behavior Tests", () => {
       expect(result.notFound).toBe(true);
     });
 
-    it("should handle token mismatch", async () => {
-      const { verifyToken } = await import("../../src/storage");
-      
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
-        authenticationToken: "different-token"
+    it('should handle token mismatch', async () => {
+      const { verifyToken } = await import('../../src/storage');
+
+      mockDbClient.query.walletPass.findFirst.mockResolvedValueOnce({
+        authenticationToken: 'different-token',
       });
 
       const result = await verifyToken(
@@ -140,37 +146,42 @@ describe("Storage Layer Behavior Tests", () => {
     });
   });
 
-  describe("registerDevice", () => {
-    it("should handle new device registration", async () => {
-      const { registerDevice } = await import("../../src/storage");
-      
+  describe('registerDevice', () => {
+    it('should handle new device registration', async () => {
+      const { registerDevice } = await import('../../src/storage');
+
       // Mock successful token verification
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
-        authenticationToken: TEST_AUTH_TOKEN
+      mockDbClient.query.walletPass.findFirst.mockResolvedValueOnce({
+        authenticationToken: TEST_AUTH_TOKEN,
       });
 
       // Mock transaction to simulate no existing registration
-      mockDbClient.transaction.mockImplementationOnce(async (callback: (tx: any) => Promise<any>) => {
-        const mockTx = {
-          insert: vi.fn().mockReturnValue({
-            values: vi.fn().mockReturnValue({
-              onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
-              onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+      mockDbClient.transaction.mockImplementationOnce(
+        async (callback: (tx: any) => Promise<any>) => {
+          const mockTx = {
+            insert: vi.fn().mockReturnValue({
+              values: vi.fn().mockReturnValue({
+                onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+                onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+              }),
             }),
-          }),
-          update: vi.fn().mockReturnValue({
-            set: vi.fn().mockReturnValue({
-              where: vi.fn().mockResolvedValue(undefined),
+            update: vi.fn().mockReturnValue({
+              set: vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue(undefined),
+              }),
             }),
-          }),
-          query: {
-            registrations: {
-              findFirst: vi.fn().mockResolvedValue(null), // No existing registration
+            query: {
+              walletRegistration: {
+                findFirst: vi.fn().mockResolvedValue(null), // No existing registration
+              },
+              walletPass: {
+                findFirst: vi.fn().mockResolvedValue({ id: 'pass-id-1' }),
+              },
             },
-          },
-        };
-        return callback(mockTx);
-      });
+          };
+          return callback(mockTx);
+        }
+      );
 
       const result = await registerDevice(
         mockEnv,
@@ -184,39 +195,41 @@ describe("Storage Layer Behavior Tests", () => {
 
       expect(result.success).toBe(true);
       expect(result.status).toBe(201); // New registration
-      expect(result.message).toContain("successfully registered");
+      expect(result.message).toContain('successfully registered');
     });
 
-    it("should reactivate inactive registration", async () => {
-      const { registerDevice } = await import("../../src/storage");
-      
+    it('should reactivate inactive registration', async () => {
+      const { registerDevice } = await import('../../src/storage');
+
       // Mock successful token verification
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
-        authenticationToken: TEST_AUTH_TOKEN
+      mockDbClient.query.walletPass.findFirst.mockResolvedValueOnce({
+        authenticationToken: TEST_AUTH_TOKEN,
       });
 
       // Mock transaction with existing inactive registration
-      mockDbClient.transaction.mockImplementationOnce(async (callback: (tx: any) => Promise<any>) => {
-        const mockTx = {
-          insert: vi.fn().mockReturnValue({
-            values: vi.fn().mockReturnValue({
-              onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
-              onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+      mockDbClient.transaction.mockImplementationOnce(
+        async (callback: (tx: any) => Promise<any>) => {
+          const mockTx = {
+            insert: vi.fn().mockReturnValue({
+              values: vi.fn().mockReturnValue({
+                onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+                onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+              }),
             }),
-          }),
-          update: vi.fn().mockReturnValue({
-            set: vi.fn().mockReturnValue({
-              where: vi.fn().mockResolvedValue(undefined),
+            update: vi.fn().mockReturnValue({
+              set: vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue(undefined),
+              }),
             }),
-          }),
-          query: {
-            registrations: {
-              findFirst: vi.fn().mockResolvedValue({ active: false }), // Existing inactive
+            query: {
+              walletRegistration: {
+                findFirst: vi.fn().mockResolvedValue({ active: false }), // Existing inactive
+              },
             },
-          },
-        };
-        return callback(mockTx);
-      });
+          };
+          return callback(mockTx);
+        }
+      );
 
       const result = await registerDevice(
         mockEnv,
@@ -230,39 +243,41 @@ describe("Storage Layer Behavior Tests", () => {
 
       expect(result.success).toBe(true);
       expect(result.status).toBe(200);
-      expect(result.message).toContain("reactivated");
+      expect(result.message).toContain('reactivated');
     });
 
-    it("should handle already active registration", async () => {
-      const { registerDevice } = await import("../../src/storage");
-      
+    it('should handle already active registration', async () => {
+      const { registerDevice } = await import('../../src/storage');
+
       // Mock successful token verification
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
-        authenticationToken: TEST_AUTH_TOKEN
+      mockDbClient.query.walletPass.findFirst.mockResolvedValueOnce({
+        authenticationToken: TEST_AUTH_TOKEN,
       });
 
       // Mock transaction with existing active registration
-      mockDbClient.transaction.mockImplementationOnce(async (callback: (tx: any) => Promise<any>) => {
-        const mockTx = {
-          insert: vi.fn().mockReturnValue({
-            values: vi.fn().mockReturnValue({
-              onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
-              onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+      mockDbClient.transaction.mockImplementationOnce(
+        async (callback: (tx: any) => Promise<any>) => {
+          const mockTx = {
+            insert: vi.fn().mockReturnValue({
+              values: vi.fn().mockReturnValue({
+                onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+                onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+              }),
             }),
-          }),
-          update: vi.fn().mockReturnValue({
-            set: vi.fn().mockReturnValue({
-              where: vi.fn().mockResolvedValue(undefined),
+            update: vi.fn().mockReturnValue({
+              set: vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue(undefined),
+              }),
             }),
-          }),
-          query: {
-            registrations: {
-              findFirst: vi.fn().mockResolvedValue({ active: true }), // Already active
+            query: {
+              walletRegistration: {
+                findFirst: vi.fn().mockResolvedValue({ active: true }), // Already active
+              },
             },
-          },
-        };
-        return callback(mockTx);
-      });
+          };
+          return callback(mockTx);
+        }
+      );
 
       const result = await registerDevice(
         mockEnv,
@@ -276,15 +291,15 @@ describe("Storage Layer Behavior Tests", () => {
 
       expect(result.success).toBe(true);
       expect(result.status).toBe(200);
-      expect(result.message).toContain("already registered");
+      expect(result.message).toContain('already registered');
     });
 
-    it("should reject invalid authentication token", async () => {
-      const { registerDevice } = await import("../../src/storage");
-      
+    it('should reject invalid authentication token', async () => {
+      const { registerDevice } = await import('../../src/storage');
+
       // Mock failed token verification
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
-        authenticationToken: "different-token"
+      mockDbClient.query.walletPass.findFirst.mockResolvedValueOnce({
+        authenticationToken: 'different-token',
       });
 
       const result = await registerDevice(
@@ -299,17 +314,17 @@ describe("Storage Layer Behavior Tests", () => {
 
       expect(result.success).toBe(false);
       expect(result.status).toBe(401);
-      expect(result.message).toContain("Invalid authentication token");
-      
+      expect(result.message).toContain('Invalid authentication token');
+
       // Should not run transaction for invalid auth
       expect(mockDbClient.transaction).not.toHaveBeenCalled();
     });
 
-    it("should handle pass not found", async () => {
-      const { registerDevice } = await import("../../src/storage");
-      
+    it('should handle pass not found', async () => {
+      const { registerDevice } = await import('../../src/storage');
+
       // Mock pass not found
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce(null);
+      mockDbClient.query.walletPass.findFirst.mockResolvedValueOnce(null);
 
       const result = await registerDevice(
         mockEnv,
@@ -323,22 +338,24 @@ describe("Storage Layer Behavior Tests", () => {
 
       expect(result.success).toBe(false);
       expect(result.status).toBe(404);
-      expect(result.message).toContain("Pass not found");
-      
+      expect(result.message).toContain('Pass not found');
+
       // Should not run transaction for missing pass
       expect(mockDbClient.transaction).not.toHaveBeenCalled();
     });
 
-    it("should handle transaction errors", async () => {
-      const { registerDevice } = await import("../../src/storage");
-      
+    it('should handle transaction errors', async () => {
+      const { registerDevice } = await import('../../src/storage');
+
       // Mock successful token verification
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
-        authenticationToken: TEST_AUTH_TOKEN
+      mockDbClient.query.walletPass.findFirst.mockResolvedValueOnce({
+        authenticationToken: TEST_AUTH_TOKEN,
       });
 
       // Mock transaction failure
-      mockDbClient.transaction.mockRejectedValueOnce(new Error("Database error"));
+      mockDbClient.transaction.mockRejectedValueOnce(
+        new Error('Database error')
+      );
 
       const result = await registerDevice(
         mockEnv,
@@ -352,25 +369,25 @@ describe("Storage Layer Behavior Tests", () => {
 
       expect(result.success).toBe(false);
       expect(result.status).toBe(500);
-      expect(result.message).toContain("Internal server error");
-      
+      expect(result.message).toContain('Internal server error');
+
       // Should log the error
       expect(mockLogger.error).toHaveBeenCalledWith(
-        "Error during device registration transaction",
+        'Error during device registration transaction',
         expect.any(Error),
         expect.objectContaining({
           deviceLibraryIdentifier: TEST_DEVICE_ID,
           passTypeIdentifier: TEST_PASS_TYPE,
-          serialNumber: TEST_SERIAL
+          serialNumber: TEST_SERIAL,
         })
       );
     });
   });
 
-  describe("listUpdatedSerials", () => {
-    it("should return undefined when no active registrations exist", async () => {
-      const { listUpdatedSerials } = await import("../../src/storage");
-      
+  describe('listUpdatedSerials', () => {
+    it('should return undefined when no active registrations exist', async () => {
+      const { listUpdatedSerials } = await import('../../src/storage');
+
       const mockWhere = vi.fn().mockResolvedValue([]);
       const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
       const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
@@ -391,12 +408,18 @@ describe("Storage Layer Behavior Tests", () => {
       expect(mockWhere).toHaveBeenCalled();
     });
 
-    it("should return updated serials when passes exist", async () => {
-      const { listUpdatedSerials } = await import("../../src/storage");
-      
+    it('should return updated serials when passes exist', async () => {
+      const { listUpdatedSerials } = await import('../../src/storage');
+
       const updatedPasses = [
-        { serialNumber: "serial-1", updated_at: new Date("2023-01-01T12:00:00Z") },
-        { serialNumber: "serial-2", updated_at: new Date("2023-01-01T13:00:00Z") },
+        {
+          serialNumber: 'serial-1',
+          updated_at: new Date('2023-01-01T12:00:00Z'),
+        },
+        {
+          serialNumber: 'serial-2',
+          updated_at: new Date('2023-01-01T13:00:00Z'),
+        },
       ];
 
       const mockWhere = vi.fn().mockResolvedValue(updatedPasses);
@@ -413,23 +436,30 @@ describe("Storage Layer Behavior Tests", () => {
       );
 
       expect(result).toBeDefined();
-      expect(result?.serialNumbers).toEqual(["serial-1", "serial-2"]);
-      expect(result?.lastUpdated).toBe(String(Math.floor(new Date("2023-01-01T13:00:00Z").getTime() / 1000)));
+      expect(result?.serialNumbers).toEqual(['serial-1', 'serial-2']);
+      expect(result?.lastUpdated).toBe(
+        String(Math.floor(new Date('2023-01-01T13:00:00Z').getTime() / 1000))
+      );
     });
 
-    it("should filter by passesUpdatedSince", async () => {
-      const { listUpdatedSerials } = await import("../../src/storage");
-      
+    it('should filter by passesUpdatedSince', async () => {
+      const { listUpdatedSerials } = await import('../../src/storage');
+
       const updatedPasses = [
-        { serialNumber: "serial-2", updated_at: new Date("2023-01-01T13:00:00Z") },
+        {
+          serialNumber: 'serial-2',
+          updated_at: new Date('2023-01-01T13:00:00Z'),
+        },
       ];
       const mockWhere = vi.fn().mockResolvedValue(updatedPasses);
       const mockInnerJoin = vi.fn().mockReturnValue({ where: mockWhere });
       const mockFrom = vi.fn().mockReturnValue({ innerJoin: mockInnerJoin });
       mockDbClient.select.mockReturnValue({ from: mockFrom });
 
-      const sinceTimestamp = String(Math.floor(new Date("2023-01-01T12:30:00Z").getTime() / 1000));
-      
+      const sinceTimestamp = String(
+        Math.floor(new Date('2023-01-01T12:30:00Z').getTime() / 1000)
+      );
+
       const result = await listUpdatedSerials(
         mockEnv,
         TEST_DEVICE_ID,
@@ -439,8 +469,8 @@ describe("Storage Layer Behavior Tests", () => {
       );
 
       expect(result).toBeDefined();
-      expect(result?.serialNumbers).toEqual(["serial-2"]);
-      
+      expect(result?.serialNumbers).toEqual(['serial-2']);
+
       const whereCall = mockWhere.mock.calls[0][0];
       // This is a bit of a hacky way to check the dynamic where clause.
       // A more robust way might involve inspecting the SQL generated by drizzle-kit.
@@ -449,17 +479,19 @@ describe("Storage Layer Behavior Tests", () => {
     });
   });
 
-  describe("getPassData", () => {
-    it("should return pass data when found", async () => {
-      const { getPassData } = await import("../../src/storage");
-      
+  describe('getPassData', () => {
+    it('should return pass data when found', async () => {
+      const { getPassData } = await import('../../src/storage');
+
       const mockPassData = {
         authenticationToken: TEST_AUTH_TOKEN,
         passTypeIdentifier: TEST_PASS_TYPE,
-        serialNumber: TEST_SERIAL
+        serialNumber: TEST_SERIAL,
       };
-      
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce(mockPassData);
+
+      mockDbClient.query.walletPass.findFirst.mockResolvedValueOnce(
+        mockPassData
+      );
 
       const result = await getPassData(
         mockEnv,
@@ -471,10 +503,10 @@ describe("Storage Layer Behavior Tests", () => {
       expect(result).toEqual(mockPassData);
     });
 
-    it("should return undefined when pass not found", async () => {
-      const { getPassData } = await import("../../src/storage");
-      
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce(null);
+    it('should return undefined when pass not found', async () => {
+      const { getPassData } = await import('../../src/storage');
+
+      mockDbClient.query.walletPass.findFirst.mockResolvedValueOnce(null);
 
       const result = await getPassData(
         mockEnv,
@@ -487,17 +519,21 @@ describe("Storage Layer Behavior Tests", () => {
     });
   });
 
-  describe("logMessages", () => {
-    it("should log each message with proper formatting", async () => {
-      const { logMessages } = await import("../../src/storage");
-      
-      const testLogs = ["Log message 1", "Log message 2"];
-      
+  describe('logMessages', () => {
+    it('should log each message with proper formatting', async () => {
+      const { logMessages } = await import('../../src/storage');
+
+      const testLogs = ['Log message 1', 'Log message 2'];
+
       await logMessages(testLogs, mockLogger);
-      
+
       expect(mockLogger.info).toHaveBeenCalledTimes(2);
-      expect(mockLogger.info).toHaveBeenCalledWith('[PassKit Log]', { messageContent: "Log message 1" });
-      expect(mockLogger.info).toHaveBeenCalledWith('[PassKit Log]', { messageContent: "Log message 2" });
+      expect(mockLogger.info).toHaveBeenCalledWith('[PassKit Log]', {
+        messageContent: 'Log message 1',
+      });
+      expect(mockLogger.info).toHaveBeenCalledWith('[PassKit Log]', {
+        messageContent: 'Log message 2',
+      });
     });
   });
-}); 
+});
