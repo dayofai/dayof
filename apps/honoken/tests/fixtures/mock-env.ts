@@ -50,6 +50,9 @@ export function createMockEnv(
     HONOKEN_RELEASE_VERSION: '0.0.0-test',
     VERBOSE_LOGGING: 'true', // Enable verbose logging in tests
 
+    // Blob token for asset storage adapter paths used in pass builder
+    BLOB_READ_WRITE_TOKEN: 'test-blob-token',
+
     // PostHog Configuration
     POSTHOG_PROJECT_API_KEY: 'phc_test_key',
     POSTHOG_HOST: 'https://test.posthog.com',
@@ -120,66 +123,87 @@ export function setupMockCrypto() {
  * Handles the complex encrypted certificate and APNS key scenarios
  */
 export function createMockDbClient() {
-  return {
-    // Mock Hyperdrive connectionString property
-    connectionString: 'postgresql://test:test@localhost:5432/test',
+  // Shared closures so related query fns can delegate safely
+  const passes = {
+    findFirst: vi.fn().mockImplementation((options) => {
+      if (options?.where) {
+        return Promise.resolve(TEST_PASS_DATA);
+      }
+      return Promise.resolve(null);
+    }),
+    findMany: vi.fn().mockResolvedValue([TEST_PASS_DATA]),
+  } as any;
 
-    // Mock the query builder pattern used throughout the codebase
+  const passTypes = {
+    findFirst: vi.fn().mockResolvedValue({
+      passTypeIdentifier: 'pass.com.example.test-event',
+      certRef: 'test-cert-ref',
+    }),
+    findMany: vi.fn().mockResolvedValue([]),
+  } as any;
+
+  const certs = {
+    findFirst: vi.fn().mockImplementation((_options) => {
+      return Promise.resolve(TEST_CERT_DATA);
+    }),
+  } as any;
+
+  const client: any = {
+    connectionString: 'postgresql://test:test@localhost:5432/test',
     query: {
-      passes: {
-        findFirst: vi.fn().mockImplementation((options) => {
-          // Mock pass lookup for authentication
-          if (options?.where) {
-            return Promise.resolve(TEST_PASS_DATA);
-          }
-          return Promise.resolve(null);
-        }),
-        findMany: vi.fn().mockResolvedValue([TEST_PASS_DATA]),
-      },
-      passTypes: {
-        findFirst: vi.fn().mockResolvedValue({
-          passTypeIdentifier: 'pass.com.example.test-event',
-          certRef: 'test-cert-ref',
-        }),
-        findMany: vi.fn().mockResolvedValue([]),
-      },
+      // Legacy names
+      passes,
+      passTypes,
       devices: {
         findFirst: vi.fn().mockResolvedValue(TEST_DEVICE_DATA),
         findMany: vi.fn().mockResolvedValue([TEST_DEVICE_DATA]),
       },
       registrations: {
-        findFirst: vi.fn().mockImplementation((options) => {
-          // Mock existing registration check
+        findFirst: vi.fn().mockImplementation((_options) => {
           return Promise.resolve(TEST_REGISTRATION_DATA);
         }),
         findMany: vi.fn().mockResolvedValue([TEST_REGISTRATION_DATA]),
       },
-      certs: {
-        findFirst: vi.fn().mockImplementation((options) => {
-          // Mock encrypted certificate data
-          return Promise.resolve(TEST_CERT_DATA);
-        }),
-      },
+      certs,
       apnsKeys: {
-        findFirst: vi.fn().mockImplementation((options) => {
-          // Mock encrypted APNS key data
+        findFirst: vi.fn().mockImplementation((_options) => {
           return Promise.resolve(TEST_APNS_KEY_DATA);
         }),
+      },
+      // Wallet (current code paths)
+      walletPass: {
+        findFirst: vi
+          .fn()
+          .mockImplementation((options) => passes.findFirst(options)),
       },
       walletPassType: {
-        findFirst: vi.fn().mockResolvedValue({
-          passTypeIdentifier: 'pass.com.example.test-event',
-          certRef: 'test-cert-ref',
-        }),
+        findFirst: vi
+          .fn()
+          .mockImplementation((options) => passTypes.findFirst(options)),
+      },
+      walletPassContent: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValue({ data: TEST_PASS_DATA.passData ?? {} }),
+      },
+      walletCert: {
+        findFirst: vi
+          .fn()
+          .mockImplementation((options) => certs.findFirst(options)),
+      },
+      walletDevice: {
+        findFirst: vi.fn().mockResolvedValue(TEST_DEVICE_DATA),
+      },
+      walletRegistration: {
+        findFirst: vi.fn().mockResolvedValue(TEST_REGISTRATION_DATA),
       },
       walletApnsKey: {
-        findFirst: vi.fn().mockImplementation((options) => {
+        findFirst: vi.fn().mockImplementation((_options) => {
           return Promise.resolve(TEST_APNS_KEY_DATA);
         }),
       },
-    } as any, // Add type assertion to bypass strict type checking for mocks
+    },
 
-    // Mock transaction support
     transaction: vi.fn().mockImplementation(async (callback) => {
       const mockTx = {
         insert: vi.fn().mockReturnValue({
@@ -210,11 +234,10 @@ export function createMockDbClient() {
             findFirst: vi.fn().mockResolvedValue(TEST_REGISTRATION_DATA),
           },
         },
-      };
+      } as any;
       return callback(mockTx);
     }),
 
-    // Mock direct query methods
     insert: vi.fn().mockReturnValue({
       values: vi.fn().mockReturnValue({
         onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
@@ -226,25 +249,71 @@ export function createMockDbClient() {
         where: vi.fn().mockResolvedValue(undefined),
       }),
     }),
-    select: vi.fn().mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue([]),
-        innerJoin: vi.fn().mockReturnValue({
-          where: vi.fn().mockReturnValue({
-            limit: vi.fn().mockReturnValue({
-              then: vi.fn().mockResolvedValue([]),
+    select: vi.fn().mockImplementation((shape: Record<string, unknown>) => {
+      return {
+        from: (_table: unknown) => ({
+          where: (_pred: unknown) => ({
+            limit: (_n: number) => ({
+              then: (resolve: (rows: any[]) => any) => {
+                // Simulate a few common select shapes used in the code
+                if (
+                  'id' in shape &&
+                  'passTypeIdentifier' in shape &&
+                  'serialNumber' in shape &&
+                  'authenticationToken' in shape
+                ) {
+                  return passes.findFirst({ where: true }).then((p: any) => {
+                    const rows = p
+                      ? [
+                          {
+                            id: 'wpass_test',
+                            passTypeIdentifier:
+                              p.passTypeIdentifier ??
+                              TEST_PASS_DATA.passTypeIdentifier,
+                            serialNumber:
+                              p.serialNumber ?? TEST_PASS_DATA.serialNumber,
+                            authenticationToken:
+                              p.authenticationToken ??
+                              TEST_PASS_DATA.authenticationToken,
+                            ticketStyle: null,
+                            poster: false,
+                          },
+                        ]
+                      : [];
+                    return resolve(rows);
+                  });
+                }
+                if ('certRef' in shape && Object.keys(shape).length === 1) {
+                  return passTypes
+                    .findFirst({})
+                    .then((pt: any) =>
+                      resolve(pt ? [{ certRef: pt.certRef }] : [])
+                    );
+                }
+                if ('data' in shape && Object.keys(shape).length === 1) {
+                  return resolve([{ data: TEST_PASS_DATA.passData ?? {} }]);
+                }
+                return resolve([]);
+              },
+            }),
+          }),
+          innerJoin: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+              limit: vi.fn().mockReturnValue({
+                then: vi.fn().mockResolvedValue([]),
+              }),
             }),
           }),
         }),
-      }),
+      };
     }),
     delete: vi.fn().mockReturnValue({
       where: vi.fn().mockResolvedValue(undefined),
     }),
-
-    // Mock health check query
     execute: vi.fn().mockResolvedValue([{ result: 1 }]),
   };
+
+  return client;
 }
 
 // Mock R2 bucket removed - now using Upstash Redis storage

@@ -90,15 +90,19 @@ bun run dev:backstage
 
 This repo uses Inngest for background jobs, orchestrated through the `apps/events` service.
 
-1.  **Start the Events service** (serves `/api/inngest` on port 3001):
-    ```bash
-    bun run dev:events
-    ```
-2.  In a **separate terminal**, start the Inngest Dev Server, pointing to the events service:
-    ```bash
-    bun run dev:inngest:events
-    ```
-3.  Open the Inngest Dev UI at `http://localhost:8288` to monitor and trigger functions.
+1. **Start the Events service** (serves `/api/inngest` on port 3001):
+
+   ```bash
+   bun run dev:events
+   ```
+
+2. In a **separate terminal**, start the Inngest Dev Server, pointing to the events service:
+
+   ```bash
+   bun run dev:inngest:events
+   ```
+
+3. Open the Inngest Dev UI at `http://localhost:8288` to monitor and trigger functions.
 
 Refer to the [Inngest & Events Service](#inngest--events-service) section in the main `README.md` for more details on the architecture.
 
@@ -109,16 +113,30 @@ Refer to the [Inngest & Events Service](#inngest--events-service) section in the
 The database schema is centrally managed in the `packages/database` workspace using Drizzle ORM.
 
 - **Generate Migrations**: After making changes to the schema in `packages/database/schema/`, run the generate command from the root. This requires a `DEV_DATABASE_URL` variable in `packages/database/.env`.
+
   ```bash
   bun run db:generate
   ```
+
 - **Apply Migrations**: Apply generated migrations to your database.
+
   ```bash
   bun run db:push
   ```
+
 - **Drizzle Studio**: To open a local GUI for the database, run:
+
   ```bash
   bun run db:studio
   ```
 
 _Note: The `db:_`scripts in the root`package.json`are configured to run these commands within the`packages/database` workspace.\*
+
+### Schema barrel and Drizzle Kit
+
+- **Single entrypoint for schema**: We expose the schema through a barrel file at `packages/database/schema/index.ts`. The package root also re-exports that barrel via `packages/database/index.ts`.
+  - Import surfaces:
+    - `@database/schema`: full schema barrel, including the composed `schema` object and `relations`.
+    - `@database`: re-exports the same barrel for a flatter import path.
+- **Drizzle Kit config uses the barrel**: `packages/database/drizzle.config.ts` sets `schema: './schema/index.ts'`, so only what the barrel exports is considered when generating and pushing migrations.
+- **Omitting experimental modules**: To exclude a table/module (e.g., payments) from generation and push, do not export it from `packages/database/schema/index.ts`. Because Drizzle Kit reads only from the barrel, omitted modules will not be included in migrations.

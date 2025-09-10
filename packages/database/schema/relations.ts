@@ -130,10 +130,7 @@ export const relations = defineRelations(schemaTables, (r) => ({
       from: r.regionPaymentProvider.regionId,
       to: r.region.id,
     }),
-    paymentProvider: r.one.paymentProvider({
-      from: r.regionPaymentProvider.paymentProviderId,
-      to: r.paymentProvider.id,
-    }),
+    // payment relations excluded for now
   },
 
   // Pricing

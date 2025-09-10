@@ -13,7 +13,7 @@ export * from './pricing';
 export * from './product';
 export * from './promotion';
 export * from './region';
-// export { relations } from './relations'; // Omitted to avoid importing unfinished payment schema during wallet tests
+export { relations } from './relations';
 export * from './sales-channel';
 export * from './tag';
 export * from './tax';
@@ -36,7 +36,6 @@ import { currency } from './currency';
 import { fee } from './fee';
 import { location, locationType } from './location';
 import { brandProfile, organizationSettings } from './organization';
-// payment schema is under active development and not required for wallet tests
 import { price, priceSet } from './pricing';
 import {
   product,
@@ -118,8 +117,6 @@ export const schema = {
   taxRate,
   productVariantTaxRate,
   fee,
-
-  // payments (omitted in this build)
 
   // wallet (PassKit)
   walletTicketStyleEnum,

@@ -27,7 +27,7 @@ export const product = pgTable('product', (t) => ({
       onDelete: 'restrict',
     })
     .notNull(),
-  isDiscountable: t.boolean().default(true).notNull(),
+  isDiscountable: t.boolean('is_discountable').default(true).notNull(),
   metadata: t.jsonb(),
   brandProfileId: t
     .text('brand_profile_id')
