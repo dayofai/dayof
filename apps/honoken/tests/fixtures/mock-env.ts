@@ -6,6 +6,7 @@ import {
   TEST_CERT_BUNDLE,
   TEST_CERT_DATA,
   TEST_DEVICE_DATA,
+  TEST_PASS_CONTENT_VALID,
   TEST_PASS_DATA,
   TEST_REGISTRATION_DATA,
 } from './test-data';
@@ -118,6 +119,12 @@ export function setupMockCrypto() {
   return mockCrypto;
 }
 
+// --- Pass content override helpers for tests that need specific shapes ---
+let __walletPassContentOverride: any | undefined;
+export function setWalletPassContentOverride(data: any | undefined) {
+  __walletPassContentOverride = data;
+}
+
 /**
  * Creates a mock database client that mimics Drizzle ORM behavior
  * Handles the complex encrypted certificate and APNS key scenarios
@@ -182,9 +189,9 @@ export function createMockDbClient() {
           .mockImplementation((options) => passTypes.findFirst(options)),
       },
       walletPassContent: {
-        findFirst: vi
-          .fn()
-          .mockResolvedValue({ data: TEST_PASS_DATA.passData ?? {} }),
+        findFirst: vi.fn().mockResolvedValue({
+          data: __walletPassContentOverride ?? TEST_PASS_CONTENT_VALID,
+        }),
       },
       walletCert: {
         findFirst: vi
@@ -291,7 +298,12 @@ export function createMockDbClient() {
                     );
                 }
                 if ('data' in shape && Object.keys(shape).length === 1) {
-                  return resolve([{ data: TEST_PASS_DATA.passData ?? {} }]);
+                  return resolve([
+                    {
+                      data:
+                        __walletPassContentOverride ?? TEST_PASS_CONTENT_VALID,
+                    },
+                  ]);
                 }
                 return resolve([]);
               },

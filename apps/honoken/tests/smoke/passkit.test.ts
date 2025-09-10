@@ -25,6 +25,16 @@ vi.mock('../../src/db', () => ({
   },
 }));
 
+// Mock Vercel Blob SDK; default head() returns 404 (not found)
+vi.mock('@vercel/blob', () => {
+  return {
+    head: vi.fn(),
+    put: vi.fn(),
+    del: vi.fn(),
+    BlobAccessError: class BlobAccessError extends Error {},
+  };
+});
+
 // Mock fetch globally
 global.fetch = vi.fn();
 
@@ -50,6 +60,22 @@ describe('PassKit Pass Generation Tests', () => {
 
     // Mock fetch for R2 asset fetching to simulate missing assets
     global.fetch = vi.fn();
+
+    // Reset pass content override
+    const { setWalletPassContentOverride } = await import(
+      '../fixtures/mock-env'
+    );
+    setWalletPassContentOverride(undefined);
+
+    // Default Blob.head() to 404 for all keys
+    const { head } = await import('@vercel/blob');
+    (head as any).mockReset();
+    (head as any).mockImplementation((_path: string) => {
+      const e: any = new Error('BlobNotFoundError');
+      e.name = 'BlobNotFoundError';
+      e.status = 404;
+      return Promise.reject(e);
+    });
   });
 
   describe('buildPass error handling', () => {
@@ -161,7 +187,22 @@ describe('PassKit Pass Generation Tests', () => {
       setupSuccessfulPassMocks(mockEnv, mockDbClient);
       setupSuccessfulCertMocks(mockEnv, mockDbClient);
 
-      // Mock icon.png to succeed but logo.png to fail
+      // Make icon available via Blob.head(), but logo not found
+      const { head } = await import('@vercel/blob');
+      (head as any).mockImplementation((path: string) => {
+        if (
+          path.endsWith('/icon.png') ||
+          path.includes('brand-assets/icon.png')
+        ) {
+          return Promise.resolve({ url: 'https://blob/icon.png' });
+        }
+        const e: any = new Error('BlobNotFoundError');
+        e.name = 'BlobNotFoundError';
+        e.status = 404;
+        return Promise.reject(e);
+      });
+
+      // Mock icon.png to succeed but logo.png to fail (404)
       (fetch as any).mockImplementation((url: string | URL | Request) => {
         const urlStr = url.toString();
         if (urlStr.includes('logo.png')) {
@@ -169,12 +210,7 @@ describe('PassKit Pass Generation Tests', () => {
         }
         if (urlStr.includes('icon.png')) {
           const png = createValidPngBuffer(29, 29);
-          return Promise.resolve(
-            new Response(png, {
-              status: 200,
-              headers: { 'content-type': 'image/png' },
-            })
-          );
+          return Promise.resolve(new Response(png, { status: 200 }));
         }
         return Promise.resolve(new Response(null, { status: 404 }));
       });
@@ -188,15 +224,34 @@ describe('PassKit Pass Generation Tests', () => {
       const { buildPass } = await import('../../src/passkit/passkit');
 
       // Current implementation reads structured JSON from walletPassContent; simulate invalid structure
-      if (mockDbClient?.query?.walletPassContent?.findFirst) {
-        mockDbClient.query.walletPassContent.findFirst.mockResolvedValueOnce({
-          data: { invalidField: 'test' },
-        });
-      }
+      const { setWalletPassContentOverride } = await import(
+        '../fixtures/mock-env'
+      );
+      setWalletPassContentOverride({ invalidField: 'test' });
 
       mockDbClient.query.passTypes.findFirst.mockResolvedValueOnce({
         passTypeIdentifier: TEST_PASS_TYPE,
         certRef: 'test-cert-ref',
+      });
+
+      // Also make icon fetch succeed so validation triggers before asset errors
+      const { head } = await import('@vercel/blob');
+      (head as any).mockImplementation((path: string) => {
+        if (path.includes('icon.png')) {
+          return Promise.resolve({ url: 'https://blob/icon.png' });
+        }
+        const e: any = new Error('BlobNotFoundError');
+        e.name = 'BlobNotFoundError';
+        e.status = 404;
+        return Promise.reject(e);
+      });
+      (fetch as any).mockImplementation((url: string | URL | Request) => {
+        const urlStr = url.toString();
+        if (urlStr.includes('icon.png')) {
+          const png = createValidPngBuffer(29, 29);
+          return Promise.resolve(new Response(png, { status: 200 }));
+        }
+        return Promise.resolve(new Response(null, { status: 404 }));
       });
 
       await expect(
@@ -207,20 +262,35 @@ describe('PassKit Pass Generation Tests', () => {
     it('should handle pass data validation errors', async () => {
       const { buildPass } = await import('../../src/passkit/passkit');
 
-      // Mock invalid pass data structure (missing required fields)
-      mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
-        passTypeIdentifier: TEST_PASS_TYPE,
-        serialNumber: TEST_SERIAL,
-        authenticationToken: TEST_AUTH_TOKEN,
-        passData: JSON.stringify({
-          // Missing required fields like description, organizationName, etc.
-          invalidField: 'test',
-        }),
-      });
+      // Mock invalid pass data via walletPassContent to trigger schema validator first
+      const { setWalletPassContentOverride } = await import(
+        '../fixtures/mock-env'
+      );
+      setWalletPassContentOverride({ invalidField: 'test' });
 
       mockDbClient.query.passTypes.findFirst.mockResolvedValueOnce({
         passTypeIdentifier: TEST_PASS_TYPE,
         certRef: 'test-cert-ref',
+      });
+
+      // Also make icon fetch succeed so validation triggers before asset errors
+      const { head } = await import('@vercel/blob');
+      (head as any).mockImplementation((path: string) => {
+        if (path.includes('icon.png')) {
+          return Promise.resolve({ url: 'https://blob/icon.png' });
+        }
+        const e: any = new Error('BlobNotFoundError');
+        e.name = 'BlobNotFoundError';
+        e.status = 404;
+        return Promise.reject(e);
+      });
+      (fetch as any).mockImplementation((url: string | URL | Request) => {
+        const urlStr = url.toString();
+        if (urlStr.includes('icon.png')) {
+          const png = createValidPngBuffer(29, 29);
+          return Promise.resolve(new Response(png, { status: 200 }));
+        }
+        return Promise.resolve(new Response(null, { status: 404 }));
       });
 
       await expect(
