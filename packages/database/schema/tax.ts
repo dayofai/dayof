@@ -1,9 +1,9 @@
-import { sql } from "drizzle-orm";
-import { pgTable, check, unique } from "drizzle-orm/pg-core";
-import { createdBy } from "./extend-created-by";
-import { timeStamps } from "./extend-timestamps";
-import { productVariant } from "./product";
-import { dineroType } from "./custom-types";
+import { sql } from 'drizzle-orm';
+import { check, index, pgTable, unique } from 'drizzle-orm/pg-core';
+import { dineroType } from './custom-types';
+import { createdBy } from './extend-created-by';
+import { timeStamps } from './extend-timestamps';
+import { productVariant } from './product';
 
 /**
  * Tax Rate Storage and Calculation with Dinero.js
@@ -45,51 +45,52 @@ import { dineroType } from "./custom-types";
  */
 
 export const taxRate = pgTable(
-	"tax_rate",
-	(t) => ({
-		id: t.text("id").primaryKey().default(sql`'txr_' || nanoid()`),
+  'tax_rate',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
 
-		// dinero object with scale and numeric version of the rate
-		rate: dineroType("rate").notNull(), // Dinero object with scale for calculations
-		rawRate: t.numeric("raw_rate").notNull(), // e.g., 8.25 for 8.25%
+    // dinero object with scale and numeric version of the rate
+    rate: dineroType('rate').notNull(), // Dinero object with scale for calculations
+    rawRate: t.numeric('raw_rate').notNull(), // e.g., 8.25 for 8.25%
 
-		name: t.text("name").notNull(), // e.g., 'Texas State Sales Tax'
-		receiptCode: t.text("receipt_code").notNull(), // e.g., 'TX-STATE'
-		isDefault: t.boolean("is_default").default(false).notNull(),
-		metadata: t.jsonb("metadata"),
-		...timeStamps({ softDelete: true }),
-		...createdBy(),
-	}),
-	(table) => [
-		check(
-			"tax_rate_pk_check",
-			sql`${table.id} SIMILAR TO 'txr_[0-9a-zA-Z]{12}'`,
-		),
-		// Ensure rawRate is a valid percentage
-		check(
-			"tax_rate_percentage_check",
-			sql`${table.rawRate} >= 0 AND ${table.rawRate} <= 100`,
-		),
-	],
+    name: t.text('name').notNull(), // e.g., 'Texas State Sales Tax'
+    receiptCode: t.text('receipt_code').notNull(), // e.g., 'TX-STATE'
+    isDefault: t.boolean('is_default').default(false).notNull(),
+    metadata: t.jsonb('metadata'),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (table) => [
+    // Ensure rawRate is a valid percentage
+    check(
+      'tax_rate_percentage_check',
+      sql`${table.rawRate} >= 0 AND ${table.rawRate} <= 100`
+    ),
+  ]
 );
 
 export const productVariantTaxRate = pgTable(
-	"product_variant_tax_rate",
-	(t) => ({
-		id: t.text("id").primaryKey().default(sql`'txrule_' || nanoid()`),
-		taxRateId: t
-			.text("tax_rate_id")
-			.references(() => taxRate.id)
-			.notNull(),
-		productVariantId: t
-			.text("product_variant_id")
-			.references(() => productVariant.id)
-			.notNull(),
-		metadata: t.jsonb("metadata"),
-		...timeStamps({ softDelete: true }),
-		...createdBy(),
-	}),
-	(table) => [
-		unique().on(table.taxRateId, table.productVariantId),
-	],
+  'product_variant_tax_rate',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
+    taxRateId: t
+      .text('tax_rate_id')
+      .references(() => taxRate.id)
+      .notNull(),
+    productVariantId: t
+      .text('product_variant_id')
+      .references(() => productVariant.id)
+      .notNull(),
+    metadata: t.jsonb('metadata'),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (t) => [
+    unique('pvtr_tax_rate_product_variant_unique').on(
+      t.taxRateId,
+      t.productVariantId
+    ),
+    index('pvtr_tax_rate_id_idx').on(t.taxRateId),
+    index('pvtr_product_variant_id_idx').on(t.productVariantId),
+  ]
 );

@@ -1,56 +1,53 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from '../../src/utils/logger';
 
 describe('Logger', () => {
-  let consoleSpy: any;
-  
+  let outSpy: ReturnType<typeof vi.spyOn>;
+  let errSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    consoleSpy = {
-      log: vi.spyOn(console, 'log').mockImplementation(() => {}),
-      warn: vi.spyOn(console, 'warn').mockImplementation(() => {}),
-      error: vi.spyOn(console, 'error').mockImplementation(() => {}),
-    };
+    outSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    errSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   });
 
   afterEach(() => {
-    consoleSpy.log.mockRestore();
-    consoleSpy.warn.mockRestore();
-    consoleSpy.error.mockRestore();
+    outSpy.mockRestore();
+    errSpy.mockRestore();
   });
 
   const createMockContext = (environment = 'production') => ({
     get: vi.fn((key: string) => {
       if (key === 'requestId') return 'test-req-id';
-      if (key === 'posthog') return undefined; // No PostHog in tests
-      return undefined;
+      if (key === 'posthog') return; // No PostHog in tests
+      return;
     }),
-    env: { 
+    env: {
       ENVIRONMENT: environment,
-      VERBOSE_LOGGING: 'false'
+      VERBOSE_LOGGING: 'false',
     },
-    req: { 
-      raw: { 
+    req: {
+      raw: {
         headers: new Map([
           ['x-vercel-deployment-url', 'honoken-abc123-iad1.vercel.app'],
           ['x-vercel-ip-country', 'US'],
-          ['x-vercel-id', 'vercel-123']
-        ])
-      } 
-    }
+          ['x-vercel-id', 'vercel-123'],
+        ]),
+      },
+    },
   });
 
   describe('info logging', () => {
     it('should create structured JSON logs with correct format in development', () => {
       const mockContext = createMockContext('development');
       const logger = createLogger(mockContext as any);
-      
+
       logger.info('test message', { extra: 'data' });
-      
-      expect(consoleSpy.log).toHaveBeenCalled();
-      const logCall = consoleSpy.log.mock.calls[0][0];
+
+      expect(outSpy).toHaveBeenCalled();
+      const logCall = outSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
-      
+
       expect(logData).toMatchObject({
         lvl: 'info',
         msg: 'test message',
@@ -59,7 +56,7 @@ describe('Logger', () => {
         country: 'US',
         vercel_id: 'vercel-123',
         platform: 'vercel-fluid',
-        extra: 'data'
+        extra: 'data',
       });
       expect(logData.ts).toBeTypeOf('number');
       expect(logData.ts).toBeGreaterThan(Date.now() - 1000); // Recent timestamp
@@ -69,29 +66,29 @@ describe('Logger', () => {
       const mockContext = createMockContext('production');
       mockContext.env.VERBOSE_LOGGING = 'false';
       const logger = createLogger(mockContext as any);
-      
+
       logger.info('test message');
-      
-      expect(consoleSpy.log).not.toHaveBeenCalled();
+
+      expect(outSpy).not.toHaveBeenCalled();
     });
 
     it('should show info logs in development', () => {
       const mockContext = createMockContext('development');
       const logger = createLogger(mockContext as any);
-      
+
       logger.info('test message');
-      
-      expect(consoleSpy.log).toHaveBeenCalled();
+
+      expect(outSpy).toHaveBeenCalled();
     });
 
     it('should show info logs in production when verbose', () => {
       const mockContext = createMockContext('production');
       mockContext.env.VERBOSE_LOGGING = 'true';
       const logger = createLogger(mockContext as any);
-      
+
       logger.info('test message');
-      
-      expect(consoleSpy.log).toHaveBeenCalled();
+
+      expect(outSpy).toHaveBeenCalled();
     });
   });
 
@@ -99,13 +96,13 @@ describe('Logger', () => {
     it('should create structured warning logs', () => {
       const mockContext = createMockContext('production');
       const logger = createLogger(mockContext as any);
-      
+
       logger.warn('test warning', { context: 'test' });
-      
-      expect(consoleSpy.warn).toHaveBeenCalled();
-      const logCall = consoleSpy.warn.mock.calls[0][0];
+
+      expect(errSpy).toHaveBeenCalled();
+      const logCall = errSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
-      
+
       expect(logData).toMatchObject({
         lvl: 'warn',
         msg: 'test warning',
@@ -113,7 +110,7 @@ describe('Logger', () => {
         region: 'iad1',
         country: 'US',
         platform: 'vercel-fluid',
-        context: 'test'
+        context: 'test',
       });
     });
 
@@ -126,13 +123,13 @@ describe('Logger', () => {
       const logger = createLogger(mockContext as any);
       const testError = new Error('Test error');
       testError.stack = 'Error: Test error\n    at test';
-      
+
       logger.error('Error occurred', testError, { context: 'test' });
-      
-      expect(consoleSpy.error).toHaveBeenCalledTimes(1);
-      const logCall = consoleSpy.error.mock.calls[0][0];
+
+      expect(errSpy).toHaveBeenCalledTimes(1);
+      const logCall = errSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
-      
+
       expect(logData).toMatchObject({
         lvl: 'error',
         msg: 'Error occurred',
@@ -141,46 +138,45 @@ describe('Logger', () => {
         region: 'iad1',
         country: 'US',
         platform: 'vercel-fluid',
-        context: 'test'
+        context: 'test',
       });
     });
 
     it('should handle non-Error objects', () => {
       const mockContext = createMockContext('production');
       const logger = createLogger(mockContext as any);
-      
+
       logger.error('String error', 'just a string');
-      
-      expect(consoleSpy.error).toHaveBeenCalledTimes(1);
-      const logCall = consoleSpy.error.mock.calls[0][0];
+
+      expect(errSpy).toHaveBeenCalledTimes(1);
+      const logCall = errSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
-      
+
       expect(logData.err_msg).toBe('just a string');
     });
   });
 
   describe('environment handling', () => {
-
     it('should handle missing Vercel headers gracefully', () => {
       const mockContext = {
         get: vi.fn((key: string) => {
           if (key === 'requestId') return 'test-req-id';
-          if (key === 'posthog') return undefined;
-          return undefined;
+          if (key === 'posthog') return;
+          return;
         }),
         env: { ENVIRONMENT: 'development' },
-        req: { raw: { headers: new Map() } } // No Vercel headers
+        req: { raw: { headers: new Map() } }, // No Vercel headers
       };
-      
+
       expect(() => {
         const logger = createLogger(mockContext as any);
         logger.info('test');
       }).not.toThrow();
-      
-      expect(consoleSpy.log).toHaveBeenCalled();
-      const logCall = consoleSpy.log.mock.calls[0][0];
+
+      expect(outSpy).toHaveBeenCalled();
+      const logCall = outSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
-      
+
       expect(logData.region).toBe('iad1'); // Default fallback
       expect(logData.country).toBe('unknown'); // Default fallback
       expect(logData.platform).toBe('vercel-fluid');
@@ -189,24 +185,24 @@ describe('Logger', () => {
     it('should fallback to process.env.VERCEL_REGION when header missing', () => {
       const originalVercelRegion = process.env.VERCEL_REGION;
       process.env.VERCEL_REGION = 'fra1';
-      
+
       const mockContext = {
         get: vi.fn((key: string) => {
           if (key === 'requestId') return 'test-req-id';
-          if (key === 'posthog') return undefined;
-          return undefined;
+          if (key === 'posthog') return;
+          return;
         }),
         env: { ENVIRONMENT: 'development' },
-        req: { raw: { headers: new Map() } }
+        req: { raw: { headers: new Map() } },
       };
-      
+
       const logger = createLogger(mockContext as any);
       logger.info('test');
-      
-      const logCall = consoleSpy.log.mock.calls[0][0];
+
+      const logCall = outSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
       expect(logData.region).toBe('fra1');
-      
+
       // Restore original env
       if (originalVercelRegion !== undefined) {
         process.env.VERCEL_REGION = originalVercelRegion;
@@ -221,12 +217,12 @@ describe('Logger', () => {
       const mockContext = createMockContext('production');
       const logger = createLogger(mockContext as any);
       const largeData = { huge: 'x'.repeat(5000) };
-      
+
       expect(() => {
         logger.warn('apns error', largeData);
       }).not.toThrow();
-      
-      expect(consoleSpy.warn).toHaveBeenCalled();
+
+      expect(errSpy).toHaveBeenCalled();
     });
   });
 });

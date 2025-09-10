@@ -1,233 +1,256 @@
-import { sql } from "drizzle-orm";
-import { pgTable, pgEnum, check, unique, index } from "drizzle-orm/pg-core";
-import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import { createdBy, createdByCheck } from "./extend-created-by";
-import { timeStamps } from "./extend-timestamps";
-import { tag } from "./tag";
-import { priceSet } from "./pricing";
-import { salesChannel } from "./sales-channel";
-import { brandProfile } from "./organization";
+import { sql } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { index, pgEnum, pgTable, unique } from 'drizzle-orm/pg-core';
+import { createdBy } from './extend-created-by';
+import { timeStamps } from './extend-timestamps';
+import { brandProfile } from './organization';
+import { priceSet } from './pricing';
+import { salesChannel } from './sales-channel';
+import { tags } from './tag';
+
+export const productStatusEnum = pgEnum('product_status_enum', [
+  'draft',
+  'active',
+  'paused',
+  'archived',
+]);
 
 export const product = pgTable(
-	"product",
-	(t) => ({
-		id: t.text("id").primaryKey().default(sql`'prod_' || nanoid()`),
-		name: t.text("name").notNull(),
-		handle: t.text("handle").notNull(),
-		description: t.text("description"),
-		status: productStatusEnum("status").notNull(),
-		typeId: t
-			.text("type_id")
-			.references(() => productType.id, {
-				onDelete: "restrict",
-			})
-			.notNull(),
-		isDiscountable: t.boolean().default(true).notNull(),
-		metadata: t.jsonb(),
-		brandProfileId: t
-			.text("brand_profile_id")
-			.references(() => brandProfile.id, { onDelete: "set null" }),
-		...timeStamps({ softDelete: true }),
-		...createdBy(),
-	}),
+  'product',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
+    name: t.text('name').notNull(),
+    handle: t.text('handle').notNull(),
+    description: t.text('description'),
+    status: productStatusEnum('status').notNull(),
+    typeId: t
+      .text('type_id')
+      .references(() => productType.id, {
+        onDelete: 'restrict',
+      })
+      .notNull(),
+    isDiscountable: t.boolean('is_discountable').default(true).notNull(),
+    metadata: t.jsonb(),
+    brandProfileId: t
+      .text('brand_profile_id')
+      .references(() => brandProfile.id, { onDelete: 'set null' }),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (t) => [
+    unique('product_handle_org_unique').on(t.handle, t.orgId),
+    index('product_type_id_idx').on(t.typeId),
+    index('product_brand_profile_id_idx').on(t.brandProfileId),
+  ]
 );
 
 export const productVariant = pgTable(
-	"product_variant",
-	(t) => ({
-		id: t.text("id").primaryKey().default(sql`'pvar_' || nanoid()`),
-		productId: t
-			.text("product_id")
-			.references(() => product.id, { onDelete: "cascade" })
-			.notNull(),
-		name: t.text("name").notNull(),
-		description: t.text("description"),
-		status: productStatusEnum("status").notNull(),
-		manageInventory: t.boolean("manage_inventory").default(true).notNull(),
-		variantRank: t.integer("variant_rank").default(0),
-		metadata: t.jsonb("metadata"),
-		...timeStamps({ softDelete: true }),
-		...createdBy(),
-	}),
-	(table) => ({
-		checks: [
-			createdByCheck(table).validActorConstraints,
-		]
-	}),
+  'product_variant',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
+    productId: t
+      .text('product_id')
+      .references(() => product.id, { onDelete: 'cascade' })
+      .notNull(),
+    name: t.text('name').notNull(),
+    description: t.text('description'),
+    status: productStatusEnum('status').notNull(),
+    manageInventory: t.boolean('manage_inventory').default(true).notNull(),
+    variantRank: t.integer('variant_rank').default(0),
+    metadata: t.jsonb('metadata'),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (t) => [index('product_variant_product_id_idx').on(t.productId)]
 );
 
 export const productType = pgTable(
-	"product_type",
-	(t) => ({
-		id: t.text("id").primaryKey().default(sql`'ptyp_' || nanoid()`),
-		singularNoun: t.text("singular_noun").notNull(),
-		pluralNoun: t.text("plural_noun").notNull(),
-		handle: t.text("handle").notNull().unique(),
-		metadata: t.jsonb("metadata"),
-		...timeStamps({ softDelete: true }),
-		...createdBy(),
-	}),
-	(table) => [
-		check(
-			"product_type_pk_check",
-			sql`${table.id} SIMILAR TO 'ptyp_[0-9a-zA-Z]{12}'`,
-		),
-	],
+  'product_type',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
+    singularNoun: t.text('singular_noun').notNull(),
+    pluralNoun: t.text('plural_noun').notNull(),
+    handle: t.text('handle').notNull(),
+    metadata: t.jsonb('metadata'),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (table) => [
+    unique('product_type_handle_org_unique').on(table.handle, table.orgId),
+  ]
 );
 
 // For grouping a list of products for use with promotions, unique storefronts,
 // or other internal features.
 export const productGroup = pgTable(
-	"product_collection",
-	(t) => ({
-		id: t.text("id").primaryKey().default(sql`'pcol_' || nanoid()`),
-		name: t.text("name").notNull(),
-		handle: t.text("handle").notNull(),
-		metadata: t.jsonb("metadata"),
-		...timeStamps({ softDelete: true }),
-		...createdBy(),
-	}),
-	(table) => [
-		unique("product_group_handle_org_unique").on(
-			table.handle,
-			table.orgId,
-		),
-	],
+  'product_collection',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
+    name: t.text('name').notNull(),
+    handle: t.text('handle').notNull(),
+    metadata: t.jsonb('metadata'),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (table) => [
+    unique('product_group_handle_org_unique').on(table.handle, table.orgId),
+  ]
 );
 
 // Storefront and marketplace for clear hierarchical navigation.
 // May mirror event categories (e.g. concert, conference) or specific to products.
 export const productCategory = pgTable(
-	"category",
-	(t) => ({
-		id: t.text("id").primaryKey().default(sql`'pcat_' || nanoid()`),
-		name: t.text("name").notNull(),
-		description: t.text("description"),
-		handle: t.text("handle").notNull().unique(),
-		mpath: t.text("mpath").notNull(),
-		isActive: t.boolean("is_active").default(false).notNull(),
-		isGlobal: t.boolean("is_global").default(false).notNull(),
-		rank: t.integer("rank").default(0).notNull(),
-		parentCategoryId: t
-			.text("parent_category_id")
-			.references((): AnyPgColumn => productCategory.id, {
-				onDelete: "set null", // allows deleting parent categories
-			}),
-		metadata: t.jsonb("metadata"),
-		...timeStamps({ softDelete: true }),
-		...createdBy(),
-	}),
+  'category',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
+    name: t.text('name').notNull(),
+    description: t.text('description'),
+    handle: t.text('handle').notNull(),
+    mpath: t.text('mpath').notNull(),
+    isActive: t.boolean('is_active').default(false).notNull(),
+    isGlobal: t.boolean('is_global').default(false).notNull(),
+    rank: t.integer('rank').default(0).notNull(),
+    parentCategoryId: t
+      .text('parent_category_id')
+      .references((): AnyPgColumn => productCategory.id, {
+        onDelete: 'set null', // allows deleting parent categories
+      }),
+    metadata: t.jsonb('metadata'),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (t) => [
+    unique('category_handle_org_unique').on(t.handle, t.orgId),
+    index('category_parent_category_id_idx').on(t.parentCategoryId),
+  ]
 );
 
-export const productStatusEnum = pgEnum("product_status_enum", [
-	"draft",
-	"active",
-	"paused",
-	"archived",
-]);
+// enum moved above to avoid TDZ issues in esbuild
 
 export const productGroupProduct = pgTable(
-	"product_collection_product",
-	(t) => ({
-		id: t.text("id").primaryKey().default(sql`'pcolprod_' || nanoid()`),
-		productId: t
-			.text("product_id")
-			.references(() => product.id, {
-				onDelete: "cascade", // if product deleted, remove from collections
-			})
-			.notNull(),
-		productGroupId: t
-			.text("product_group_id")
-			.references(() => productGroup.id, {
-				onDelete: "cascade",
-			})
-			.notNull(),
-	}),
-	(table) => [
-		check(
-			"product_collection_product_pk_check",
-			sql`${table.id} SIMILAR TO 'pcolprod_[0-9a-zA-Z]{12}'`,
-		),
-	],
+  'product_collection_product',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
+    productId: t
+      .text('product_id')
+      .references(() => product.id, {
+        onDelete: 'cascade', // if product deleted, remove from collections
+      })
+      .notNull(),
+    productGroupId: t
+      .text('product_group_id')
+      .references(() => productGroup.id, {
+        onDelete: 'cascade',
+      })
+      .notNull(),
+  }),
+  (t) => [
+    index('pcp_product_id_idx').on(t.productId),
+    index('pcp_product_group_id_idx').on(t.productGroupId),
+    unique('pcp_product_product_group_unique').on(
+      t.productId,
+      t.productGroupId
+    ),
+  ]
 );
 
 export const productCategoryProduct = pgTable(
-	"product_category",
-	(t) => ({
-		id: t.text("id").primaryKey().default(sql`'pcp_' || nanoid()`),
-		productId: t
-			.text("product_id")
-			.references(() => product.id, {
-				onDelete: "cascade", // if product deleted, remove category associations
-			})
-			.notNull(),
-		categoryId: t
-			.text("category_id")
-			.references(() => productCategory.id, {
-				onDelete: "cascade", // if category deleted, remove product associations
-			})
-			.notNull(),
-		...timeStamps({ softDelete: true }),
-		...createdBy(),
-	}),
-	(table) => [
-		check(
-			"product_category_product_pk_check",
-			sql`${table.id} SIMILAR TO 'pcp_[0-9a-zA-Z]{12}'`,
-		),
-	],
+  'product_category',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
+    productId: t
+      .text('product_id')
+      .references(() => product.id, {
+        onDelete: 'cascade', // if product deleted, remove category associations
+      })
+      .notNull(),
+    categoryId: t
+      .text('category_id')
+      .references(() => productCategory.id, {
+        onDelete: 'cascade', // if category deleted, remove product associations
+      })
+      .notNull(),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (t) => [
+    index('product_category_product_id_idx').on(t.productId),
+    index('product_category_category_id_idx').on(t.categoryId),
+    unique('product_category_product_category_unique').on(
+      t.productId,
+      t.categoryId
+    ),
+  ]
 );
 
 export const productTag = pgTable(
-	"product_tag",
-	(t) => ({
-		id: t.text("id").primaryKey().default(sql`'ptag_' || nanoid()`),
-		productId: t
-			.text("product_id")
-			.references(() => product.id, { onDelete: "cascade" })
-			.notNull(),
-		tagId: t
-			.text("tag_id")
-			.references(() => tag.id, { onDelete: "cascade" })
-			.notNull(),
-		...timeStamps({ softDelete: true }),
-		...createdBy(),
-	}),
+  'product_tag',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
+    productId: t
+      .text('product_id')
+      .references(() => product.id, { onDelete: 'cascade' })
+      .notNull(),
+    tagId: t
+      .text('tag_id')
+      .references(() => tags.id, { onDelete: 'cascade' })
+      .notNull(),
+    ...timeStamps({ softDelete: true }),
+    ...createdBy(),
+  }),
+  (t) => [
+    index('product_tag_product_id_idx').on(t.productId),
+    index('product_tag_tag_id_idx').on(t.tagId),
+    unique('product_tag_product_tag_unique').on(t.productId, t.tagId),
+  ]
 );
 
 export const productVariantPriceSet = pgTable(
-	"product_variant_price_set",
-	(t) => ({
-		id: t.text("id").primaryKey().default(sql`'pvps_' || nanoid()`),
-		variantId: t
-			.text("variant_id")
-			.references(() => productVariant.id, { onDelete: "cascade" })
-			.notNull(),
-		priceSetId: t
-			.text("price_set_id")
-			.references(() => priceSet.id, { onDelete: "cascade" })
-			.notNull(),
-		...timeStamps({ softDelete: true }),
-	})
+  'product_variant_price_set',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
+    variantId: t
+      .text('variant_id')
+      .references(() => productVariant.id, { onDelete: 'cascade' })
+      .notNull(),
+    priceSetId: t
+      .text('price_set_id')
+      .references(() => priceSet.id, { onDelete: 'cascade' })
+      .notNull(),
+    ...timeStamps({ softDelete: true }),
+  }),
+  (t) => [
+    index('pvps_variant_id_idx').on(t.variantId),
+    index('pvps_price_set_id_idx').on(t.priceSetId),
+    unique('pvps_variant_price_set_unique').on(t.variantId, t.priceSetId),
+  ]
 );
 
 export const productSalesChannel = pgTable(
-	"product_sales_channel",
-	(t) => ({
-		id: t.text("id").primaryKey().default(sql`'psc_' || nanoid()`),
-		productId: t
-			.text("product_id")
-			.references(() => product.id, {
-				onDelete: "cascade",
-			})
-			.notNull(),
-		salesChannelId: t
-			.text("sales_channel_id")
-			.references(() => salesChannel.id, {
-				onDelete: "cascade",
-			})
-			.notNull(),
-		...timeStamps({ softDelete: false }),
-		...createdBy(),
-	})
+  'product_sales_channel',
+  (t) => ({
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
+    productId: t
+      .text('product_id')
+      .references(() => product.id, {
+        onDelete: 'cascade',
+      })
+      .notNull(),
+    salesChannelId: t
+      .text('sales_channel_id')
+      .references(() => salesChannel.id, {
+        onDelete: 'cascade',
+      })
+      .notNull(),
+    ...timeStamps({ softDelete: false }),
+    ...createdBy(),
+  }),
+  (t) => [
+    index('psc_product_id_idx').on(t.productId),
+    index('psc_sales_channel_id_idx').on(t.salesChannelId),
+    unique('psc_product_sales_channel_unique').on(
+      t.productId,
+      t.salesChannelId
+    ),
+  ]
 );

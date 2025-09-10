@@ -1,77 +1,80 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from '../../src/utils/logger';
 
 describe('Environment-Specific Behavior', () => {
-  let consoleSpy: any;
-  
+  let outSpy: ReturnType<typeof vi.spyOn>;
+  let errSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    consoleSpy = {
-      log: vi.spyOn(console, 'log').mockImplementation(() => {}),
-      warn: vi.spyOn(console, 'warn').mockImplementation(() => {}),
-      error: vi.spyOn(console, 'error').mockImplementation(() => {}),
-    };
+    outSpy = vi
+      .spyOn(process.stdout, 'write')
+      // @ts-expect-error Node types
+      .mockImplementation(() => true);
+    errSpy = vi
+      .spyOn(process.stderr, 'write')
+      // @ts-expect-error Node types
+      .mockImplementation(() => true);
   });
 
   afterEach(() => {
-    consoleSpy.log.mockRestore();
-    consoleSpy.warn.mockRestore();
-    consoleSpy.error.mockRestore();
+    outSpy.mockRestore();
+    errSpy.mockRestore();
   });
 
   const createMockContext = (overrides = {}) => ({
     get: vi.fn((key: string) => {
       if (key === 'requestId') return 'test-req-id';
-      if (key === 'posthog') return undefined; // No PostHog in tests
-      return undefined;
+      if (key === 'posthog') return; // No PostHog in tests
+      return;
     }),
-    env: { 
+    env: {
       ENVIRONMENT: 'production',
       VERBOSE_LOGGING: 'false',
-      ...overrides
+      ...overrides,
     },
-    req: { 
-      raw: { 
+    req: {
+      raw: {
         headers: new Map([
           ['x-vercel-deployment-url', 'honoken-abc123-iad1.vercel.app'],
           ['x-vercel-ip-country', 'US'],
-          ['x-vercel-id', 'vercel-123']
-        ])
-      } 
-    }
+          ['x-vercel-id', 'vercel-123'],
+        ]),
+      },
+    },
   });
 
   describe('Development Environment', () => {
     it('should log to console in development', () => {
       const mockContext = createMockContext({ ENVIRONMENT: 'development' });
       const logger = createLogger(mockContext as any);
-      
+
       logger.info('dev info message');
       logger.warn('dev warning');
       logger.error('dev error', new Error('test'));
-      
-      expect(consoleSpy.log).toHaveBeenCalled();
-      expect(consoleSpy.warn).toHaveBeenCalled();
-      expect(consoleSpy.error).toHaveBeenCalled();
+
+      expect(outSpy).toHaveBeenCalled();
+      expect(errSpy).toHaveBeenCalled();
+      expect(errSpy).toHaveBeenCalled();
     });
 
     it('should still flag critical warnings in development for consistency', () => {
       const mockContext = createMockContext({ ENVIRONMENT: 'development' });
       const logger = createLogger(mockContext as any);
-      
+
       logger.warn('apns critical error', { severity: 'critical_warn' });
-      
+
       // Should still create structured logs
-      expect(consoleSpy.warn).toHaveBeenCalled();
+      expect(errSpy).toHaveBeenCalled();
     });
 
     it('should create error logs consistently in development', () => {
       const mockContext = createMockContext({ ENVIRONMENT: 'development' });
       const logger = createLogger(mockContext as any);
-      
+
       logger.error('dev error', new Error('test'));
-      
-      expect(consoleSpy.error).toHaveBeenCalled();
+
+      expect(errSpy).toHaveBeenCalled();
     });
   });
 
@@ -79,11 +82,11 @@ describe('Environment-Specific Behavior', () => {
     it('should create structured warning logs in production', () => {
       const mockContext = createMockContext({ ENVIRONMENT: 'production' });
       const logger = createLogger(mockContext as any);
-      
+
       logger.warn('prod warning');
-      
-      expect(consoleSpy.warn).toHaveBeenCalled();
-      const logCall = consoleSpy.warn.mock.calls[0][0];
+
+      expect(errSpy).toHaveBeenCalled();
+      const logCall = errSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
       expect(logData.lvl).toBe('warn');
       expect(logData.platform).toBe('vercel-fluid');
@@ -92,34 +95,34 @@ describe('Environment-Specific Behavior', () => {
     // Removed Sentry-specific test - warnings now just go to console/PostHog
 
     it('should suppress info logs in production unless verbose', () => {
-      const mockContext = createMockContext({ 
+      const mockContext = createMockContext({
         ENVIRONMENT: 'production',
-        VERBOSE_LOGGING: 'false'
+        VERBOSE_LOGGING: 'false',
       });
       const logger = createLogger(mockContext as any);
-      
+
       logger.info('prod info message');
-      
-      expect(consoleSpy.log).not.toHaveBeenCalled();
+
+      expect(outSpy).not.toHaveBeenCalled();
     });
 
     it('should show info logs in production when verbose enabled', () => {
-      const mockContext = createMockContext({ 
+      const mockContext = createMockContext({
         ENVIRONMENT: 'production',
-        VERBOSE_LOGGING: 'true'
+        VERBOSE_LOGGING: 'true',
       });
       const logger = createLogger(mockContext as any);
-      
+
       logger.info('verbose prod info message');
-      
-      expect(consoleSpy.log).toHaveBeenCalled();
+
+      expect(outSpy).toHaveBeenCalled();
     });
   });
 
   describe('Missing Environment Variables', () => {
     it('should handle missing ENVIRONMENT gracefully', () => {
       const mockContext = createMockContext({ ENVIRONMENT: undefined });
-      
+
       expect(() => {
         const logger = createLogger(mockContext as any);
         logger.info('test message');
@@ -132,7 +135,7 @@ describe('Environment-Specific Behavior', () => {
 
     it('should handle missing VERBOSE_LOGGING gracefully', () => {
       const mockContext = createMockContext({ VERBOSE_LOGGING: undefined });
-      
+
       expect(() => {
         const logger = createLogger(mockContext as any);
         logger.info('test message');
@@ -145,18 +148,18 @@ describe('Environment-Specific Behavior', () => {
       const mockContext = {
         get: vi.fn().mockReturnValue('test-req-id'),
         env: { ENVIRONMENT: 'development' },
-        req: { raw: {} } // No headers
+        req: { raw: {} }, // No headers
       };
-      
+
       expect(() => {
         const logger = createLogger(mockContext as any);
         logger.info('test message');
       }).not.toThrow();
-      
-      expect(consoleSpy.log).toHaveBeenCalled();
-      const logCall = consoleSpy.log.mock.calls[0][0];
+
+      expect(outSpy).toHaveBeenCalled();
+      const logCall = outSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
-      
+
       expect(logData.region).toBe('iad1'); // Default fallback
       expect(logData.country).toBe('unknown'); // Default fallback
       expect(logData.platform).toBe('vercel-fluid');
@@ -169,22 +172,22 @@ describe('Environment-Specific Behavior', () => {
         req: {
           raw: {
             headers: new Map([
-              ['x-vercel-ip-country', 'US']
+              ['x-vercel-ip-country', 'US'],
               // Missing other headers
-            ])
-          }
-        }
+            ]),
+          },
+        },
       };
-      
+
       expect(() => {
         const logger = createLogger(mockContext as any);
         logger.info('test message');
       }).not.toThrow();
-      
-      expect(consoleSpy.log).toHaveBeenCalled();
-      const logCall = consoleSpy.log.mock.calls[0][0];
+
+      expect(outSpy).toHaveBeenCalled();
+      const logCall = outSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
-      
+
       expect(logData.country).toBe('US');
       expect(logData.region).toBe('iad1'); // Fallback
       expect(logData.vercel_id).toBeUndefined();
@@ -194,9 +197,9 @@ describe('Environment-Specific Behavior', () => {
       const mockContext = {
         get: vi.fn().mockReturnValue('test-req-id'),
         env: { ENVIRONMENT: 'development' },
-        req: {} // Empty req object, no raw property
+        req: {}, // Empty req object, no raw property
       };
-      
+
       expect(() => {
         const logger = createLogger(mockContext as any);
         logger.info('test message');
@@ -206,16 +209,16 @@ describe('Environment-Specific Behavior', () => {
     it('should handle missing request ID gracefully', () => {
       const mockContext = createMockContext({ ENVIRONMENT: 'development' });
       mockContext.get = vi.fn().mockReturnValue(undefined);
-      
+
       expect(() => {
         const logger = createLogger(mockContext as any);
         logger.info('test message');
       }).not.toThrow();
-      
-      expect(consoleSpy.log).toHaveBeenCalled();
-      const logCall = consoleSpy.log.mock.calls[0][0];
+
+      expect(outSpy).toHaveBeenCalled();
+      const logCall = outSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
-      
+
       expect(logData.req_id).toBeUndefined();
     });
   });
@@ -224,7 +227,7 @@ describe('Environment-Specific Behavior', () => {
     it('should handle null/undefined data objects', () => {
       const mockContext = createMockContext();
       const logger = createLogger(mockContext as any);
-      
+
       expect(() => {
         logger.info('test message', null as any);
         logger.warn('test warning', undefined as any);
@@ -235,10 +238,10 @@ describe('Environment-Specific Behavior', () => {
     it('should handle circular references in data objects', () => {
       const mockContext = createMockContext();
       const logger = createLogger(mockContext as any);
-      
+
       const circularObj: any = { name: 'test' };
       circularObj.self = circularObj;
-      
+
       expect(() => {
         logger.info('test message', circularObj);
       }).not.toThrow();
@@ -247,31 +250,39 @@ describe('Environment-Specific Behavior', () => {
     it('should handle moderately large data objects', () => {
       const mockContext = createMockContext({ ENVIRONMENT: 'development' });
       const logger = createLogger(mockContext as any);
-      
+
       // Create a large but not excessive object (under 3KB to avoid truncation issues)
       const largeObj = {
         data: 'x'.repeat(1000),
         nested: {
           moreData: 'y'.repeat(1000),
-          items: Array(50).fill(0).map((_, i) => ({ id: i, name: `item-${i}` }))
-        }
+          items: Array(50)
+            .fill(0)
+            .map((_, i) => ({ id: i, name: `item-${i}` })),
+        },
       };
-      
+
       expect(() => {
         logger.warn('large data warning', largeObj);
       }).not.toThrow();
-      
-      expect(consoleSpy.warn).toHaveBeenCalled();
+
+      expect(errSpy).toHaveBeenCalled();
     });
   });
 
   describe('Different Environment Values', () => {
-    const testEnvironments = ['development', 'staging', 'production', 'test', 'preview'];
-    
-    testEnvironments.forEach(env => {
+    const testEnvironments = [
+      'development',
+      'staging',
+      'production',
+      'test',
+      'preview',
+    ];
+
+    testEnvironments.forEach((env) => {
       it(`should handle ${env} environment without errors`, () => {
         const mockContext = createMockContext({ ENVIRONMENT: env });
-        
+
         expect(() => {
           const logger = createLogger(mockContext as any);
           logger.info(`${env} info message`);
@@ -283,7 +294,7 @@ describe('Environment-Specific Behavior', () => {
 
     it('should handle unexpected environment values', () => {
       const mockContext = createMockContext({ ENVIRONMENT: 'unknown-env' });
-      
+
       expect(() => {
         const logger = createLogger(mockContext as any);
         logger.info('unknown env message');
@@ -296,15 +307,15 @@ describe('Environment-Specific Behavior', () => {
     it('should use default region when VERCEL_REGION not set', () => {
       const originalVercelRegion = process.env.VERCEL_REGION;
       delete process.env.VERCEL_REGION;
-      
+
       const mockContext = createMockContext({ ENVIRONMENT: 'development' });
       const logger = createLogger(mockContext as any);
       logger.info('test message');
-      
-      const logCall = consoleSpy.log.mock.calls[0][0];
+
+      const logCall = outSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
       expect(logData.region).toBe('iad1'); // Default region
-      
+
       // Restore original env
       if (originalVercelRegion !== undefined) {
         process.env.VERCEL_REGION = originalVercelRegion;
@@ -314,17 +325,17 @@ describe('Environment-Specific Behavior', () => {
     it('should fallback to process.env.VERCEL_REGION when header missing', () => {
       const originalVercelRegion = process.env.VERCEL_REGION;
       process.env.VERCEL_REGION = 'syd1';
-      
+
       const mockContext = createMockContext({ ENVIRONMENT: 'development' });
       mockContext.req.raw.headers = new Map(); // Empty headers
-      
+
       const logger = createLogger(mockContext as any);
       logger.info('test message');
-      
-      const logCall = consoleSpy.log.mock.calls[0][0];
+
+      const logCall = outSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
       expect(logData.region).toBe('syd1');
-      
+
       // Restore original env
       if (originalVercelRegion !== undefined) {
         process.env.VERCEL_REGION = originalVercelRegion;
@@ -336,10 +347,10 @@ describe('Environment-Specific Behavior', () => {
     it('should include platform tag in all logs', () => {
       const mockContext = createMockContext({ ENVIRONMENT: 'development' });
       const logger = createLogger(mockContext as any);
-      
+
       logger.info('test message');
-      
-      const logCall = consoleSpy.log.mock.calls[0][0];
+
+      const logCall = outSpy.mock.calls[0][0] as string;
       const logData = JSON.parse(logCall);
       expect(logData.platform).toBe('vercel-fluid');
     });
