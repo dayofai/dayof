@@ -13,7 +13,6 @@ export * from './pricing';
 export * from './product';
 export * from './promotion';
 export * from './region';
-export { relations } from './relations';
 // export { relations } from './relations'; // Omitted to avoid importing unfinished payment schema during wallet tests
 export * from './sales-channel';
 export * from './tag';
