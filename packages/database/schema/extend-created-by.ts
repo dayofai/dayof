@@ -40,7 +40,7 @@ export const createdByCheck = <
 				WHEN 'system' THEN 
 					${table.userId} IS NULL
 				WHEN 'api_token' THEN 
-					${table.userId} IS NULL AND ${table.orgId} IS NOT NULL
+					${table.userId} IS NULL
 				ELSE FALSE
 			END
 		`

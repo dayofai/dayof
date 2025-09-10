@@ -5,7 +5,7 @@ import { timeStamps } from './extend-timestamps';
 import { regionCountry } from './region';
 
 export const address = pgTable('address', (t) => ({
-  id: t.text('id').primaryKey().default(sql`'addr_' || nanoid()`),
+  id: t.text('id').primaryKey().default(sql`nanoid()`),
   addressName: t.text('address_name'),
   isDefaultShipping: t.boolean('is_default_shipping').default(false).notNull(),
   isDefaultBilling: t.boolean('is_default_billing').default(false).notNull(),

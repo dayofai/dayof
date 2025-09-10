@@ -15,7 +15,7 @@ export const walletTicketStyleEnum = pgEnum('wallet_ticket_style_enum', [
 export const walletCert = pgTable(
   'wallet_cert',
   (t) => ({
-    id: t.text('id').primaryKey().default(sql`'wcrt_' || nanoid()`),
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
     certRef: t.text('cert_ref').notNull(),
     description: t.text('description'),
     isEnhanced: t.boolean('is_enhanced').notNull().default(false),
@@ -34,7 +34,7 @@ export const walletCert = pgTable(
 export const walletApnsKey = pgTable(
   'wallet_apns_key',
   (t) => ({
-    id: t.text('id').primaryKey().default(sql`'wak_' || nanoid()`),
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
     keyRef: t.text('key_ref').notNull(),
     teamId: t.text('team_id').notNull(),
     isActive: t.boolean('is_active').notNull().default(true),
@@ -59,7 +59,7 @@ export const walletApnsKey = pgTable(
 export const walletPassType = pgTable(
   'wallet_pass_type',
   (t) => ({
-    id: t.text('id').primaryKey().default(sql`'wpty_' || nanoid()`),
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
     passTypeIdentifier: t.text('pass_type_identifier').notNull(),
     certRef: t
       .text('cert_ref')
@@ -79,7 +79,7 @@ export const walletPassType = pgTable(
 export const walletPass = pgTable(
   'wallet_pass',
   (t) => ({
-    id: t.text('id').primaryKey().default(sql`'wpass_' || nanoid()`),
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
     passTypeIdentifier: t.text('pass_type_identifier').notNull(),
     serialNumber: t.text('serial_number').notNull(),
     authenticationToken: t.text('authentication_token').notNull(),
@@ -103,7 +103,7 @@ export const walletPass = pgTable(
 export const walletDevice = pgTable(
   'wallet_device',
   (t) => ({
-    id: t.text('id').primaryKey().default(sql`'wdev_' || nanoid()`),
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
     deviceLibraryIdentifier: t.text('device_library_identifier').notNull(),
     pushToken: t.text('push_token').notNull(),
     ...timeStamps({ softDelete: true }),
@@ -119,7 +119,7 @@ export const walletDevice = pgTable(
 export const walletRegistration = pgTable(
   'wallet_registration',
   (t) => ({
-    id: t.text('id').primaryKey().default(sql`'wreg_' || nanoid()`),
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
     passId: t
       .text('pass_id')
       .notNull()
@@ -157,7 +157,7 @@ export const walletRegistration = pgTable(
 export const walletPassContent = pgTable(
   'wallet_pass_content',
   (t) => ({
-    id: t.text('id').primaryKey().default(sql`'wpc_' || nanoid()`),
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
     passId: t
       .text('pass_id')
       .notNull()

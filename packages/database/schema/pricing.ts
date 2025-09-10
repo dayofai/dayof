@@ -5,7 +5,7 @@ import { createdBy } from './extend-created-by';
 import { timeStamps } from './extend-timestamps';
 
 export const priceSet = pgTable('price_set', (t) => ({
-  id: t.text('id').primaryKey().default(sql`'pset_' || nanoid()`),
+  id: t.text('id').primaryKey().default(sql`nanoid()`),
   label: t.text('label'),
   description: t.text('description'),
   type: t.text('type').default('default').notNull(),
@@ -18,7 +18,7 @@ export const priceSet = pgTable('price_set', (t) => ({
 }));
 
 export const price = pgTable('price', (t) => ({
-  id: t.text('id').primaryKey().default(sql`'price_' || nanoid()`),
+  id: t.text('id').primaryKey().default(sql`nanoid()`),
   label: t.text('label'),
   priceSetId: t
     .text('price_set_id')

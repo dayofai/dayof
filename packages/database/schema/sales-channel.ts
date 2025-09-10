@@ -1,12 +1,12 @@
 import { sql } from 'drizzle-orm';
-import { check, pgTable } from 'drizzle-orm/pg-core';
-import { createdBy } from '../schema/extend-created-by';
-import { timeStamps } from '../schema/extend-timestamps';
+import { pgTable } from 'drizzle-orm/pg-core';
 // Note: relations moved to relations.ts (RQB v2)
 import { address } from './address';
+import { createdBy } from './extend-created-by';
+import { timeStamps } from './extend-timestamps';
 
 export const stockLocation = pgTable('stock_location', (t) => ({
-  id: t.text('id').primaryKey().default(sql`'sloc_' || nanoid()`),
+  id: t.text('id').primaryKey().default(sql`nanoid()`),
   name: t.text('name').notNull(),
   addressId: t
     .text('address_id')
@@ -18,7 +18,7 @@ export const stockLocation = pgTable('stock_location', (t) => ({
 }));
 
 export const salesChannel = pgTable('sales_channel', (t) => ({
-  id: t.text('id').primaryKey().default(sql`'sc_' || nanoid()`),
+  id: t.text('id').primaryKey().default(sql`nanoid()`),
   name: t.text('name').notNull(),
   description: t.text('description'),
   isDisabled: t.boolean('is_disabled').default(false),
@@ -30,7 +30,7 @@ export const salesChannel = pgTable('sales_channel', (t) => ({
 export const salesChannelStockLocation = pgTable(
   'sales_channel_stock_location',
   (t) => ({
-    id: t.text('id').primaryKey().default(sql`'scloc_' || nanoid()`),
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
     salesChannelId: t
       .text('sales_channel_id')
       .references(() => salesChannel.id, {
@@ -42,7 +42,6 @@ export const salesChannelStockLocation = pgTable(
       .references(() => stockLocation.id, {
         onDelete: 'restrict',
       })
-      .default('sc_WASBSjE935POhANBMjbeW')
       .notNull(),
     ...timeStamps({ softDelete: false }),
     ...createdBy(),

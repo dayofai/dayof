@@ -3,6 +3,7 @@ import { pgTable, unique } from 'drizzle-orm/pg-core';
 import { address } from './address';
 import { organization } from './better-auth';
 import { currency } from './currency';
+import { ianaTimezone } from './custom-types';
 import { createdBy } from './extend-created-by';
 import { timeStamps } from './extend-timestamps';
 import { regionCountry } from './region';
@@ -12,7 +13,7 @@ import { taxRate } from './tax';
 export const organizationSettings = pgTable(
   'organization_settings',
   (t) => ({
-    id: t.text('id').primaryKey().default(sql`'oset_' || nanoid()`),
+    id: t.text('id').primaryKey().default(sql`nanoid()`),
     orgId: t
       .text('org_id')
       .references(() => organization.id, { onDelete: 'cascade' })
@@ -27,7 +28,7 @@ export const organizationSettings = pgTable(
       .text('default_country_code')
       .references(() => regionCountry.iso2)
       .notNull(),
-    defaultTimezone: t.text('default_timezone').notNull(),
+    defaultTimezone: ianaTimezone('default_timezone').notNull(),
 
     // tax & fee settings
     defaultTaxRateId: t
@@ -68,7 +69,7 @@ export const organizationSettings = pgTable(
 // I'll need to link this up on the event level
 
 export const brandProfile = pgTable('brand_profile', (t) => ({
-  id: t.text('id').primaryKey().default(sql`'brand_' || nanoid()`),
+  id: t.text('id').primaryKey().default(sql`nanoid()`),
 
   // profile
   name: t.text('name').notNull(),
