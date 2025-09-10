@@ -1,27 +1,3 @@
-[**PostgreSQL**](https://rqbv2.drizzle-orm-fe.pages.dev/docs/column-types/pg) [**MySQL**](https://rqbv2.drizzle-orm-fe.pages.dev/docs/column-types/mysql) [**SQLite**](https://rqbv2.drizzle-orm-fe.pages.dev/docs/column-types/sqlite) [**SingleStore**](https://rqbv2.drizzle-orm-fe.pages.dev/docs/column-types/singlestore)
-
-[v1.0\\
-\\
-75%](https://rqbv2.drizzle-orm-fe.pages.dev/roadmap)
-
-[Benchmarks](https://rqbv2.drizzle-orm-fe.pages.dev/benchmarks) [Extension](https://driz.link/extension) [Studio](https://rqbv2.drizzle-orm-fe.pages.dev/drizzle-studio/overview) [Studio Package](https://github.com/drizzle-team/drizzle-studio-npm) [Drizzle Run](https://drizzle.run/)
-
-Our goodies!
-
-[![](<Base64-Image-Removed>)![Gel](<Base64-Image-Removed>)](https://driz.link/edgedb)[![](<Base64-Image-Removed>)![Upstash](<Base64-Image-Removed>)](https://driz.link/upstash)
-
-[![](<Base64-Image-Removed>)![Turso](<Base64-Image-Removed>)\\
-\\
-🚀 Drizzle is giving you 10% off Turso Scaler and Pro for 1 Year 🚀](https://driz.link/turso) [![](<Base64-Image-Removed>)![Payload](<Base64-Image-Removed>)](https://driz.link/payload) [![](<Base64-Image-Removed>)![Xata](<Base64-Image-Removed>)](https://driz.link/xataio) [![](<Base64-Image-Removed>)![Neon](<Base64-Image-Removed>)](https://driz.link/neon) [![](<Base64-Image-Removed>)![Nuxt](<Base64-Image-Removed>)](https://hub.nuxt.com/?utm_source=drizzle-docs) [![](<Base64-Image-Removed>)![Hydra](<Base64-Image-Removed>)](https://driz.link/hydraso) [![](<Base64-Image-Removed>)![Deco.cx](<Base64-Image-Removed>)](https://driz.link/decocx) [![](<Base64-Image-Removed>)![Tembo](<Base64-Image-Removed>)](https://driz.link/tembo) [![](<Base64-Image-Removed>)![SQLite Cloud](<Base64-Image-Removed>)](https://driz.link/sqlitecloud) [![](<Base64-Image-Removed>)![SingleStore](<Base64-Image-Removed>)](https://driz.link/singlestore) [![](<Base64-Image-Removed>)![PrAha](<Base64-Image-Removed>)](https://driz.link/praha) [![](<Base64-Image-Removed>)![Lokalise](<Base64-Image-Removed>)](https://driz.link/lokalise) [![](<Base64-Image-Removed>)![Replit](<Base64-Image-Removed>)](https://driz.link/replit) [![](<Base64-Image-Removed>)![Sentry](<Base64-Image-Removed>)](https://driz.link/sentry) [![](<Base64-Image-Removed>)![Mooncake](<Base64-Image-Removed>)](https://driz.link/mooncake) [![](<Base64-Image-Removed>)![Sponsor](<Base64-Image-Removed>)](https://driz.link/sponsor)
-
-Product by Drizzle Team
-
-[One Dollar Stats$1 per mo web analytics\\
-\\
-christmas\\
-\\
-deal](https://driz.link/onedollarstats)
-
 # PostgreSQL column types
 
 We have native support for all of them, yet if that’s not enough for you, feel free to create **[custom types](https://rqbv2.drizzle-orm-fe.pages.dev/docs/custom-types)**.
@@ -711,7 +687,6 @@ Type `point` has 2 modes for mappings from the database: `tuple` and `xy`.
 
 - `xy` will be accepted for insert and mapped on select to an object with x, y coordinates. So, the database Point(1,2) will be typed as `{ x: 1, y: 2 }` with drizzle
 
-
 ```
 const items = pgTable('items', {
  point: point(),
@@ -739,7 +714,6 @@ Type `line` has 2 modes for mappings from the database: `tuple` and `abc`.
 - `tuple` will be accepted for insert and mapped on select to a tuple. So, the database Line3 will be typed as \[1,2,3\] with drizzle.
 
 - `abc` will be accepted for insert and mapped on select to an object with a, b, and c constants from the equation `Ax + By + C = 0`. So, the database Line3 will be typed as `{ a: 1, b: 2, c: 3 }` with drizzle.
-
 
 ```
 const items = pgTable('items', {

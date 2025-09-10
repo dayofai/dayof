@@ -188,6 +188,33 @@ describe('HTTP Endpoint Smoke Tests', () => {
         expect(text).toMatch(RE_PAYLOAD_TOO_LARGE);
       }
     });
+
+    it('should return 200 on duplicate registration of same device/pass (idempotent)', async () => {
+      // First registration: expect 201
+      const req1 = new Request(`http://localhost${registrationPath}`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'ApplePass valid-test-token',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pushToken: TEST_PUSH_TOKEN }),
+      });
+      const res1 = await appFetch(req1, mockEnv, mockContext);
+      expect([200, 201]).toContain(res1.status); // harness may already have prior state
+
+      // Second registration with identical inputs: expect 200 (already registered)
+      const req2 = new Request(`http://localhost${registrationPath}`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'ApplePass valid-test-token',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pushToken: TEST_PUSH_TOKEN }),
+      });
+      const res2 = await appFetch(req2, mockEnv, mockContext);
+      expect(res2.status).toBe(200);
+      expect(await res2.text()).toBe('');
+    });
   });
 
   describe('Device Unregistration', () => {

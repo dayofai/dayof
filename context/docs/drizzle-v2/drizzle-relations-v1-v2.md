@@ -1,25 +1,3 @@
-[v1.0\\
-\\
-75%](https://rqbv2.drizzle-orm-fe.pages.dev/roadmap)
-
-[Benchmarks](https://rqbv2.drizzle-orm-fe.pages.dev/benchmarks) [Extension](https://driz.link/extension) [Studio](https://rqbv2.drizzle-orm-fe.pages.dev/drizzle-studio/overview) [Studio Package](https://github.com/drizzle-team/drizzle-studio-npm) [Drizzle Run](https://drizzle.run/)
-
-Our goodies!
-
-[![](<Base64-Image-Removed>)![Gel](<Base64-Image-Removed>)](https://driz.link/edgedb)[![](<Base64-Image-Removed>)![Upstash](<Base64-Image-Removed>)](https://driz.link/upstash)
-
-[![](<Base64-Image-Removed>)![Turso](<Base64-Image-Removed>)\\
-\\
-🚀 Drizzle is giving you 10% off Turso Scaler and Pro for 1 Year 🚀](https://driz.link/turso) [![](<Base64-Image-Removed>)![Payload](<Base64-Image-Removed>)](https://driz.link/payload) [![](<Base64-Image-Removed>)![Xata](<Base64-Image-Removed>)](https://driz.link/xataio) [![](<Base64-Image-Removed>)![Neon](<Base64-Image-Removed>)](https://driz.link/neon) [![](<Base64-Image-Removed>)![Nuxt](<Base64-Image-Removed>)](https://hub.nuxt.com/?utm_source=drizzle-docs) [![](<Base64-Image-Removed>)![Hydra](<Base64-Image-Removed>)](https://driz.link/hydraso) [![](<Base64-Image-Removed>)![Deco.cx](<Base64-Image-Removed>)](https://driz.link/decocx) [![](<Base64-Image-Removed>)![Tembo](<Base64-Image-Removed>)](https://driz.link/tembo) [![](<Base64-Image-Removed>)![SQLite Cloud](<Base64-Image-Removed>)](https://driz.link/sqlitecloud) [![](<Base64-Image-Removed>)![SingleStore](<Base64-Image-Removed>)](https://driz.link/singlestore) [![](<Base64-Image-Removed>)![PrAha](<Base64-Image-Removed>)](https://driz.link/praha) [![](<Base64-Image-Removed>)![Lokalise](<Base64-Image-Removed>)](https://driz.link/lokalise) [![](<Base64-Image-Removed>)![Replit](<Base64-Image-Removed>)](https://driz.link/replit) [![](<Base64-Image-Removed>)![Sentry](<Base64-Image-Removed>)](https://driz.link/sentry) [![](<Base64-Image-Removed>)![Mooncake](<Base64-Image-Removed>)](https://driz.link/mooncake) [![](<Base64-Image-Removed>)![Sponsor](<Base64-Image-Removed>)](https://driz.link/sponsor)
-
-Product by Drizzle Team
-
-[One Dollar Stats$1 per mo web analytics\\
-\\
-christmas\\
-\\
-deal](https://driz.link/onedollarstats)
-
 # Migrating to Relational Queries version 2
 
 This guide assumes familiarity with:
@@ -1160,7 +1138,7 @@ export interface DrizzleConfig<
 ```
 
 3. The following entities have been moved from `drizzle-orm` and `drizzle-orm/relations` to `drizzle-orm/_relations`. The original imports now
-include new types used by Relational Queries v2, so make sure to update your imports if you intend to use the older types:
+   include new types used by Relational Queries v2, so make sure to update your imports if you intend to use the older types:
 
 A list of all moved entities
 
@@ -1199,7 +1177,7 @@ A list of all moved entities
 - `mapRelationalRow`
 
 4. In the same manner, `${dialect}-core/query-builders/query` files were moved to `${dialect}-core/query-builders/_query`
-with RQB v2’s alternatives being put in their place
+   with RQB v2’s alternatives being put in their place
 
 Examples
 

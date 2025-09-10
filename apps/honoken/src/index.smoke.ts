@@ -1,28 +1,62 @@
-import { Hono } from 'hono';
-import { secureHeaders } from 'hono/secure-headers';
-import { bodyLimit } from 'hono/body-limit';
 import { zValidator } from '@hono/zod-validator';
-import { createLogger } from './utils/logger';
-import type { Env } from './types';
-import type { MiddlewareHandler, ExecutionContext } from 'hono';
-
+import type { ExecutionContext, MiddlewareHandler } from 'hono';
+import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
+import { secureHeaders } from 'hono/secure-headers';
 import {
-  RegisterDeviceBodySchema,
-  PassPathParamsSchema,
-  PassIdParamsSchema,
   DevicePassRegistrationsParamsSchema,
-  LogMessagesBodySchema
+  LogMessagesBodySchema,
+  PassIdParamsSchema,
+  PassPathParamsSchema,
+  RegisterDeviceBodySchema,
 } from './schemas';
+import type { Env } from './types';
 import { formatZodError } from './utils/errorHandling';
+import { createLogger } from './utils/logger';
+
+// In-memory registration store for idempotency behavior in smoke tests
+const __registrations = new Set<string>();
+const buildRegistrationKey = (
+  deviceLibraryIdentifier: string,
+  passTypeIdentifier: string,
+  serialNumber: string
+) => `${deviceLibraryIdentifier}|${passTypeIdentifier}|${serialNumber}`;
 
 // Mock storage for smoke tests (no database calls)
 const mockStorage = {
-  registerDevice: async () => ({ success: true }),
-  unregisterDevice: async () => ({ success: true }),
+  registerDevice: async (
+    deviceLibraryIdentifier: string,
+    passTypeIdentifier: string,
+    serialNumber: string
+  ) => {
+    const key = buildRegistrationKey(
+      deviceLibraryIdentifier,
+      passTypeIdentifier,
+      serialNumber
+    );
+    const alreadyRegistered = __registrations.has(key);
+    if (!alreadyRegistered) {
+      __registrations.add(key);
+    }
+    return { alreadyRegistered } as const;
+  },
+  unregisterDevice: async (
+    deviceLibraryIdentifier: string,
+    passTypeIdentifier: string,
+    serialNumber: string
+  ) => {
+    const key = buildRegistrationKey(
+      deviceLibraryIdentifier,
+      passTypeIdentifier,
+      serialNumber
+    );
+    __registrations.delete(key);
+    return { success: true } as const;
+  },
   getPassData: async () => null,
-  listUpdatedSerials: async () => ({ serialNumbers: [], lastUpdated: "test" }),
+  listUpdatedSerials: async () => ({ serialNumbers: [], lastUpdated: 'test' }),
   storeLogMessages: async () => ({ success: true }),
-  healthCheck: async () => ({ status: "connected", responseTime: "1ms" }),
+  healthCheck: async () => ({ status: 'connected', responseTime: '1ms' }),
 };
 
 const enhancedLogger = (): MiddlewareHandler<{ Bindings: Env }> => {
@@ -41,12 +75,12 @@ const enhancedLogger = (): MiddlewareHandler<{ Bindings: Env }> => {
       path,
       userAgent,
     });
-    
+
     const start = Date.now();
-    
+
     try {
-      await next(); 
-      c.res.headers.set('X-Request-ID', requestId); 
+      await next();
+      c.res.headers.set('X-Request-ID', requestId);
 
       const responseTime = Date.now() - start;
       logger.info('response', {
@@ -57,7 +91,11 @@ const enhancedLogger = (): MiddlewareHandler<{ Bindings: Env }> => {
         responseTime: `${responseTime}ms`,
       });
     } catch (error) {
-      if (c.res && typeof c.res.headers !== 'undefined' && typeof c.res.headers.set === 'function') {
+      if (
+        c.res &&
+        typeof c.res.headers !== 'undefined' &&
+        typeof c.res.headers.set === 'function'
+      ) {
         c.res.headers.set('X-Request-ID', requestId);
       }
 
@@ -69,37 +107,50 @@ const enhancedLogger = (): MiddlewareHandler<{ Bindings: Env }> => {
         status: c.res ? c.res.status : 500,
         responseTime: `${responseTime}ms`,
       });
-      throw error; 
+      throw error;
     }
   };
 };
 
 // Custom body size checker that properly handles large payloads before JSON parsing
-const customBodySizeCheck = (maxSize: number, message: string): MiddlewareHandler => {
+const customBodySizeCheck = (
+  maxSize: number,
+  message: string
+): MiddlewareHandler => {
   return async (c, next) => {
     // Check Content-Length header first
     const contentLength = c.req.header('Content-Length');
-    
+
     if (contentLength) {
-      const size = parseInt(contentLength, 10);
+      const size = Number.parseInt(contentLength, 10);
       if (size > maxSize) {
-        return c.json({ 
-          error: 'Payload Too Large',
-          message 
-        }, 413);
+        return c.json(
+          {
+            error: 'Payload Too Large',
+            message,
+          },
+          413
+        );
       }
-    } else if (c.req.method === 'POST' || c.req.method === 'PUT' || c.req.method === 'PATCH') {
+    } else if (
+      c.req.method === 'POST' ||
+      c.req.method === 'PUT' ||
+      c.req.method === 'PATCH'
+    ) {
       // For POST/PUT/PATCH requests without Content-Length, read and check body size
       try {
         const clonedRequest = c.req.raw.clone();
         const bodyText = await clonedRequest.text();
         const actualSize = new TextEncoder().encode(bodyText).length;
-        
+
         if (actualSize > maxSize) {
-          return c.json({ 
-            error: 'Payload Too Large',
-            message 
-          }, 413);
+          return c.json(
+            {
+              error: 'Payload Too Large',
+              message,
+            },
+            413
+          );
         }
       } catch (error) {
         // If we can't read the body, continue and let downstream middleware handle it
@@ -126,7 +177,7 @@ const handleV1Health = async (c: any) => {
 
 const handleRegisterDevice = async (c: any) => {
   const authHeader = c.req.header('authorization');
-  if (!authHeader || !authHeader.startsWith('ApplePass ')) {
+  if (!(authHeader && authHeader.startsWith('ApplePass '))) {
     return c.json({ error: 'Invalid authorization' }, 401);
   }
 
@@ -135,13 +186,20 @@ const handleRegisterDevice = async (c: any) => {
     return c.json({ error: 'Invalid authorization token' }, 401);
   }
 
-  await mockStorage.registerDevice();
-  return c.body(null, 201);
+  const params = c.req.param();
+  const { deviceLibraryIdentifier, passTypeIdentifier, serialNumber } = params;
+  const result = await mockStorage.registerDevice(
+    deviceLibraryIdentifier,
+    passTypeIdentifier,
+    serialNumber
+  );
+  // Apple spec: 201 on first registration, 200 if already registered
+  return c.body(null, result.alreadyRegistered ? 200 : 201);
 };
 
 const handleUnregisterDevice = async (c: any) => {
   const authHeader = c.req.header('authorization');
-  if (!authHeader || !authHeader.startsWith('ApplePass ')) {
+  if (!(authHeader && authHeader.startsWith('ApplePass '))) {
     return c.json({ error: 'Invalid authorization' }, 401);
   }
 
@@ -150,13 +208,19 @@ const handleUnregisterDevice = async (c: any) => {
     return c.json({ error: 'Invalid authorization token' }, 401);
   }
 
-  await mockStorage.unregisterDevice();
+  const params = c.req.param();
+  const { deviceLibraryIdentifier, passTypeIdentifier, serialNumber } = params;
+  await mockStorage.unregisterDevice(
+    deviceLibraryIdentifier,
+    passTypeIdentifier,
+    serialNumber
+  );
   return c.body(null, 200);
 };
 
 const handleGetPassFile = async (c: any) => {
   const authHeader = c.req.header('authorization');
-  if (!authHeader || !authHeader.startsWith('ApplePass ')) {
+  if (!(authHeader && authHeader.startsWith('ApplePass '))) {
     return c.json({ error: 'Invalid authorization' }, 401);
   }
 
@@ -186,7 +250,7 @@ const handleGetPassFile = async (c: any) => {
 
 const handleListUpdatedSerials = async (c: any) => {
   const auth = c.req.header('authorization');
-  if (!auth || !auth.startsWith('ApplePass ')) {
+  if (!(auth && auth.startsWith('ApplePass '))) {
     return c.json({ error: 'Invalid authorization' }, 401);
   }
   const token = auth.replace('ApplePass ', '');
@@ -205,7 +269,7 @@ const handleLogMessages = async (c: any) => {
   const { logs } = c.req.valid('json');
   const requestId = c.get('requestId');
   const logger = createLogger(c);
-  
+
   for (const message of logs) {
     logger.info('[PassKit Log]', { requestId, messageContent: message });
   }
@@ -216,36 +280,43 @@ const handleLogMessages = async (c: any) => {
 
 function createV1App(env: Env) {
   const v1 = new Hono<{ Bindings: Env }>();
-  
+
   const apiSecurityConfig = secureHeaders({
     xFrameOptions: 'DENY',
     contentSecurityPolicy: {
       defaultSrc: ["'none'"],
-      connectSrc: ["'self'"]
+      connectSrc: ["'self'"],
     },
   });
-  
-  v1.post('/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber',
+
+  v1.post(
+    '/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber',
     apiSecurityConfig,
-    customBodySizeCheck(10 * 1024, 'Push registration payload exceeds 10KB limit'),
+    customBodySizeCheck(
+      10 * 1024,
+      'Push registration payload exceeds 10KB limit'
+    ),
     zValidator('param', PassPathParamsSchema, formatZodError),
     zValidator('json', RegisterDeviceBodySchema, formatZodError),
     handleRegisterDevice
   );
-  
-  v1.delete('/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber',
+
+  v1.delete(
+    '/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber',
     apiSecurityConfig,
     zValidator('param', PassPathParamsSchema, formatZodError),
     handleUnregisterDevice
   );
-  
-  v1.get('/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier',
+
+  v1.get(
+    '/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier',
     apiSecurityConfig,
     zValidator('param', DevicePassRegistrationsParamsSchema, formatZodError),
     handleListUpdatedSerials
   );
-  
-  v1.get('/passes/:passTypeIdentifier/:serialNumber',
+
+  v1.get(
+    '/passes/:passTypeIdentifier/:serialNumber',
     secureHeaders({
       crossOriginResourcePolicy: 'cross-origin',
       xFrameOptions: false,
@@ -253,48 +324,56 @@ function createV1App(env: Env) {
     zValidator('param', PassIdParamsSchema, formatZodError),
     handleGetPassFile
   );
-  
-  v1.post('/log',
+
+  v1.post(
+    '/log',
     apiSecurityConfig,
     customBodySizeCheck(256 * 1024, 'Log payload exceeds 256KB limit'),
     zValidator('json', LogMessagesBodySchema, formatZodError),
     handleLogMessages
   );
-  
-  v1.get('/health',
-    apiSecurityConfig,
-    handleV1Health
-  );
-  
+
+  v1.get('/health', apiSecurityConfig, handleV1Health);
+
   return v1;
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<Response> {
     const app = new Hono<{ Bindings: Env }>();
-    
+
     // Enhanced Logger
     app.use('*', enhancedLogger());
-    
+
     // Global Secure Headers
-    app.use('*', secureHeaders({
-      strictTransportSecurity: 'max-age=63072000; includeSubDomains',
-      xContentTypeOptions: 'nosniff',
-      xDnsPrefetchControl: 'off',
-      referrerPolicy: 'strict-origin-when-cross-origin',
-      xXssProtection: '0',
-      xPermittedCrossDomainPolicies: 'none',
-      crossOriginResourcePolicy: 'same-origin',
-      crossOriginOpenerPolicy: 'same-origin',
-    }));
-    
+    app.use(
+      '*',
+      secureHeaders({
+        strictTransportSecurity: 'max-age=63072000; includeSubDomains',
+        xContentTypeOptions: 'nosniff',
+        xDnsPrefetchControl: 'off',
+        referrerPolicy: 'strict-origin-when-cross-origin',
+        xXssProtection: '0',
+        xPermittedCrossDomainPolicies: 'none',
+        crossOriginResourcePolicy: 'same-origin',
+        crossOriginOpenerPolicy: 'same-origin',
+      })
+    );
+
     // Global Body Limit
-    app.use('*', customBodySizeCheck(2 * 1024 * 1024, 'Request exceeds the 2MB size limit'));
+    app.use(
+      '*',
+      customBodySizeCheck(2 * 1024 * 1024, 'Request exceeds the 2MB size limit')
+    );
 
     // Admin routes (mock basic auth)
     app.use('/admin/*', async (c, next) => {
       const authHeader = c.req.header('authorization');
-      if (!authHeader || !authHeader.startsWith('Basic ')) {
+      if (!(authHeader && authHeader.startsWith('Basic '))) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
 
@@ -313,13 +392,13 @@ export default {
     app.post('/admin/invalidate/certs/:certId', async (c) => {
       return c.json({ error: 'Certificate not found' }, 404);
     });
-    
+
     // Mount v1 routes
     app.route('/v1', createV1App(env));
-    
+
     // Root health route
     app.get('/', handleRootHealth);
-    
+
     return app.fetch(request, env, ctx);
-  }
+  },
 };

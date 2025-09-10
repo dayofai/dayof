@@ -1,25 +1,3 @@
-[v1.0\\
-\\
-75%](https://rqbv2.drizzle-orm-fe.pages.dev/roadmap)
-
-[Benchmarks](https://rqbv2.drizzle-orm-fe.pages.dev/benchmarks) [Extension](https://driz.link/extension) [Studio](https://rqbv2.drizzle-orm-fe.pages.dev/drizzle-studio/overview) [Studio Package](https://github.com/drizzle-team/drizzle-studio-npm) [Drizzle Run](https://drizzle.run/)
-
-Our goodies!
-
-[![](<Base64-Image-Removed>)![Gel](<Base64-Image-Removed>)](https://driz.link/edgedb)[![](<Base64-Image-Removed>)![Upstash](<Base64-Image-Removed>)](https://driz.link/upstash)
-
-[![](<Base64-Image-Removed>)![Turso](<Base64-Image-Removed>)\\
-\\
-🚀 Drizzle is giving you 10% off Turso Scaler and Pro for 1 Year 🚀](https://driz.link/turso) [![](<Base64-Image-Removed>)![Payload](<Base64-Image-Removed>)](https://driz.link/payload) [![](<Base64-Image-Removed>)![Xata](<Base64-Image-Removed>)](https://driz.link/xataio) [![](<Base64-Image-Removed>)![Neon](<Base64-Image-Removed>)](https://driz.link/neon) [![](<Base64-Image-Removed>)![Nuxt](<Base64-Image-Removed>)](https://hub.nuxt.com/?utm_source=drizzle-docs) [![](<Base64-Image-Removed>)![Hydra](<Base64-Image-Removed>)](https://driz.link/hydraso) [![](<Base64-Image-Removed>)![Deco.cx](<Base64-Image-Removed>)](https://driz.link/decocx) [![](<Base64-Image-Removed>)![Tembo](<Base64-Image-Removed>)](https://driz.link/tembo) [![](<Base64-Image-Removed>)![SQLite Cloud](<Base64-Image-Removed>)](https://driz.link/sqlitecloud) [![](<Base64-Image-Removed>)![SingleStore](<Base64-Image-Removed>)](https://driz.link/singlestore) [![](<Base64-Image-Removed>)![PrAha](<Base64-Image-Removed>)](https://driz.link/praha) [![](<Base64-Image-Removed>)![Lokalise](<Base64-Image-Removed>)](https://driz.link/lokalise) [![](<Base64-Image-Removed>)![Replit](<Base64-Image-Removed>)](https://driz.link/replit) [![](<Base64-Image-Removed>)![Sentry](<Base64-Image-Removed>)](https://driz.link/sentry) [![](<Base64-Image-Removed>)![Mooncake](<Base64-Image-Removed>)](https://driz.link/mooncake) [![](<Base64-Image-Removed>)![Sponsor](<Base64-Image-Removed>)](https://driz.link/sponsor)
-
-Product by Drizzle Team
-
-[One Dollar Stats$1 per mo web analytics\\
-\\
-christmas\\
-\\
-deal](https://driz.link/onedollarstats)
-
 # Drizzle Relations Fundamentals
 
 In the world of databases, especially relational databases, the concept of relations is absolutely fundamental.
@@ -42,6 +20,7 @@ Why is Normalization Important?
 1. **Insertion Anomalies**: Difficulty adding new data because you’re missing related information.
 2. **Update Anomalies**: Having to update the same information in multiple rows.
 3. **Deletion Anomalies**: Accidentally losing valuable information when you delete something seemingly unrelated.
+
 - **Easier to Understand and Maintain**: A normalized database is generally more logically structured and easier to understand, query, and modify.
 
 Normalization is often described in terms of “normal forms” (1NF, 2NF, 3NF, and beyond). While the details can get quite technical, the core ideas are straightforward:
@@ -293,7 +272,7 @@ Use Cases & Examples
 
 1. **Students and Courses**: One student can enroll in many courses, and one course can have many students enrolled.
 2. **Products and Categories**: One product can belong to multiple categories (e.g., a “T-shirt” can be
-in “Clothing” and “Summer Wear” categories), and one category can contain many products.
+   in “Clothing” and “Summer Wear” categories), and one category can contain many products.
 3. **Authors and Books**: A book can be written by multiple authors, and an author can write multiple books.
 
 ```
@@ -350,8 +329,8 @@ to a much larger purpose. Foreign key constraints are fundamentally about:
 We’ve discussed relationships like `One-to-Many` between Customers and Orders.
 A foreign key is the SQL language’s way of telling the database:
 
-> Hey database, I want to enforce a 1-M relationship here. Every value in the customer\_id column of the
-> Orders table must correspond to a valid customer\_id in the Customers table.
+> Hey database, I want to enforce a 1-M relationship here. Every value in the customer_id column of the
+> Orders table must correspond to a valid customer_id in the Customers table.
 
 It’s not just a suggestion; it’s a constraint the database actively enforces.
 The database becomes relationship-aware because of the foreign key.
@@ -359,14 +338,14 @@ The database becomes relationship-aware because of the foreign key.
 2\. Maintaining Referential Integrity
 
 - This is the core of “data integrity” in the context of relationships. Referential integrity means
-that relationships between tables remain consistent and valid over time.
+  that relationships between tables remain consistent and valid over time.
 - Foreign keys prevent orphaned records. What’s an orphaned record? In our Customer-Order example,
-an order that exists in the Orders table but doesn’t have a corresponding customer in the Customers
-table would be an orphan. Foreign keys prevent this from happening (or control what happens
-if you try to delete a customer with orders - via CASCADE, SET NULL, etc.).
+  an order that exists in the Orders table but doesn’t have a corresponding customer in the Customers
+  table would be an orphan. Foreign keys prevent this from happening (or control what happens
+  if you try to delete a customer with orders - via CASCADE, SET NULL, etc.).
 - Why is preventing orphans important? Orphaned records break the logical structure of your data.
-If you have an order without a customer, you lose crucial context. Queries become unreliable, reports
-become inaccurate, and your application’s logic can break down.
+  If you have an order without a customer, you lose crucial context. Queries become unreliable, reports
+  become inaccurate, and your application’s logic can break down.
 
 **Example**:
 
@@ -380,9 +359,9 @@ a customer that no longer exists! A foreign key constraint prevents this data in
 
 - Foreign keys are not just about technical enforcement; they are also a crucial part of database design documentation.
 - When you see a foreign key in a database schema, it immediately tells you:
-`Table 'X' is related to Table 'Y' in this way.` It’s a clear visual and structural indicator of relationships.
+  `Table 'X' is related to Table 'Y' in this way.` It’s a clear visual and structural indicator of relationships.
 - This makes databases easier to understand, maintain, and evolve over time. New developers can quickly
-grasp how different parts of the database are connected.
+  grasp how different parts of the database are connected.
 
 In essence, foreign key constraints are not just about checking values; they are about:
 
@@ -399,10 +378,10 @@ These are typically edge cases and often involve trade-offs.
 1\. Performance Overhead in Very High-Write Environments
 
 - **Scenario**: Extremely high-volume transactional systems (e.g., real-time logging, very high-frequency trading
-platforms, massive IoT data ingestion).
+  platforms, massive IoT data ingestion).
 - **Explanation**: Every time you insert or update data in a table with a foreign key, the database system
-needs to perform checks to ensure referential integrity. In extremely high-write scenarios, these
-checks can introduce a small but potentially noticeable performance overhead.
+  needs to perform checks to ensure referential integrity. In extremely high-write scenarios, these
+  checks can introduce a small but potentially noticeable performance overhead.
 
 2\. Distributed Database Systems and Cross-Node Foreign Keys:
 
@@ -429,8 +408,8 @@ relationships for each activity type and the things they relate to, you might us
 Common Scenarios & Examples
 
 - **Comments/Reviews**: A “Comment” might be related to different types of content: articles, products, videos, etc.
-Instead of having separate article\_id, product\_id, video\_id columns in a Comments table, you can use a
-polymorphic relationship.
+  Instead of having separate article_id, product_id, video_id columns in a Comments table, you can use a
+  polymorphic relationship.
 
 ```
 +---------------------+

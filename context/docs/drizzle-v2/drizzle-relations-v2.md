@@ -1,25 +1,3 @@
-[v1.0\\
-\\
-75%](https://rqbv2.drizzle-orm-fe.pages.dev/roadmap)
-
-[Benchmarks](https://rqbv2.drizzle-orm-fe.pages.dev/benchmarks) [Extension](https://driz.link/extension) [Studio](https://rqbv2.drizzle-orm-fe.pages.dev/drizzle-studio/overview) [Studio Package](https://github.com/drizzle-team/drizzle-studio-npm) [Drizzle Run](https://drizzle.run/)
-
-Our goodies!
-
-[![](<Base64-Image-Removed>)![Gel](<Base64-Image-Removed>)](https://driz.link/edgedb)[![](<Base64-Image-Removed>)![Upstash](<Base64-Image-Removed>)](https://driz.link/upstash)
-
-[![](<Base64-Image-Removed>)![Turso](<Base64-Image-Removed>)\\
-\\
-🚀 Drizzle is giving you 10% off Turso Scaler and Pro for 1 Year 🚀](https://driz.link/turso) [![](<Base64-Image-Removed>)![Payload](<Base64-Image-Removed>)](https://driz.link/payload) [![](<Base64-Image-Removed>)![Xata](<Base64-Image-Removed>)](https://driz.link/xataio) [![](<Base64-Image-Removed>)![Neon](<Base64-Image-Removed>)](https://driz.link/neon) [![](<Base64-Image-Removed>)![Nuxt](<Base64-Image-Removed>)](https://hub.nuxt.com/?utm_source=drizzle-docs) [![](<Base64-Image-Removed>)![Hydra](<Base64-Image-Removed>)](https://driz.link/hydraso) [![](<Base64-Image-Removed>)![Deco.cx](<Base64-Image-Removed>)](https://driz.link/decocx) [![](<Base64-Image-Removed>)![Tembo](<Base64-Image-Removed>)](https://driz.link/tembo) [![](<Base64-Image-Removed>)![SQLite Cloud](<Base64-Image-Removed>)](https://driz.link/sqlitecloud) [![](<Base64-Image-Removed>)![SingleStore](<Base64-Image-Removed>)](https://driz.link/singlestore) [![](<Base64-Image-Removed>)![PrAha](<Base64-Image-Removed>)](https://driz.link/praha) [![](<Base64-Image-Removed>)![Lokalise](<Base64-Image-Removed>)](https://driz.link/lokalise) [![](<Base64-Image-Removed>)![Replit](<Base64-Image-Removed>)](https://driz.link/replit) [![](<Base64-Image-Removed>)![Sentry](<Base64-Image-Removed>)](https://driz.link/sentry) [![](<Base64-Image-Removed>)![Mooncake](<Base64-Image-Removed>)](https://driz.link/mooncake) [![](<Base64-Image-Removed>)![Sponsor](<Base64-Image-Removed>)](https://driz.link/sponsor)
-
-Product by Drizzle Team
-
-[One Dollar Stats$1 per mo web analytics\\
-\\
-christmas\\
-\\
-deal](https://driz.link/onedollarstats)
-
 # Drizzle soft relations
 
 This guide assumes familiarity with:
@@ -116,15 +94,15 @@ const relations = defineRelations({ users, posts }, (r) => ({
 - `author` key is a custom key that appears in the `posts` object when using Drizzle relational queries.
 - `r.one.users` defines that `author` will be a single object from the `users` table rather than an array of objects.
 - `from: r.posts.ownerId` specifies the table from which we are establishing a soft relation.
-In this case, the relation starts from the `ownerId` column in the `posts` table.
+  In this case, the relation starts from the `ownerId` column in the `posts` table.
 - `to: r.users.id` specifies the table to which we are establishing a soft relation.
-In this case, the relation points to the `id` column in the `users` table.
+  In this case, the relation points to the `id` column in the `users` table.
 - `optional: false` at the type level makes the `author` key in the posts object `required`.
-This should be used when you are certain that this specific entity will always exist.
+  This should be used when you are certain that this specific entity will always exist.
 - `alias` is used to add a specific alias to relationships between tables. If you have multiple identical relationships between two tables, you should
-differentiate them using `alias`
+  differentiate them using `alias`
 - `where` condition can be used for polymorphic relations. It fetches relations based on a `where` statement.
-For example, in the case above, only `verified authors` will be retrieved. Learn more about polymorphic relations [here](https://rqbv2.drizzle-orm-fe.pages.dev/docs/relations-schema-declaration#polymorphic-relations).
+  For example, in the case above, only `verified authors` will be retrieved. Learn more about polymorphic relations [here](https://rqbv2.drizzle-orm-fe.pages.dev/docs/relations-schema-declaration#polymorphic-relations).
 
 ### `many()`
 
@@ -149,15 +127,15 @@ const relations = defineRelations({ users, posts }, (r) => ({
 - `feed` key is a custom key that appears in the `users` object when using Drizzle relational queries.
 - `r.many.posts` defines that `feed` will be an array of objects from the `posts` table rather than just an object
 - `from: r.users.id` specifies the table from which we are establishing a soft relation.
-In this case, the relation starts from the `id` column in the `users` table.
+  In this case, the relation starts from the `id` column in the `users` table.
 - `to: r.posts.ownerId` specifies the table to which we are establishing a soft relation.
-In this case, the relation points to the `ownerId` column in the `posts` table.
+  In this case, the relation points to the `ownerId` column in the `posts` table.
 - `optional: false` at the type level makes the `feed` key in the posts object `required`.
-This should be used when you are certain that this specific entity will always exist.
+  This should be used when you are certain that this specific entity will always exist.
 - `alias` is used to add a specific alias to relationships between tables. If you have multiple identical relationships between two tables, you should
-differentiate them using `alias`
+  differentiate them using `alias`
 - `where` condition can be used for polymorphic relations. It fetches relations based on a `where` statement.
-For example, in the case above, only `approved posts` will be retrieved. Learn more about polymorphic relations [here](https://rqbv2.drizzle-orm-fe.pages.dev/docs/relations-schema-declaration#polymorphic-relations).
+  For example, in the case above, only `approved posts` will be retrieved. Learn more about polymorphic relations [here](https://rqbv2.drizzle-orm-fe.pages.dev/docs/relations-schema-declaration#polymorphic-relations).
 
 ## \-\-\-
 
@@ -187,7 +165,7 @@ export const relations = defineRelations({ users }, (r) => ({
 }));
 ```
 
-Another example would be a user having a profile information stored in separate table. In this case, because the foreign key is stored in the “profile\_info” table, the user relation have neither fields or references. This tells Typescript that `user.profileInfo` is nullable:
+Another example would be a user having a profile information stored in separate table. In this case, because the foreign key is stored in the “profile_info” table, the user relation have neither fields or references. This tells Typescript that `user.profileInfo` is nullable:
 
 ```
 import { pgTable, serial, text, integer, jsonb } from 'drizzle-orm/pg-core';
@@ -653,10 +631,10 @@ For many-to-many relationships, it is generally recommended to create the follow
 indexes on the junction table:
 
 1. **Index on each foreign key column individually:** This optimizes queries that
-filter or join based on a single side of the relationship
-(e.g., finding all groups for a user OR all users in a group).
+   filter or join based on a single side of the relationship
+   (e.g., finding all groups for a user OR all users in a group).
 2. **Composite index on both foreign key columns together:** This is crucial for
-efficiently resolving the many-to-many relationship itself. It speeds up queries that need to find the connections between both entities.
+   efficiently resolving the many-to-many relationship itself. It speeds up queries that need to find the connections between both entities.
 
 Why it is important
 
