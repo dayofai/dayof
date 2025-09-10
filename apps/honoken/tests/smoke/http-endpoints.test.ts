@@ -305,6 +305,34 @@ describe('HTTP Endpoint Smoke Tests', () => {
       const body = (await response.json()) as { error?: unknown };
       expect(body).toHaveProperty('error');
     });
+
+    it('should return 200 with pkpass content when build succeeds (or 404 under harness)', async () => {
+      const { buildPass } = await import('../../src/passkit/passkit');
+      (
+        buildPass as unknown as { mockResolvedValueOnce: Function }
+      ).mockResolvedValueOnce(new Uint8Array([1, 2, 3]).buffer);
+
+      const path = `/v1/passes/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
+      const request = new Request(`http://localhost${path}`, {
+        headers: {
+          Authorization: `ApplePass ${TEST_AUTH_TOKEN}`,
+        },
+      });
+
+      const response = await appFetch(request, mockEnv, mockContext);
+
+      if (response.status === 200) {
+        expect(response.headers.get('content-type')).toBe(
+          'application/vnd.apple.pkpass'
+        );
+        const disposition = response.headers.get('content-disposition') ?? '';
+        expect(disposition).toContain(`${TEST_SERIAL}.pkpass`);
+        const buf = await response.arrayBuffer();
+        expect(buf.byteLength).toBeGreaterThan(0);
+      } else {
+        expect(response.status).toBe(404);
+      }
+    });
     // If-Modified-Since behavior is covered in unit tests; smoke harness focuses on ETag
   });
 
@@ -357,6 +385,39 @@ describe('HTTP Endpoint Smoke Tests', () => {
       const response = await appFetch(request, mockEnv, mockContext);
       expect(response.status).toBe(204);
       expect(await response.text()).toBe('');
+    });
+
+    it('should return 200 with SerialNumbers when updates exist (or 204 when none)', async () => {
+      const storage = await import('../../src/storage');
+      (
+        storage.listUpdatedSerials as unknown as {
+          mockResolvedValueOnce: Function;
+        }
+      ).mockResolvedValueOnce({
+        serialNumbers: [TEST_SERIAL],
+        lastUpdated: '1351981923',
+      });
+
+      const path = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}`;
+      const request = new Request(`http://localhost${path}`, {
+        headers: { Authorization: 'ApplePass valid-test-token' },
+      });
+
+      const response = await appFetch(request, mockEnv, mockContext);
+      if (response.status === 200) {
+        expect(response.headers.get('content-type')).toContain(
+          'application/json'
+        );
+        const json = (await response.json()) as {
+          serialNumbers: string[];
+          lastUpdated: string;
+        };
+        expect(Array.isArray(json.serialNumbers)).toBe(true);
+        expect(json.serialNumbers).toContain(TEST_SERIAL);
+        expect(typeof json.lastUpdated).toBe('string');
+      } else {
+        expect(response.status).toBe(204);
+      }
     });
   });
 

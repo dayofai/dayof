@@ -217,6 +217,7 @@ describe('PassKit Pass Generation Tests', () => {
 
       await expect(
         buildPass(mockEnv, TEST_PASS_TYPE, TEST_SERIAL, mockLogger)
+        // biome-ignore lint/performance/useTopLevelRegex: needed for test
       ).rejects.toThrow(/Mandatory logo\.png/);
     });
 
@@ -351,6 +352,7 @@ describe('PassKit Pass Generation Tests', () => {
 });
 
 // Helper functions for setting up successful mocks
+// biome-ignore lint/correctness/noUnusedFunctionParameters: testing
 function setupSuccessfulPassMocks(mockEnv: any, mockDbClient: any) {
   mockDbClient.query.passes.findFirst.mockResolvedValueOnce({
     passTypeIdentifier: TEST_PASS_TYPE,
@@ -398,6 +400,7 @@ function setupSuccessfulPassMocks(mockEnv: any, mockDbClient: any) {
   }
 }
 
+// biome-ignore lint/correctness/noUnusedFunctionParameters: testing
 function setupSuccessfulCertMocks(mockEnv: any, mockDbClient: any) {
   mockDbClient.query.certs.findFirst.mockResolvedValueOnce(TEST_CERT_DATA);
 
@@ -405,6 +408,8 @@ function setupSuccessfulCertMocks(mockEnv: any, mockDbClient: any) {
   // No need to manually mock crypto here anymore
 }
 
+// biome-ignore lint/correctness/noUnusedVariables: testing
+// biome-ignore lint/correctness/noUnusedFunctionParameters: testing
 function setupSuccessfulImageMocks(mockEnv: any) {
   // Mock fetch to return valid images for required assets
   (fetch as any).mockImplementation((url: string | URL | Request) => {
@@ -457,13 +462,21 @@ function createValidPngBuffer(width: number, height: number): ArrayBuffer {
   buffer[15] = 0x52;
 
   // Width and height (big-endian)
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
   buffer[16] = (width >> 24) & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
   buffer[17] = (width >> 16) & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
   buffer[18] = (width >> 8) & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
   buffer[19] = width & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
   buffer[20] = (height >> 24) & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
   buffer[21] = (height >> 16) & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
   buffer[22] = (height >> 8) & 0xff;
+  // biome-ignore lint/nursery/noBitwiseOperators: testing
   buffer[23] = height & 0xff;
 
   // Other IHDR fields
