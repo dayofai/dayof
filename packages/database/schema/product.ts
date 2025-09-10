@@ -37,16 +37,11 @@ export const product = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    handleOrgUnique: unique('product_handle_org_unique').on(
-      table.handle,
-      table.orgId
-    ),
-    typeIdIdx: index('product_type_id_idx').on(table.typeId),
-    brandProfileIdIdx: index('product_brand_profile_id_idx').on(
-      table.brandProfileId
-    ),
-  })
+  (t) => [
+    unique('product_handle_org_unique').on(t.handle, t.orgId),
+    index('product_type_id_idx').on(t.typeId),
+    index('product_brand_profile_id_idx').on(t.brandProfileId),
+  ]
 );
 
 export const productVariant = pgTable(
@@ -66,9 +61,7 @@ export const productVariant = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    productIdIdx: index('product_variant_product_id_idx').on(table.productId),
-  })
+  (t) => [index('product_variant_product_id_idx').on(t.productId)]
 );
 
 export const productType = pgTable(
@@ -126,15 +119,10 @@ export const productCategory = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    handleOrgUnique: unique('category_handle_org_unique').on(
-      table.handle,
-      table.orgId
-    ),
-    parentCategoryIdIdx: index('category_parent_category_id_idx').on(
-      table.parentCategoryId
-    ),
-  })
+  (t) => [
+    unique('category_handle_org_unique').on(t.handle, t.orgId),
+    index('category_parent_category_id_idx').on(t.parentCategoryId),
+  ]
 );
 
 // enum moved above to avoid TDZ issues in esbuild
@@ -156,16 +144,14 @@ export const productGroupProduct = pgTable(
       })
       .notNull(),
   }),
-  (table) => ({
-    productIdIdx: index('pcp_product_id_idx').on(table.productId),
-    productGroupIdIdx: index('pcp_product_group_id_idx').on(
-      table.productGroupId
+  (t) => [
+    index('pcp_product_id_idx').on(t.productId),
+    index('pcp_product_group_id_idx').on(t.productGroupId),
+    unique('pcp_product_product_group_unique').on(
+      t.productId,
+      t.productGroupId
     ),
-    productProductGroupUnique: unique('pcp_product_product_group_unique').on(
-      table.productId,
-      table.productGroupId
-    ),
-  })
+  ]
 );
 
 export const productCategoryProduct = pgTable(
@@ -187,15 +173,14 @@ export const productCategoryProduct = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    productIdIdx: index('product_category_product_id_idx').on(table.productId),
-    categoryIdIdx: index('product_category_category_id_idx').on(
-      table.categoryId
+  (t) => [
+    index('product_category_product_id_idx').on(t.productId),
+    index('product_category_category_id_idx').on(t.categoryId),
+    unique('product_category_product_category_unique').on(
+      t.productId,
+      t.categoryId
     ),
-    productCategoryUnique: unique(
-      'product_category_product_category_unique'
-    ).on(table.productId, table.categoryId),
-  })
+  ]
 );
 
 export const productTag = pgTable(
@@ -213,14 +198,11 @@ export const productTag = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    productIdIdx: index('product_tag_product_id_idx').on(table.productId),
-    tagIdIdx: index('product_tag_tag_id_idx').on(table.tagId),
-    productTagUnique: unique('product_tag_product_tag_unique').on(
-      table.productId,
-      table.tagId
-    ),
-  })
+  (t) => [
+    index('product_tag_product_id_idx').on(t.productId),
+    index('product_tag_tag_id_idx').on(t.tagId),
+    unique('product_tag_product_tag_unique').on(t.productId, t.tagId),
+  ]
 );
 
 export const productVariantPriceSet = pgTable(
@@ -237,14 +219,11 @@ export const productVariantPriceSet = pgTable(
       .notNull(),
     ...timeStamps({ softDelete: true }),
   }),
-  (table) => ({
-    variantIdIdx: index('pvps_variant_id_idx').on(table.variantId),
-    priceSetIdIdx: index('pvps_price_set_id_idx').on(table.priceSetId),
-    variantPriceSetUnique: unique('pvps_variant_price_set_unique').on(
-      table.variantId,
-      table.priceSetId
-    ),
-  })
+  (t) => [
+    index('pvps_variant_id_idx').on(t.variantId),
+    index('pvps_price_set_id_idx').on(t.priceSetId),
+    unique('pvps_variant_price_set_unique').on(t.variantId, t.priceSetId),
+  ]
 );
 
 export const productSalesChannel = pgTable(
@@ -266,14 +245,12 @@ export const productSalesChannel = pgTable(
     ...timeStamps({ softDelete: false }),
     ...createdBy(),
   }),
-  (table) => ({
-    productIdIdx: index('psc_product_id_idx').on(table.productId),
-    salesChannelIdIdx: index('psc_sales_channel_id_idx').on(
-      table.salesChannelId
+  (t) => [
+    index('psc_product_id_idx').on(t.productId),
+    index('psc_sales_channel_id_idx').on(t.salesChannelId),
+    unique('psc_product_sales_channel_unique').on(
+      t.productId,
+      t.salesChannelId
     ),
-    productSalesChannelUnique: unique('psc_product_sales_channel_unique').on(
-      table.productId,
-      table.salesChannelId
-    ),
-  })
+  ]
 );

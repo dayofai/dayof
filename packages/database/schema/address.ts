@@ -34,7 +34,5 @@ export const address = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    countryCodeIdx: index('address_country_code_idx').on(table.countryCode),
-  })
+  (t) => [index('address_country_code_idx').on(t.countryCode)]
 );

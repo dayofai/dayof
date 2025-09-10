@@ -35,9 +35,5 @@ export const price = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    priceSetIdIdx: index('price_price_set_id_idx').on(table.priceSetId),
-  })
+  (t) => [index('price_price_set_id_idx').on(t.priceSetId)]
 );
-
-// Relations are defined centrally in relations.ts using Drizzle RQB v2

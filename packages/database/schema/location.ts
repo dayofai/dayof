@@ -38,13 +38,9 @@ export const location = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (t) => ({
-    handleOrgUnique: unique('location_handle_org_unique').on(t.handle, t.orgId),
-    locationParentIdIdx: index('location_location_parent_id_idx').on(
-      t.locationParentId
-    ),
-    locationTypeIdIdx: index('location_location_type_id_idx').on(
-      t.locationTypeId
-    ),
-  })
+  (t) => [
+    unique('location_handle_org_unique').on(t.handle, t.orgId),
+    index('location_location_parent_id_idx').on(t.locationParentId),
+    index('location_location_type_id_idx').on(t.locationTypeId),
+  ]
 );

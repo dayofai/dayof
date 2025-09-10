@@ -132,14 +132,14 @@ export const paymentCollection = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    cartOrOrderCheck: check(
+  (t) => [
+    check(
       'payment_collection_cart_or_order_check',
-      sql`${table.cartId} IS NOT NULL OR ${table.orderId} IS NOT NULL`
+      sql`${t.cartId} IS NOT NULL OR ${t.orderId} IS NOT NULL`
     ),
-    cartIdIdx: index('payment_collection_cart_id_idx').on(table.cartId),
-    orderIdIdx: index('payment_collection_order_id_idx').on(table.orderId),
-  })
+    index('payment_collection_cart_id_idx').on(t.cartId),
+    index('payment_collection_order_id_idx').on(t.orderId),
+  ]
 );
 
 export const paymentIntent = pgTable(
@@ -176,18 +176,12 @@ export const paymentIntent = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    paymentCollectionIdIdx: index(
-      'payment_intent_payment_collection_id_idx'
-    ).on(table.paymentCollectionId),
-    subscriptionIdIdx: index('payment_intent_subscription_id_idx').on(
-      table.subscriptionId
-    ),
-    invoiceIdIdx: index('payment_intent_invoice_id_idx').on(table.invoiceId),
-    paymentProviderIdIdx: index('payment_intent_payment_provider_id_idx').on(
-      table.paymentProviderId
-    ),
-  })
+  (t) => [
+    index('payment_intent_payment_collection_id_idx').on(t.paymentCollectionId),
+    index('payment_intent_subscription_id_idx').on(t.subscriptionId),
+    index('payment_intent_invoice_id_idx').on(t.invoiceId),
+    index('payment_intent_payment_provider_id_idx').on(t.paymentProviderId),
+  ]
 );
 
 // represents a single attempt to capture a payment
@@ -213,11 +207,7 @@ export const paymentAttempt = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    paymentIntentIdIdx: index('payment_attempt_payment_intent_id_idx').on(
-      table.paymentIntentId
-    ),
-  })
+  (t) => [index('payment_attempt_payment_intent_id_idx').on(t.paymentIntentId)]
 );
 
 export const paymentMethod = pgTable(
@@ -251,16 +241,14 @@ export const paymentMethod = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    providerUnique: unique('payment_method_provider_unique').on(
-      table.providerPaymentMethodId,
-      table.providerCustomerId
+  (t) => [
+    unique('payment_method_provider_unique').on(
+      t.providerPaymentMethodId,
+      t.providerCustomerId
     ),
-    paymentProviderIdIdx: index('payment_method_payment_provider_id_idx').on(
-      table.paymentProviderId
-    ),
-    customerIdIdx: index('payment_method_customer_id_idx').on(table.customerId),
-  })
+    index('payment_method_payment_provider_id_idx').on(t.paymentProviderId),
+    index('payment_method_customer_id_idx').on(t.customerId),
+  ]
 );
 
 export const refundReason = pgTable(
@@ -315,24 +303,16 @@ export const refund = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    paymentIntentIdIdx: index('refund_payment_intent_id_idx').on(
-      table.paymentIntentId
+  (t) => [
+    index('refund_payment_intent_id_idx').on(t.paymentIntentId),
+    index('refund_installment_id_idx').on(t.installmentId),
+    index('refund_invoice_id_idx').on(t.invoiceId),
+    index('refund_destination_provider_id_idx').on(t.destinationProviderId),
+    index('refund_destination_payment_method_id_idx').on(
+      t.destinationPaymentMethodId
     ),
-    installmentIdIdx: index('refund_installment_id_idx').on(
-      table.installmentId
-    ),
-    invoiceIdIdx: index('refund_invoice_id_idx').on(table.invoiceId),
-    destinationProviderIdIdx: index('refund_destination_provider_id_idx').on(
-      table.destinationProviderId
-    ),
-    destinationPaymentMethodIdIdx: index(
-      'refund_destination_payment_method_id_idx'
-    ).on(table.destinationPaymentMethodId),
-    refundReasonIdIdx: index('refund_refund_reason_id_idx').on(
-      table.refundReasonId
-    ),
-  })
+    index('refund_refund_reason_id_idx').on(t.refundReasonId),
+  ]
 );
 
 // need to check this against our actual current invoice data for subscriptions!
@@ -364,11 +344,7 @@ export const invoice = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    subscriptionIdIdx: index('invoice_subscription_id_idx').on(
-      table.subscriptionId
-    ),
-  })
+  (t) => [index('invoice_subscription_id_idx').on(t.subscriptionId)]
 );
 
 export const subscriptionTypeEnum = pgEnum('subscription_type_enum', [
@@ -471,18 +447,14 @@ export const subscription = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    idCheck: check(
+  (t) => [
+    check(
       'subscription_id_check',
-      sql`${table.id} SIMILAR TO 'sub_[0-9a-zA-Z]{12}'`
+      sql`${t.id} SIMILAR TO 'sub_[0-9a-zA-Z]{12}'`
     ),
-    paymentCollectionIdIdx: index('subscription_payment_collection_id_idx').on(
-      table.paymentCollectionId
-    ),
-    paymentProviderIdIdx: index('subscription_payment_provider_id_idx').on(
-      table.paymentProviderId
-    ),
-  })
+    index('subscription_payment_collection_id_idx').on(t.paymentCollectionId),
+    index('subscription_payment_provider_id_idx').on(t.paymentProviderId),
+  ]
 );
 
 export const subscriptionSchedulePhase = pgTable(
@@ -517,11 +489,7 @@ export const subscriptionSchedulePhase = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    subscriptionIdIdx: index('ssp_subscription_id_idx').on(
-      table.subscriptionId
-    ),
-  })
+  (t) => [index('ssp_subscription_id_idx').on(t.subscriptionId)]
 );
 
 export const installment = pgTable(
@@ -550,11 +518,9 @@ export const installment = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    subscriptionIdIdx: index('installment_subscription_id_idx').on(
-      table.subscriptionId
-    ),
-    phaseIdIdx: index('installment_phase_id_idx').on(table.phaseId),
-    invoiceIdIdx: index('installment_invoice_id_idx').on(table.invoiceId),
-  })
+  (t) => [
+    index('installment_subscription_id_idx').on(t.subscriptionId),
+    index('installment_phase_id_idx').on(t.phaseId),
+    index('installment_invoice_id_idx').on(t.invoiceId),
+  ]
 );

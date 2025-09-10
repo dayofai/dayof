@@ -18,9 +18,7 @@ export const stockLocation = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    addressIdIdx: index('stock_location_address_id_idx').on(table.addressId),
-  })
+  (t) => [index('stock_location_address_id_idx').on(t.addressId)]
 );
 
 export const salesChannel = pgTable('sales_channel', (t) => ({
@@ -52,16 +50,14 @@ export const salesChannelStockLocation = pgTable(
     ...timeStamps({ softDelete: false }),
     ...createdBy(),
   }),
-  (table) => ({
-    salesChannelIdIdx: index('scsl_sales_channel_id_idx').on(
-      table.salesChannelId
+  (t) => [
+    index('scsl_sales_channel_id_idx').on(t.salesChannelId),
+    index('scsl_location_id_idx').on(t.locationId),
+    unique('scsl_sales_channel_location_unique').on(
+      t.salesChannelId,
+      t.locationId
     ),
-    locationIdIdx: index('scsl_location_id_idx').on(table.locationId),
-    salesChannelLocationUnique: unique('scsl_sales_channel_location_unique').on(
-      table.salesChannelId,
-      table.locationId
-    ),
-  })
+  ]
 );
 
 /** salesChannel */

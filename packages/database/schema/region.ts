@@ -17,9 +17,7 @@ export const region = pgTable(
     metadata: t.jsonb('metadata'),
     ...timeStamps({ softDelete: true }),
   }),
-  (table) => ({
-    currencyCodeIdx: index('region_currency_code_idx').on(table.currencyCode),
-  })
+  (t) => [index('region_currency_code_idx').on(t.currencyCode)]
 );
 
 export const regionCountry = pgTable(
@@ -34,9 +32,7 @@ export const regionCountry = pgTable(
     metadata: t.jsonb('metadata'),
     ...timeStamps({ softDelete: true }),
   }),
-  (table) => ({
-    regionIdIdx: index('region_country_region_id_idx').on(table.regionId),
-  })
+  (t) => [index('region_country_region_id_idx').on(t.regionId)]
 );
 
 // Payment provider dependencies omitted in wallet-only run
@@ -51,12 +47,5 @@ export const regionPaymentProvider = pgTable(
     paymentProviderId: t.text('payment_provider_id').notNull(),
     ...timeStamps({ softDelete: true }),
   }),
-  (table) => ({
-    regionIdIdx: index('region_payment_provider_region_id_idx').on(
-      table.regionId
-    ),
-  })
+  (t) => [index('region_payment_provider_region_id_idx').on(t.regionId)]
 );
-
-/** region */
-// Relations are defined centrally in relations.ts using Drizzle RQB v2

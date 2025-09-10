@@ -62,21 +62,13 @@ export const organizationSettings = pgTable(
     metadata: t.jsonb('metadata'),
     ...timeStamps({ softDelete: true }),
   }),
-  (table) => ({
-    orgSettingsOrgUnique: unique('org_settings_org_unique').on(table.orgId),
-    defaultCurrencyCodeIdx: index('org_settings_default_currency_code_idx').on(
-      table.defaultCurrencyCode
-    ),
-    defaultCountryCodeIdx: index('org_settings_default_country_code_idx').on(
-      table.defaultCountryCode
-    ),
-    defaultTaxRateIdIdx: index('org_settings_default_tax_rate_id_idx').on(
-      table.defaultTaxRateId
-    ),
-    businessAddressIdIdx: index('org_settings_business_address_id_idx').on(
-      table.businessAddressId
-    ),
-  })
+  (t) => [
+    unique('org_settings_org_unique').on(t.orgId),
+    index('org_settings_default_currency_code_idx').on(t.defaultCurrencyCode),
+    index('org_settings_default_country_code_idx').on(t.defaultCountryCode),
+    index('org_settings_default_tax_rate_id_idx').on(t.defaultTaxRateId),
+    index('org_settings_business_address_id_idx').on(t.businessAddressId),
+  ]
 );
 
 // brand profiles for different identities within an organization
@@ -127,15 +119,9 @@ export const brandProfile = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    currencyCodeIdx: index('brand_profile_currency_code_idx').on(
-      table.currencyCode
-    ),
-    countryCodeIdx: index('brand_profile_country_code_idx').on(
-      table.countryCode
-    ),
-    defaultTaxRateIdIdx: index('brand_profile_default_tax_rate_id_idx').on(
-      table.defaultTaxRateId
-    ),
-  })
+  (t) => [
+    index('brand_profile_currency_code_idx').on(t.currencyCode),
+    index('brand_profile_country_code_idx').on(t.countryCode),
+    index('brand_profile_default_tax_rate_id_idx').on(t.defaultTaxRateId),
+  ]
 );

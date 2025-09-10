@@ -85,14 +85,12 @@ export const productVariantTaxRate = pgTable(
     ...timeStamps({ softDelete: true }),
     ...createdBy(),
   }),
-  (table) => ({
-    taxRateProductVariantUnique: unique().on(
-      table.taxRateId,
-      table.productVariantId
+  (t) => [
+    unique('pvtr_tax_rate_product_variant_unique').on(
+      t.taxRateId,
+      t.productVariantId
     ),
-    taxRateIdIdx: index('pvtr_tax_rate_id_idx').on(table.taxRateId),
-    productVariantIdIdx: index('pvtr_product_variant_id_idx').on(
-      table.productVariantId
-    ),
-  })
+    index('pvtr_tax_rate_id_idx').on(t.taxRateId),
+    index('pvtr_product_variant_id_idx').on(t.productVariantId),
+  ]
 );
