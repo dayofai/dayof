@@ -308,8 +308,12 @@ describe('HTTP Endpoint Smoke Tests', () => {
 
     it('should return 200 with pkpass content when build succeeds (or 404 under harness)', async () => {
       const { buildPass } = await import('../../src/passkit/passkit');
+
       (
-        buildPass as unknown as { mockResolvedValueOnce: Function }
+        buildPass as unknown as {
+          // biome-ignore lint/complexity/noBannedTypes: testing
+          mockResolvedValueOnce: Function;
+        }
       ).mockResolvedValueOnce(new Uint8Array([1, 2, 3]).buffer);
 
       const path = `/v1/passes/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
@@ -391,6 +395,7 @@ describe('HTTP Endpoint Smoke Tests', () => {
       const storage = await import('../../src/storage');
       (
         storage.listUpdatedSerials as unknown as {
+          // biome-ignore lint/complexity/noBannedTypes: testing
           mockResolvedValueOnce: Function;
         }
       ).mockResolvedValueOnce({
@@ -509,6 +514,25 @@ describe('HTTP Endpoint Smoke Tests', () => {
       const response = await appFetch(request, mockEnv, mockContext);
 
       expect(response.status).toBe(401); // Should reject non-ApplePass format
+      expect(response.headers.get('content-type')).toContain(
+        'application/json'
+      );
+    });
+
+    it('should enforce case-sensitive "ApplePass " authorization prefix', async () => {
+      const registrationPath = `/v1/devices/${TEST_DEVICE_ID}/registrations/${TEST_PASS_TYPE}/${TEST_SERIAL}`;
+
+      const request = new Request(`http://localhost${registrationPath}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `applepass ${TEST_AUTH_TOKEN}`, // wrong case
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pushToken: TEST_PUSH_TOKEN }),
+      });
+
+      const response = await appFetch(request, mockEnv, mockContext);
+      expect(response.status).toBe(401);
       expect(response.headers.get('content-type')).toContain(
         'application/json'
       );
