@@ -3,6 +3,43 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+// Define root directory first
+const rootDirectory = resolve(process.cwd());
+function loadEnvFromFile(path: string): void {
+  if (!existsSync(path)) return;
+  try {
+    const content = readFileSync(path, 'utf8');
+    const lines = content.split(/\r?\n/);
+    for (const line of lines) {
+      const match = line.match(/^([^=]+)=(.*)$/);
+      if (match && !process.env[match[1]]) {
+        // Remove quotes if present
+        let value = match[2];
+        if (
+          (value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))
+        ) {
+          value = value.slice(1, -1);
+        }
+        process.env[match[1]] = value;
+      }
+    }
+  } catch {
+    // Ignore errors
+  }
+}
+
+// Try to load from multiple locations
+const envPaths = [
+  '.env.local',
+  '.env',
+  'apps/auth/.env.local',
+  'apps/events/.env.local',
+];
+for (const envPath of envPaths) {
+  loadEnvFromFile(resolve(rootDirectory, envPath));
+}
+
 type VercelProjectsConfig = {
   team: string;
   apps: Record<string, string>;
@@ -28,7 +65,36 @@ type NeonEndpoint = {
 const TTL_REGEX = /^([0-9]+)\s*([smhd])$/i;
 const NEWLINE_REGEX = /\r?\n/;
 
-const rootDirectory = resolve(process.cwd());
+function checkNeonCredentials(): { apiKey: string; projectId: string } {
+  const neon = readNeonCfg();
+  const apiKey = process.env.NEON_API_KEY ?? neon.NEON_API_KEY;
+  const projectId = process.env.NEON_PROJECT_ID ?? neon.NEON_PROJECT_ID;
+
+  if (!(apiKey && projectId)) {
+    console.error('Missing NEON_API_KEY / NEON_PROJECT_ID.');
+    console.error('\nSearched in:');
+    console.error('  - Environment variables');
+    console.error('  - ~/.config/dayof/neon.json');
+    for (const envPath of envPaths) {
+      const fullPath = resolve(rootDirectory, envPath);
+      console.error(
+        `  - ${fullPath} ${existsSync(fullPath) ? '(found)' : '(not found)'}`
+      );
+    }
+    console.error('\nTo fix this:');
+    console.error(
+      '1. Run: bun env:pull:dev  (recommended - pulls from Vercel)'
+    );
+    console.error('2. Or run: bun secrets:neon  (saves locally only)');
+    console.error(
+      '\nNote: The script automatically checks multiple .env.local files.'
+    );
+    console.error('No manual copying needed!');
+    process.exit(1);
+  }
+
+  return { apiKey, projectId };
+}
 const cfgPath = resolve(rootDirectory, 'scripts', 'vercel-projects.json');
 const projectsCfg = JSON.parse(
   readFileSync(cfgPath, 'utf8')
@@ -199,6 +265,7 @@ async function waitForEndpointReady(
   timeoutMs = 120_000
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  const startTime = Date.now();
   // CLI UX
   console.log('→ Waiting for endpoint to become active...');
 
@@ -207,13 +274,33 @@ async function waitForEndpointReady(
       `/projects/${projectId}/endpoints/${endpointId}`,
       { method: 'GET', apiKey }
     );
-    const state = (data.endpoint.state ?? '').toLowerCase();
+
+    // Check both possible state fields
+    const state = (
+      data.endpoint.current_state ??
+      data.endpoint.state ??
+      ''
+    ).toLowerCase();
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+
+    // Log progress every 10 seconds
+    if (elapsed > 0 && elapsed % 10 === 0) {
+      console.log(
+        `  Still waiting... (${elapsed}s elapsed, current state: ${state || 'unknown'})`
+      );
+    }
+
     if (state === 'active' || state === 'idle') {
+      console.log(`✓ Endpoint active after ${elapsed}s`);
       return;
     }
+
     if (Date.now() >= deadline) {
-      throw new Error('Timed out waiting for endpoint to become active');
+      throw new Error(
+        `Timed out waiting for endpoint to become active (state: ${state})`
+      );
     }
+
     await sleep(2000);
     await poll();
   }
@@ -302,15 +389,7 @@ async function doCreate(): Promise<void> {
     }
   }
 
-  const neon = readNeonCfg();
-  const apiKey = process.env.NEON_API_KEY ?? neon.NEON_API_KEY;
-  const projectId = process.env.NEON_PROJECT_ID ?? neon.NEON_PROJECT_ID;
-  if (!(apiKey && projectId)) {
-    console.error(
-      'Missing NEON_API_KEY / NEON_PROJECT_ID. Run: bun secrets:neon:vercel && bun env:pull:dev'
-    );
-    process.exit(1);
-  }
+  const { apiKey, projectId } = checkNeonCredentials();
 
   const branches = await getBranches(projectId, apiKey);
   const parent = findDefaultParentBranch(branches);
@@ -339,7 +418,25 @@ async function doCreate(): Promise<void> {
   );
   await waitForEndpointReady(projectId, apiKey, endpoint.id);
 
-  const uri = await getConnectionUri(projectId, apiKey, newBranch.id);
+  // Construct connection URI from endpoint details
+  console.log('→ Constructing connection URI...');
+  let uri: string;
+
+  // Try to get password from existing DATABASE_URL
+  const existingUrl =
+    process.env.DATABASE_URL ||
+    readFileSync('.env.local', 'utf8').match(/DATABASE_URL="([^"]+)"/)?.[1];
+  const password = existingUrl?.match(/\/\/[^:]+:([^@]+)@/)?.[1];
+
+  if (password && endpoint.host) {
+    uri = `postgresql://neondb_owner:${password}@${endpoint.host}/neondb?sslmode=require`;
+    console.log('✓ Connection URI ready');
+  } else {
+    throw new Error(
+      'Unable to construct connection URI - missing password or endpoint host'
+    );
+  }
+
   writeTempUrlToEnvFiles(uri);
 
   // CLI UX
@@ -364,15 +461,7 @@ async function doDelete(): Promise<void> {
     process.exit(1);
   }
 
-  const neon = readNeonCfg();
-  const apiKey = process.env.NEON_API_KEY ?? neon.NEON_API_KEY;
-  const projectId = process.env.NEON_PROJECT_ID ?? neon.NEON_PROJECT_ID;
-  if (!(apiKey && projectId)) {
-    console.error(
-      'Missing NEON_API_KEY / NEON_PROJECT_ID. Run: bun secrets:neon:vercel && bun env:pull:dev'
-    );
-    process.exit(1);
-  }
+  const { apiKey, projectId } = checkNeonCredentials();
 
   const branches = await getBranches(projectId, apiKey);
   const target = branches.find((b) => b.name === name);
