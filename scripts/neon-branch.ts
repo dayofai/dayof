@@ -1,12 +1,20 @@
 #!/usr/bin/env bun
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { resolve } from 'node:path';
 
 // Define root directory first
 const rootDirectory = resolve(process.cwd());
 function loadEnvFromFile(path: string): void {
-  if (!existsSync(path)) return;
+  if (!existsSync(path)) {
+    return;
+  }
   try {
     const content = readFileSync(path, 'utf8');
     const lines = content.split(/\r?\n/);
@@ -359,6 +367,32 @@ function writeTempUrlToEnvFiles(tempUrl: string): void {
   upsertEnvVar(dbEnvPath, 'TEMP_BRANCH_DATABASE_URL', tempUrl);
 }
 
+function removeTempUrlFromEnvFile(filePath: string): void {
+  if (!existsSync(filePath)) {
+    return;
+  }
+
+  try {
+    const content = readFileSync(filePath, 'utf8');
+    const lines = content.split(NEWLINE_REGEX);
+    const filtered = lines.filter(
+      (l) => !l.startsWith('TEMP_BRANCH_DATABASE_URL=')
+    );
+
+    // Only write back if we actually removed something
+    if (filtered.length < lines.length) {
+      const newContent = filtered.join('\n');
+      writeFileSync(
+        filePath,
+        newContent.endsWith('\n') ? newContent : `${newContent}\n`,
+        'utf8'
+      );
+    }
+  } catch {
+    // Ignore errors
+  }
+}
+
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: needed complexity
 async function doCreate(): Promise<void> {
   const args = process.argv.slice(2);
@@ -450,8 +484,13 @@ async function doCreate(): Promise<void> {
 
   writeTempUrlToEnvFiles(uri);
 
+  // Save the branch name for easy deletion later
+  const lastBranchFile = resolve(rootDirectory, '.neon-last-branch');
+  writeFileSync(lastBranchFile, branchName, 'utf8');
+
   // CLI UX
   console.log('✓ Ephemeral branch ready');
+  console.log('✓ Branch name saved to .neon-last-branch for easy deletion');
   // CLI UX
   console.log(`TEMP_BRANCH_DATABASE_URL=${uri}`);
 }
@@ -473,11 +512,34 @@ async function doDelete(): Promise<void> {
   }
 
   if (!name) {
-    name = getCurrentGitBranch();
+    // Check for last created branch first
+    const lastBranchFile = resolve(rootDirectory, '.neon-last-branch');
+    if (existsSync(lastBranchFile)) {
+      try {
+        const lastBranch = readFileSync(lastBranchFile, 'utf8').trim();
+        if (lastBranch) {
+          name = lastBranch;
+          console.log(`→ Using last created branch: ${name}`);
+        }
+      } catch {
+        // Ignore read errors
+      }
+    }
   }
+
+  if (!name) {
+    name = getCurrentGitBranch();
+    if (name) {
+      console.log(`→ Using current git branch: ${name}`);
+    }
+  }
+
   if (!name) {
     console.error(
       'Provide a branch name: bun db:branch:delete <branch-name> or --name <branch-name>'
+    );
+    console.error(
+      'No last branch found in .neon-last-branch and no git branch detected.'
     );
     process.exit(1);
   }
@@ -535,6 +597,35 @@ async function doDelete(): Promise<void> {
 
   // CLI UX
   console.log('✓ Branch deleted');
+
+  // Remove TEMP_BRANCH_DATABASE_URL from all .env.local files
+  console.log('→ Cleaning up temporary database URLs...');
+  for (const dir of Object.keys(projectsCfg.apps)) {
+    const envPath = resolve(rootDirectory, 'apps', dir, '.env.local');
+    removeTempUrlFromEnvFile(envPath);
+  }
+  const dbEnvPath = resolve(
+    rootDirectory,
+    'packages',
+    'database',
+    '.env.local'
+  );
+  removeTempUrlFromEnvFile(dbEnvPath);
+  console.log('✓ Removed temporary database URLs from .env.local files');
+
+  // Clean up the last branch file if we deleted that branch
+  const lastBranchFile = resolve(rootDirectory, '.neon-last-branch');
+  if (existsSync(lastBranchFile)) {
+    try {
+      const lastBranch = readFileSync(lastBranchFile, 'utf8').trim();
+      if (lastBranch === name) {
+        unlinkSync(lastBranchFile);
+        console.log('✓ Cleared saved branch name');
+      }
+    } catch {
+      // Ignore errors
+    }
+  }
 }
 
 async function main(): Promise<void> {
@@ -550,10 +641,15 @@ async function main(): Promise<void> {
     console.log('  bun db:branch:new --name <branch-name> --ttl <ttl>');
     console.log('  bun db:branch:delete <branch-name>');
     console.log('  bun db:branch:delete --name <branch-name>');
+    console.log('  bun db:branch:delete  (deletes last created branch)');
     console.log('\nExamples:');
     console.log('  bun db:branch:new feature-xyz 2h');
     console.log('  bun db:branch:new --ttl 30m');
+    console.log('  bun db:branch:delete  (deletes last created branch)');
     console.log('  bun db:branch:delete feature-xyz');
+    console.log(
+      '\nNote: Branch names are saved to .neon-last-branch for easy deletion'
+    );
     process.exit(1);
   }
 }
