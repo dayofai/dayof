@@ -27,6 +27,7 @@
     "env:pull:preview": "bun scripts/vercel-env-pull.ts preview",
     "env:pull:prod": "bun scripts/vercel-env-pull.ts production",
     "secrets:neon": "bun scripts/neon-setup-local.ts",
+    "secrets:neon:vercel": "bun scripts/setup-neon-vercel.ts",
     "vc:env:add": "bun scripts/vc-env-add.ts",
     "db:branch:new": "bun scripts/neon-branch.ts create",
     "db:branch:delete": "bun scripts/neon-branch.ts delete"

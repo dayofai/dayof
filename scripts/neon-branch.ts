@@ -256,6 +256,7 @@ function writeTempUrlToEnvFiles(tempUrl: string): void {
   upsertEnvVar(dbEnvPath, 'TEMP_BRANCH_DATABASE_URL', tempUrl);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: needed complexity
 async function doCreate(): Promise<void> {
   const args = process.argv.slice(2);
   let branchName: string | undefined;
@@ -269,7 +270,20 @@ async function doCreate(): Promise<void> {
     }
   }
   if (!branchName) {
-    branchName = getCurrentGitBranch() ?? `dev-${Date.now()}`;
+    const gitBranch = getCurrentGitBranch();
+    const username = process.env.USER || process.env.USERNAME || 'dev';
+    const timestamp = new Date()
+      .toISOString()
+      .slice(0, 16)
+      .replace(/[:\-T]/g, '');
+
+    if (gitBranch) {
+      // Include username and timestamp with git branch to avoid collisions
+      branchName = `${username}-${gitBranch}-${timestamp}`;
+    } else {
+      // No git branch, just use username and timestamp
+      branchName = `${username}-${timestamp}`;
+    }
   }
 
   const neon = readNeonCfg();
@@ -277,7 +291,7 @@ async function doCreate(): Promise<void> {
   const projectId = process.env.NEON_PROJECT_ID ?? neon.NEON_PROJECT_ID;
   if (!(apiKey && projectId)) {
     console.error(
-      'Missing NEON_API_KEY / NEON_PROJECT_ID. Run: bun secrets:neon'
+      'Missing NEON_API_KEY / NEON_PROJECT_ID. Run: bun secrets:neon:vercel && bun env:pull:dev'
     );
     process.exit(1);
   }
@@ -290,7 +304,9 @@ async function doCreate(): Promise<void> {
 
   const expiresAtIso = new Date(Date.now() + parseTtl(ttl)).toISOString();
   // CLI UX
-  console.log(`→ Creating branch '${branchName}' (parent ${parent.name})`);
+  console.log(
+    `→ Creating branch '${branchName}' (parent ${parent.name}, expires in ${ttl})`
+  );
   const newBranch = await createBranch(
     projectId,
     apiKey,
@@ -338,7 +354,7 @@ async function doDelete(): Promise<void> {
   const projectId = process.env.NEON_PROJECT_ID ?? neon.NEON_PROJECT_ID;
   if (!(apiKey && projectId)) {
     console.error(
-      'Missing NEON_API_KEY / NEON_PROJECT_ID. Run: bun secrets:neon'
+      'Missing NEON_API_KEY / NEON_PROJECT_ID. Run: bun secrets:neon:vercel && bun env:pull:dev'
     );
     process.exit(1);
   }
