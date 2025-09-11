@@ -1,8 +1,8 @@
 import { defineRelations } from 'drizzle-orm';
-// import { address } from './address';
-// import { organization } from './better-auth';
-// import { currency } from './currency';
-// import { location, locationType } from './location';
+import { address } from './address';
+import { organization } from './better-auth';
+import { currency } from './currency';
+import { location, locationType } from './location';
 // import { brandProfile, organizationSettings } from './organization';
 // import { price, priceSet } from './pricing';
 // import {
@@ -17,7 +17,7 @@ import { defineRelations } from 'drizzle-orm';
 //   productVariant,
 //   productVariantPriceSet,
 // } from './product';
-// import { region, regionCountry, regionPaymentProvider } from './region';
+import { region, regionCountry } from './region';
 // import {
 //   salesChannel,
 //   salesChannelStockLocation,
@@ -45,9 +45,8 @@ const schemaTables = {
   walletCert,
   walletApnsKey,
   // region
-  // region,
-  // regionCountry,
-  // regionPaymentProvider,
+  region,
+  regionCountry,
   // pricing
   // priceSet,
   // price,
@@ -72,15 +71,15 @@ const schemaTables = {
   // taxRate,
   // productVariantTaxRate,
   // location & address
-  // locationType,
-  // location,
-  // address,
+  locationType,
+  location,
+  address,
   // org & brand
   // organizationSettings,
   // brandProfile,
-  // organization,
+  organization,
   // currency
-  // currency,
+  currency,
 } as const;
 
 export const relations = defineRelations(schemaTables, (r) => ({
@@ -149,41 +148,34 @@ export const relations = defineRelations(schemaTables, (r) => ({
   },
 
   // Region
-  // region: {
-  //   countries: r.many.regionCountry({
-  //     from: r.region.id,
-  //     to: r.regionCountry.regionId,
-  //   }),
-  //   paymentProviders: r.many.regionPaymentProvider({
-  //     from: r.region.id,
-  //     to: r.regionPaymentProvider.regionId,
-  //   }),
-  // },
-  // regionCountry: {
-  //   region: r.one.region({
-  //     from: r.regionCountry.regionId,
-  //     to: r.region.id,
-  //   }),
-  //   addresses: r.many.address({
-  //     from: r.regionCountry.iso2,
-  //     to: r.address.countryCode,
-  //   }),
-  //   brandProfiles: r.many.brandProfile({
-  //     from: r.regionCountry.iso2,
-  //     to: r.brandProfile.countryCode,
-  //   }),
-  //   orgSettings: r.many.organizationSettings({
-  //     from: r.regionCountry.iso2,
-  //     to: r.organizationSettings.defaultCountryCode,
-  //   }),
-  // },
-  // regionPaymentProvider: {
-  //   region: r.one.region({
-  //     from: r.regionPaymentProvider.regionId,
-  //     to: r.region.id,
-  //   }),
-  //   // payment provider relation omitted
-  // },
+  region: {
+    countries: r.many.regionCountry({
+      from: r.region.id,
+      to: r.regionCountry.regionId,
+    }),
+    // paymentProviders: r.many.regionPaymentProvider({
+    //   from: r.region.id,
+    //   to: r.regionPaymentProvider.regionId,
+    // }),
+  },
+  regionCountry: {
+    region: r.one.region({
+      from: r.regionCountry.regionId,
+      to: r.region.id,
+    }),
+    addresses: r.many.address({
+      from: r.regionCountry.iso2,
+      to: r.address.countryCode,
+    }),
+    // brandProfiles: r.many.brandProfile({
+    //   from: r.regionCountry.iso2,
+    //   to: r.brandProfile.countryCode,
+    // }),
+    // orgSettings: r.many.organizationSettings({
+    //   from: r.regionCountry.iso2,
+    //   to: r.organizationSettings.defaultCountryCode,
+    // }),
+  },
 
   // Pricing
   // priceSet: {
@@ -382,32 +374,32 @@ export const relations = defineRelations(schemaTables, (r) => ({
   // },
 
   // Location & Address
-  // locationType: {
-  //   locations: r.many.location({
-  //     from: r.locationType.id,
-  //     to: r.location.locationTypeId,
-  //   }),
-  // },
-  // location: {
-  //   type: r.one.locationType({
-  //     from: r.location.locationTypeId,
-  //     to: r.locationType.id,
-  //   }),
-  //   parent: r.one.location({
-  //     from: r.location.locationParentId,
-  //     to: r.location.id,
-  //   }),
-  //   children: r.many.location({
-  //     from: r.location.id,
-  //     to: r.location.locationParentId,
-  //   }),
-  // },
-  // address: {
-  //   country: r.one.regionCountry({
-  //     from: r.address.countryCode,
-  //     to: r.regionCountry.iso2,
-  //   }),
-  // },
+  locationType: {
+    locations: r.many.location({
+      from: r.locationType.id,
+      to: r.location.locationTypeId,
+    }),
+  },
+  location: {
+    type: r.one.locationType({
+      from: r.location.locationTypeId,
+      to: r.locationType.id,
+    }),
+    parent: r.one.location({
+      from: r.location.locationParentId,
+      to: r.location.id,
+    }),
+    children: r.many.location({
+      from: r.location.id,
+      to: r.location.locationParentId,
+    }),
+  },
+  address: {
+    country: r.one.regionCountry({
+      from: r.address.countryCode,
+      to: r.regionCountry.iso2,
+    }),
+  },
 
   // Organization & Brand
   // organizationSettings: {

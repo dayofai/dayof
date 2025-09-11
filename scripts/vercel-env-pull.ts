@@ -198,6 +198,21 @@ if (sourceApp && cfg.apps[sourceApp]) {
     if (!(rootHasTemp || rootHasDb)) {
       upsertEnvVar(rootEnvPath, 'DATABASE_URL', sharedUrl);
     }
+    // Ensure packages/database/.env.local has DATABASE_URL if neither exist
+    const dbEnvPath = resolve(
+      rootDirectory,
+      'packages',
+      'database',
+      '.env.local'
+    );
+    const dbHasTemp = !!readEnvVarFromFile(
+      dbEnvPath,
+      'TEMP_BRANCH_DATABASE_URL'
+    );
+    const dbHasDb = !!readEnvVarFromFile(dbEnvPath, 'DATABASE_URL');
+    if (!(dbHasTemp || dbHasDb)) {
+      upsertEnvVar(dbEnvPath, 'DATABASE_URL', sharedUrl);
+    }
   }
 }
 console.log('✓ Done');
