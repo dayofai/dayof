@@ -157,11 +157,27 @@ async function createBranch(
   }
 }
 
-async function createReadWriteEndpoint(
+async function getOrCreateReadWriteEndpoint(
   projectId: string,
   apiKey: string,
   branchId: string
 ): Promise<NeonEndpoint> {
+  // Check for existing endpoints on this branch
+  const existing = await neonRequest<{ endpoints: NeonEndpoint[] }>(
+    `/projects/${projectId}/endpoints?branch_id=${encodeURIComponent(branchId)}`,
+    { method: 'GET', apiKey }
+  );
+
+  const existingEndpoint = existing.endpoints?.find(
+    (ep) => ep.branch_id === branchId && ep.type === 'read_write'
+  );
+
+  if (existingEndpoint) {
+    console.log('→ Using existing read-write endpoint');
+    return existingEndpoint;
+  }
+
+  // Create new endpoint
   const payload = { endpoint: { type: 'read_write', branch_id: branchId } };
   const created = await neonRequest<{ endpoint: NeonEndpoint }>(
     `/projects/${projectId}/endpoints`,
@@ -315,9 +331,8 @@ async function doCreate(): Promise<void> {
     expiresAtIso
   );
 
-  // CLI UX
-  console.log('→ Creating read-write endpoint');
-  const endpoint = await createReadWriteEndpoint(
+  // Get or create endpoint
+  const endpoint = await getOrCreateReadWriteEndpoint(
     projectId,
     apiKey,
     newBranch.id
@@ -366,20 +381,39 @@ async function doDelete(): Promise<void> {
     process.exit(1);
   }
 
+  // Prevent accidental deletion of important branches
+  const protectedBranches = ['main', 'production', 'master'];
+  if (protectedBranches.includes(target.name.toLowerCase())) {
+    console.error(`❌ Cannot delete protected branch '${target.name}'`);
+    console.error('Protected branches:', protectedBranches.join(', '));
+    process.exit(1);
+  }
+
   // Delete endpoints on this branch
   const eps = await neonRequest<{ endpoints: NeonEndpoint[] }>(
     `/projects/${projectId}/endpoints?branch_id=${encodeURIComponent(target.id)}`,
     { method: 'GET', apiKey }
   );
-  await Promise.all(
-    (eps.endpoints ?? []).map(async (ep) => {
-      console.log(`→ Deleting endpoint ${ep.id}`);
-      await neonRequest(`/projects/${projectId}/endpoints/${ep.id}`, {
-        method: 'DELETE',
-        apiKey,
-      });
-    })
+
+  // Double-check that endpoints actually belong to this branch
+  const endpointsToDelete = (eps.endpoints ?? []).filter(
+    (ep) => ep.branch_id === target.id
   );
+
+  if (endpointsToDelete.length === 0) {
+    console.log('→ No endpoints found for this branch');
+  } else {
+    console.log(`→ Found ${endpointsToDelete.length} endpoint(s) to delete`);
+    await Promise.all(
+      endpointsToDelete.map(async (ep) => {
+        console.log(`  → Deleting endpoint ${ep.id}`);
+        await neonRequest(`/projects/${projectId}/endpoints/${ep.id}`, {
+          method: 'DELETE',
+          apiKey,
+        });
+      })
+    );
+  }
 
   // Delete branch
   // CLI UX
