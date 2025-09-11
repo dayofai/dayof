@@ -1,0 +1,11 @@
+{
+  "team": "dayof",
+  "apps": {
+    "auth": "auth",
+    "backstage": "backstage",
+    "frontrow": "frontrow",
+    "events": "events",
+    "honoken": "honoken"
+  },
+  "sourceProjectForCli": "events"
+}
