@@ -364,6 +364,17 @@ async function doCreate(): Promise<void> {
   const args = process.argv.slice(2);
   let branchName: string | undefined;
   let ttl = '12h';
+
+  // Check for positional argument first (e.g., "create branch-name")
+  if (args[1] && !args[1].startsWith('--')) {
+    branchName = args[1];
+    // Check if there's a TTL after the branch name
+    if (args[2] && !args[2].startsWith('--')) {
+      ttl = args[2];
+    }
+  }
+
+  // Then check for named arguments
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--name' && args[i + 1]) {
@@ -448,16 +459,26 @@ async function doCreate(): Promise<void> {
 async function doDelete(): Promise<void> {
   const args = process.argv.slice(2);
   let name: string | undefined;
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--name' && args[i + 1]) {
-      name = args[++i];
+
+  // Check for positional argument first (e.g., "delete branch-name")
+  if (args[1] && !args[1].startsWith('--')) {
+    name = args[1];
+  } else {
+    // Otherwise look for --name flag
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--name' && args[i + 1]) {
+        name = args[++i];
+      }
     }
   }
+
   if (!name) {
     name = getCurrentGitBranch();
   }
   if (!name) {
-    console.error('Provide a branch name via --name');
+    console.error(
+      'Provide a branch name: bun db:branch:delete <branch-name> or --name <branch-name>'
+    );
     process.exit(1);
   }
 
@@ -524,9 +545,15 @@ async function main(): Promise<void> {
     await doDelete();
   } else {
     // CLI UX
-    console.log(
-      'Usage: bun scripts/neon-branch.ts <create|delete> [--name NAME] [--ttl 12h]'
-    );
+    console.log('Usage:');
+    console.log('  bun db:branch:new [branch-name] [ttl]');
+    console.log('  bun db:branch:new --name <branch-name> --ttl <ttl>');
+    console.log('  bun db:branch:delete <branch-name>');
+    console.log('  bun db:branch:delete --name <branch-name>');
+    console.log('\nExamples:');
+    console.log('  bun db:branch:new feature-xyz 2h');
+    console.log('  bun db:branch:new --ttl 30m');
+    console.log('  bun db:branch:delete feature-xyz');
     process.exit(1);
   }
 }

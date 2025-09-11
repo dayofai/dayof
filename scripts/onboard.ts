@@ -51,7 +51,7 @@ function isLoggedIn(): boolean {
 }
 
 if (!hasVercel()) {
-  console.error('Vercel CLI not found. Install it first: bun i -g vercel');
+  console.error('Vercel CLI not found. Install it first: bun add -g vercel');
   process.exit(1);
 }
 
@@ -89,8 +89,10 @@ for (const [relativeDir, projectName] of entries) {
 console.log('→ Pulling Development envs across apps');
 run('bun', ['scripts/vercel-env-pull.ts', 'development']);
 
-// 4) Ensure local Neon secrets exist, prompting as needed
-console.log('→ Ensuring local Neon secrets (~/.config/dayof/neon.json)');
-run('bun', ['scripts/neon-setup-local.ts']);
-
 console.log('✓ Onboarding complete.');
+console.log(
+  '\nNote: NEON_API_KEY and NEON_PROJECT_ID have been pulled from Vercel.'
+);
+console.log(
+  'The neon-branch.ts script will automatically use these from .env.local files.'
+);

@@ -28,7 +28,7 @@ if (!NAME || VALUE === undefined) {
 
 function add(appDir: string): void {
   // Use bash with -lc to safely handle piping and quoting
-  const cmd = `printf %s "${VALUE.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}" | vercel env add ${NAME} ${ENV} --yes --cwd "${appDir}" --scope ${TEAM}`;
+  const cmd = `printf %s "${VALUE.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}" | vercel env add ${NAME} ${ENV} --cwd "${appDir}" --scope ${TEAM}`;
   const r = spawnSync('bash', ['-lc', cmd], { stdio: 'inherit' });
   if ((r.status ?? 0) !== 0) {
     throw new Error(`env add failed in ${appDir}`);

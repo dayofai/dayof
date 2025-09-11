@@ -50,7 +50,7 @@ function addEnvVar(name: string, value: string, env = 'development'): void {
     console.log(`  → ${projectName}`);
 
     // Use printf to safely handle the value
-    const cmd = `printf %s "${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}" | vercel env add ${name} ${env} --yes --cwd "${appDir}" --scope ${TEAM}`;
+    const cmd = `printf %s "${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}" | vercel env add ${name} ${env} --cwd "${appDir}" --scope ${TEAM}`;
     const r = spawnSync('bash', ['-c', cmd], { stdio: 'inherit' });
     if ((r.status ?? 0) !== 0) {
       console.error(`  ✗ Failed to add to ${projectName}`);
