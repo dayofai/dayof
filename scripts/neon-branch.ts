@@ -17,9 +17,9 @@ function loadEnvFromFile(path: string): void {
   }
   try {
     const content = readFileSync(path, 'utf8');
-    const lines = content.split(/\r?\n/);
+    const lines = content.split(NEWLINE_REGEX);
     for (const line of lines) {
-      const match = line.match(/^([^=]+)=(.*)$/);
+      const match = line.match(ENV_KV_REGEX);
       if (match && !process.env[match[1]]) {
         // Remove quotes if present
         let value = match[2];
@@ -51,6 +51,7 @@ for (const envPath of envPaths) {
 type VercelProjectsConfig = {
   team: string;
   apps: Record<string, string>;
+  sourceProjectForCli?: string;
 };
 
 type NeonCfg = { NEON_API_KEY: string; NEON_PROJECT_ID: string };
@@ -68,10 +69,44 @@ type NeonEndpoint = {
   branch_id: string;
   type: 'read_only' | 'read_write';
   state?: string;
+  current_state?: string;
 };
 
 const TTL_REGEX = /^([0-9]+)\s*([smhd])$/i;
 const NEWLINE_REGEX = /\r?\n/;
+const ENV_KV_REGEX = /^([^=]+)=(.*)$/;
+const DATABASE_URL_QUOTED_REGEX = /DATABASE_URL="([^"]+)"/;
+const PASSWORD_FROM_URL_REGEX = /\/\/[^:]+:([^@]+)@/;
+
+function readEnvVarFromFile(
+  filePath: string,
+  name: string
+): string | undefined {
+  if (!existsSync(filePath)) {
+    return;
+  }
+  try {
+    const content = readFileSync(filePath, 'utf8');
+    const lines = content.split(NEWLINE_REGEX);
+    for (const line of lines) {
+      if (!line.startsWith(`${name}=`)) {
+        continue;
+      }
+      const raw = line.slice(name.length + 1);
+      let value = raw;
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      return value;
+    }
+    return;
+  } catch {
+    return;
+  }
+}
 
 function checkNeonCredentials(): { apiKey: string; projectId: string } {
   const neon = readNeonCfg();
@@ -316,22 +351,6 @@ async function waitForEndpointReady(
   await poll();
 }
 
-async function getConnectionUri(
-  projectId: string,
-  apiKey: string,
-  branchId: string,
-  database = 'neondb',
-  role = 'neondb_owner'
-): Promise<string> {
-  const data = await neonRequest<{ connection_uri: string }>(
-    `/projects/${projectId}/branches/${branchId}/connection_uri?database=${encodeURIComponent(
-      database
-    )}&role_name=${encodeURIComponent(role)}`,
-    { method: 'GET', apiKey }
-  );
-  return data.connection_uri;
-}
-
 function upsertEnvVar(filePath: string, name: string, value: string): void {
   const line = `${name}=${JSON.stringify(value).slice(1, -1)}`; // naive but safe for common chars
   let content = '';
@@ -390,6 +409,60 @@ function removeTempUrlFromEnvFile(filePath: string): void {
     }
   } catch {
     // Ignore errors
+  }
+}
+
+function getSharedDatabaseUrlFromSource(): string | undefined {
+  const source = projectsCfg.sourceProjectForCli;
+  if (!source) {
+    return;
+  }
+  const sourceEnvPath = resolve(rootDirectory, 'apps', source, '.env.local');
+  let url = readEnvVarFromFile(sourceEnvPath, 'DATABASE_URL');
+  if (url) {
+    return url;
+  }
+  try {
+    // Try pulling envs once to populate
+    const r = spawnSync('bun', ['scripts/vercel-env-pull.ts', 'development'], {
+      cwd: rootDirectory,
+      stdio: 'inherit',
+    });
+    if ((r.status ?? 0) === 0) {
+      url = readEnvVarFromFile(sourceEnvPath, 'DATABASE_URL');
+    }
+  } catch {
+    // ignore
+  }
+  return url;
+}
+
+function restoreSharedDatabaseUrlInEnvFiles(): void {
+  const sharedUrl = getSharedDatabaseUrlFromSource();
+  if (!sharedUrl) {
+    console.warn(
+      'Warning: Could not determine shared DATABASE_URL to restore. Skipping backfill.'
+    );
+    return;
+  }
+  // apps/*/.env.local
+  for (const dir of Object.keys(projectsCfg.apps)) {
+    const envPath = resolve(rootDirectory, 'apps', dir, '.env.local');
+    const hasTemp = !!readEnvVarFromFile(envPath, 'TEMP_BRANCH_DATABASE_URL');
+    const hasDb = !!readEnvVarFromFile(envPath, 'DATABASE_URL');
+    if (!(hasTemp || hasDb)) {
+      upsertEnvVar(envPath, 'DATABASE_URL', sharedUrl);
+    }
+  }
+  // root .env.local used by scripts
+  const rootEnvPath = resolve(rootDirectory, '.env.local');
+  const rootHasTemp = !!readEnvVarFromFile(
+    rootEnvPath,
+    'TEMP_BRANCH_DATABASE_URL'
+  );
+  const rootHasDb = !!readEnvVarFromFile(rootEnvPath, 'DATABASE_URL');
+  if (!(rootHasTemp || rootHasDb)) {
+    upsertEnvVar(rootEnvPath, 'DATABASE_URL', sharedUrl);
   }
 }
 
@@ -470,8 +543,8 @@ async function doCreate(): Promise<void> {
   // Try to get password from existing DATABASE_URL
   const existingUrl =
     process.env.DATABASE_URL ||
-    readFileSync('.env.local', 'utf8').match(/DATABASE_URL="([^"]+)"/)?.[1];
-  const password = existingUrl?.match(/\/\/[^:]+:([^@]+)@/)?.[1];
+    readFileSync('.env.local', 'utf8').match(DATABASE_URL_QUOTED_REGEX)?.[1];
+  const password = existingUrl?.match(PASSWORD_FROM_URL_REGEX)?.[1];
 
   if (password && endpoint.host) {
     uri = `postgresql://neondb_owner:${password}@${endpoint.host}/neondb?sslmode=require`;
@@ -495,6 +568,7 @@ async function doCreate(): Promise<void> {
   console.log(`TEMP_BRANCH_DATABASE_URL=${uri}`);
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: needed complexity
 async function doDelete(): Promise<void> {
   const args = process.argv.slice(2);
   let name: string | undefined;
@@ -612,6 +686,10 @@ async function doDelete(): Promise<void> {
   );
   removeTempUrlFromEnvFile(dbEnvPath);
   console.log('✓ Removed temporary database URLs from .env.local files');
+
+  // Restore shared DATABASE_URL when TEMP is gone and no DATABASE_URL exists
+  console.log('→ Restoring shared DATABASE_URL where missing...');
+  restoreSharedDatabaseUrlInEnvFiles();
 
   // Clean up the last branch file if we deleted that branch
   const lastBranchFile = resolve(rootDirectory, '.neon-last-branch');

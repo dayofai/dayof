@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 type VercelProjectsConfig = {
   team: string;
   apps: Record<string, string>;
+  sourceProjectForCli?: string;
 };
 
 const rootDirectory = resolve(process.cwd());
@@ -17,6 +18,58 @@ const TEAM = cfg.team;
 
 const environment = (process.argv[2] || 'development').toLowerCase();
 const gitBranch = process.argv[3];
+
+const NEWLINE_REGEX = /\r?\n/;
+
+function readEnvVarFromFile(
+  filePath: string,
+  name: string
+): string | undefined {
+  if (!existsSync(filePath)) {
+    return;
+  }
+  try {
+    const content = readFileSync(filePath, 'utf8');
+    const lines = content.split(NEWLINE_REGEX);
+    for (const line of lines) {
+      if (!line.startsWith(`${name}=`)) {
+        continue;
+      }
+      const raw = line.slice(name.length + 1);
+      let value = raw;
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      return value;
+    }
+    return;
+  } catch {
+    return;
+  }
+}
+
+function upsertEnvVar(filePath: string, name: string, value: string): void {
+  const line = `${name}=${JSON.stringify(value).slice(1, -1)}`;
+  let content = '';
+  if (existsSync(filePath)) {
+    content = readFileSync(filePath, 'utf8');
+    const lines = content.split(NEWLINE_REGEX);
+    const filtered = lines.filter(
+      (l) => !l.startsWith(`${name}=`) && l.trim().length > 0
+    );
+    content = `${filtered.join('\n')}${filtered.length ? '\n' : ''}${line}\n`;
+  } else {
+    content = `${line}\n`;
+  }
+  const dir = resolve(filePath, '..');
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  writeFileSync(filePath, content, 'utf8');
+}
 
 function fileForEnv(env: string): string {
   switch (env) {
@@ -90,10 +143,61 @@ function linkProject(appDir: string, projectName: string): void {
 console.log(
   `Pulling ${environment} envs${gitBranch ? ` for ${gitBranch}` : ''}...`
 );
+
+// Pull source app first so we can backfill from it
+const sourceApp = cfg.sourceProjectForCli;
+if (sourceApp && cfg.apps[sourceApp]) {
+  const sourceDir = resolve(rootDirectory, 'apps', sourceApp);
+  console.log(`→ ${sourceApp} (source)`);
+  linkProject(sourceDir, cfg.apps[sourceApp]);
+  pull(sourceDir);
+}
+
 for (const [dir, projectName] of Object.entries(cfg.apps)) {
   const appDir = resolve(rootDirectory, 'apps', dir);
-  console.log(`→ ${dir}`);
-  linkProject(appDir, projectName);
-  pull(appDir);
+  if (dir !== sourceApp) {
+    console.log(`→ ${dir}`);
+    linkProject(appDir, projectName);
+    pull(appDir);
+  }
+}
+
+// Backfill DATABASE_URL where neither TEMP nor DATABASE_URL exist
+if (sourceApp && cfg.apps[sourceApp]) {
+  const sourceEnvPath = resolve(
+    rootDirectory,
+    'apps',
+    sourceApp,
+    fileForEnv(environment)
+  );
+  const sharedUrl = readEnvVarFromFile(sourceEnvPath, 'DATABASE_URL');
+  if (sharedUrl) {
+    for (const dir of Object.keys(cfg.apps)) {
+      const appEnvPath = resolve(
+        rootDirectory,
+        'apps',
+        dir,
+        fileForEnv(environment)
+      );
+      const hasTemp = !!readEnvVarFromFile(
+        appEnvPath,
+        'TEMP_BRANCH_DATABASE_URL'
+      );
+      const hasDb = !!readEnvVarFromFile(appEnvPath, 'DATABASE_URL');
+      if (!(hasTemp || hasDb)) {
+        upsertEnvVar(appEnvPath, 'DATABASE_URL', sharedUrl);
+      }
+    }
+    // Also ensure root .env.local has DATABASE_URL if neither exist
+    const rootEnvPath = resolve(rootDirectory, fileForEnv(environment));
+    const rootHasTemp = !!readEnvVarFromFile(
+      rootEnvPath,
+      'TEMP_BRANCH_DATABASE_URL'
+    );
+    const rootHasDb = !!readEnvVarFromFile(rootEnvPath, 'DATABASE_URL');
+    if (!(rootHasTemp || rootHasDb)) {
+      upsertEnvVar(rootEnvPath, 'DATABASE_URL', sharedUrl);
+    }
+  }
 }
 console.log('✓ Done');
