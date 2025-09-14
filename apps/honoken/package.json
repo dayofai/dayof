@@ -12,7 +12,7 @@
     "test:unit": "vitest run tests/unit",
     "setup": "node ./scripts/setup.mjs",
     "check-bundle-size": "node ./scripts/check-bundle-size.js",
-    "dev": "vercel dev",
+    "dev": "bun run src/index.ts",
     "dev:vercel": "vercel dev",
     "build": "tsc",
     "deploy:preview": "vercel",
