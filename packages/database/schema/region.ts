@@ -34,18 +34,3 @@ export const regionCountry = pgTable(
   }),
   (t) => [index('region_country_region_id_idx').on(t.regionId)]
 );
-
-// Payment provider dependencies omitted in wallet-only run
-export const regionPaymentProvider = pgTable(
-  'region_payment_provider',
-  (t) => ({
-    id: t.text('id').primaryKey().default(sql`nanoid()`),
-    regionId: t
-      .text('region_id')
-      .references(() => region.id)
-      .notNull(),
-    paymentProviderId: t.text('payment_provider_id').notNull(),
-    ...timeStamps({ softDelete: true }),
-  }),
-  (t) => [index('region_payment_provider_region_id_idx').on(t.regionId)]
-);
