@@ -1,13 +1,18 @@
 import { sql } from 'drizzle-orm';
-import { index, pgEnum, pgTable, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  index,
+  pgEnum,
+  pgTable,
+  unique,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { createdBy } from './extend-created-by';
 import { timeStamps } from './extend-timestamps';
 
 // Enum for pass ticket styles
 export const walletTicketStyleEnum = pgEnum('wallet_ticket_style_enum', [
-  'coupon',
   'event',
-  'storeCard',
+  'coupon',
   'generic',
 ]);
 
@@ -26,7 +31,7 @@ export const walletCert = pgTable(
   (t) => [
     index('idx_wallet_certs_enhanced').on(t.isEnhanced),
     index('idx_wallet_certs_team_id').on(t.teamId),
-    uniqueIndex('uq_wallet_cert_cert_ref').on(t.certRef),
+    unique('uq_wallet_cert_cert_ref').on(t.certRef),
   ]
 );
 
@@ -101,9 +106,7 @@ export const walletDevice = pgTable(
     ...timeStamps({ softDelete: true }),
   }),
   (t) => [
-    uniqueIndex('uq_wallet_device_library_identifier').on(
-      t.deviceLibraryIdentifier
-    ),
+    unique('uq_wallet_device_library_identifier').on(t.deviceLibraryIdentifier),
   ]
 );
 

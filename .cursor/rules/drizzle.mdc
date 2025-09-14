@@ -1,0 +1,12 @@
+---
+description: Drizzle Rules
+globs: "**/*.{ts,tsx,js,jsx}"
+alwaysApply: true
+---
+
+# Drizzle Rules
+
+## Rules
+
+- Always use drizzle-kit to generate migrations.
+- Do not modify migration SQL files by hand.
