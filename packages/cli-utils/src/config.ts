@@ -21,8 +21,8 @@ const homeDirectory = process.env.HOME || process.env.USERPROFILE || '.';
 function getPackageRoot(): string {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
-  // Go up from src/config.ts to package root
-  return resolve(__dirname, '..', '..');
+  // src -> package root (works for both src/ and dist/ builds)
+  return resolve(__dirname, '..');
 }
 
 /**
@@ -30,20 +30,24 @@ function getPackageRoot(): string {
  */
 export function readVercelConfig(): VercelProjectsConfig {
   const packageRoot = getPackageRoot();
+  const cwd = process.cwd();
 
-  // First try the package directory (where we moved it)
-  let cfgPath = resolve(packageRoot, 'vercel-projects.json');
-  if (!existsSync(cfgPath)) {
-    // Fall back to project root scripts directory (legacy location)
-    const projectRoot = resolve(packageRoot, '..', '..');
-    cfgPath = resolve(projectRoot, 'scripts', 'vercel-projects.json');
+  // Try multiple candidates in order of preference
+  const candidates = [
+    resolve(packageRoot, 'vercel-projects.json'), // packages/cli-utils/vercel-projects.json
+    resolve(cwd, 'packages', 'cli-utils', 'vercel-projects.json'), // cwd/packages/cli-utils/vercel-projects.json
+    resolve(cwd, 'vercel-projects.json'), // cwd/vercel-projects.json
+    resolve(cwd, 'scripts', 'vercel-projects.json'), // legacy: cwd/scripts/vercel-projects.json
+  ];
+
+  const found = candidates.find((p) => existsSync(p));
+  if (!found) {
+    throw new Error(
+      `Could not find vercel-projects.json. Tried:\n  - ${candidates.join('\n  - ')}`
+    );
   }
 
-  if (!existsSync(cfgPath)) {
-    throw new Error(`Could not find vercel-projects.json at ${cfgPath}`);
-  }
-
-  return JSON.parse(readFileSync(cfgPath, 'utf8')) as VercelProjectsConfig;
+  return JSON.parse(readFileSync(found, 'utf8')) as VercelProjectsConfig;
 }
 
 /**
