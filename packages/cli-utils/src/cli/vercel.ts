@@ -1,0 +1,309 @@
+#!/usr/bin/env bun
+
+import { spawn } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { parseArgs } from 'node:util';
+import { readVercelConfig } from '../config.js';
+import { CliError, handleError } from '../errors.js';
+
+const VERCEL_CACHE_DIR = join(homedir(), '.config', 'dayof');
+const VERCEL_SCOPE_FILE = join(VERCEL_CACHE_DIR, 'vercel-scope.txt');
+
+function getVercelScope(): string | null {
+  // Check if scope file exists
+  if (existsSync(VERCEL_SCOPE_FILE)) {
+    return readFileSync(VERCEL_SCOPE_FILE, 'utf-8').trim();
+  }
+  return null;
+}
+
+function pullEnv(appDir: string, projectName: string): Promise<void> {
+  console.log(`\n📥 Pulling environment variables for ${projectName}...`);
+
+  const scope = getVercelScope();
+  if (!scope) {
+    throw new CliError(
+      'No Vercel scope configured. Run "bun vercel set-scope" first.',
+      'NO_SCOPE'
+    );
+  }
+
+  const args = [
+    'env',
+    'pull',
+    '.env.local',
+    '--environment=development',
+    '--yes',
+  ];
+
+  return new Promise((resolvePromise, rejectPromise) => {
+    const vercel = spawn('bunx', ['vercel', ...args], {
+      cwd: appDir,
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        VERCEL_ORG_ID: scope,
+        VERCEL_SCOPE: scope,
+      },
+    });
+
+    vercel.on('close', (code) => {
+      if (code !== 0) {
+        rejectPromise(
+          new CliError(`Failed to pull env for ${projectName}`, 'PULL_FAILED')
+        );
+      } else {
+        console.log(`✅ Environment variables pulled for ${projectName}`);
+        resolvePromise();
+      }
+    });
+
+    vercel.on('error', (err) => {
+      rejectPromise(
+        new CliError(
+          `Failed to spawn vercel command: ${err.message}`,
+          'SPAWN_ERROR'
+        )
+      );
+    });
+  });
+}
+
+async function addEnvVar(key: string, value: string): Promise<void> {
+  console.log(`\n🔧 Adding environment variable ${key}...`);
+
+  const scope = getVercelScope();
+  if (!scope) {
+    throw new CliError(
+      'No Vercel scope configured. Run "bun vercel set-scope" first.',
+      'NO_SCOPE'
+    );
+  }
+
+  const projects = readVercelConfig();
+
+  const promises = Object.entries(projects.apps).map(([, projectName]) => {
+    console.log(`  Adding to ${projectName}...`);
+
+    return new Promise<void>((resolvePromise, rejectPromise) => {
+      const vercel = spawn(
+        'bunx',
+        ['vercel', 'env', 'add', key, 'development'],
+        {
+          stdio: ['pipe', 'inherit', 'inherit'],
+          env: {
+            ...process.env,
+            VERCEL_ORG_ID: scope,
+            VERCEL_SCOPE: scope,
+          },
+        }
+      );
+
+      // Write the value to stdin
+      vercel.stdin?.write(value);
+      vercel.stdin?.end();
+
+      vercel.on('close', (code) => {
+        if (code !== 0) {
+          rejectPromise(
+            new CliError(
+              `Failed to add env var to ${projectName}`,
+              'ADD_FAILED'
+            )
+          );
+        } else {
+          console.log(`  ✅ Added to ${projectName}`);
+          resolvePromise();
+        }
+      });
+
+      vercel.on('error', (err) => {
+        rejectPromise(
+          new CliError(
+            `Failed to spawn vercel command: ${err.message}`,
+            'SPAWN_ERROR'
+          )
+        );
+      });
+    });
+  });
+
+  await Promise.all(promises);
+}
+
+function setScope(teamSlug: string): Promise<void> {
+  console.log(`\n🔧 Setting Vercel scope to team: ${teamSlug}...`);
+
+  // Get team/org ID from Vercel
+  return new Promise((resolvePromise, rejectPromise) => {
+    const vercel = spawn('bunx', ['vercel', 'teams', 'ls', '--json'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    vercel.stdout?.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+
+    vercel.stderr?.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    vercel.on('close', (code) => {
+      if (code !== 0) {
+        rejectPromise(
+          new CliError(`Failed to list teams: ${stderr}`, 'LIST_TEAMS_FAILED')
+        );
+        return;
+      }
+
+      try {
+        const teams = JSON.parse(stdout);
+        const team = teams.teams?.find(
+          (t: { slug: string; id: string }) => t.slug === teamSlug
+        );
+
+        if (!team) {
+          rejectPromise(
+            new CliError(`Team '${teamSlug}' not found`, 'TEAM_NOT_FOUND')
+          );
+          return;
+        }
+
+        // Create cache directory if it doesn't exist
+        if (!existsSync(VERCEL_CACHE_DIR)) {
+          mkdirSync(VERCEL_CACHE_DIR, { recursive: true });
+        }
+
+        // Save the team ID
+        writeFileSync(VERCEL_SCOPE_FILE, team.id);
+        console.log(`✅ Vercel scope set to team: ${teamSlug} (${team.id})`);
+        resolvePromise();
+      } catch (error) {
+        rejectPromise(
+          new CliError(
+            `Failed to parse teams response: ${error}`,
+            'PARSE_ERROR'
+          )
+        );
+      }
+    });
+
+    vercel.on('error', (err) => {
+      rejectPromise(
+        new CliError(
+          `Failed to spawn vercel command: ${err.message}`,
+          'SPAWN_ERROR'
+        )
+      );
+    });
+  });
+}
+
+async function main() {
+  try {
+    const { values, positionals } = parseArgs({
+      args: process.argv.slice(2),
+      options: {
+        help: { type: 'boolean', short: 'h' },
+      },
+      strict: false,
+      allowPositionals: true,
+    });
+
+    const command = positionals[0];
+
+    if (values.help || !command) {
+      console.log(`
+Vercel CLI - Manage Vercel environment and projects
+
+Usage:
+  bun vercel <command> [options]
+
+Commands:
+  pull              Pull environment variables for all projects
+  add <key> <value> Add an environment variable to all projects
+  set-scope <team>  Set the Vercel team scope
+
+Options:
+  -h, --help        Show this help message
+
+Examples:
+  bun vercel pull
+  bun vercel add STRIPE_SECRET_KEY sk_test_...
+  bun vercel set-scope my-team-slug
+      `);
+      process.exit(0);
+    }
+
+    switch (command) {
+      case 'pull': {
+        const projects = readVercelConfig();
+        const appsDir = resolve(process.cwd(), 'apps');
+
+        const pullPromises = Object.entries(projects.apps)
+          .filter(([appName]) => {
+            const appDir = join(appsDir, appName);
+            if (!existsSync(appDir)) {
+              console.warn(`⚠️  App directory not found: ${appDir}`);
+              return false;
+            }
+            return true;
+          })
+          .map(([appName, projectName]) => {
+            const appDir = join(appsDir, appName);
+            return pullEnv(appDir, projectName);
+          });
+
+        await Promise.all(pullPromises);
+
+        console.log('\n✅ All environment variables pulled successfully!');
+        break;
+      }
+
+      case 'add': {
+        const key = positionals[1];
+        const value = positionals[2];
+
+        if (!(key && value)) {
+          throw new CliError(
+            'Usage: bun vercel add <key> <value>',
+            'INVALID_USAGE'
+          );
+        }
+
+        await addEnvVar(key, value);
+        console.log('\n✅ Environment variable added to all projects!');
+        break;
+      }
+
+      case 'set-scope': {
+        const teamSlug = positionals[1];
+
+        if (!teamSlug) {
+          throw new CliError(
+            'Usage: bun vercel set-scope <team-slug>',
+            'INVALID_USAGE'
+          );
+        }
+
+        await setScope(teamSlug);
+        break;
+      }
+
+      default:
+        throw new CliError(`Unknown command: ${command}`, 'UNKNOWN_COMMAND');
+    }
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+// Run if this is the main module
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}
