@@ -20,6 +20,27 @@ function getVercelScope(): string | null {
   return null;
 }
 
+// Ensure we have a Vercel team scope set; if not, set it from config (defaults to 'dayof')
+async function ensureScope(): Promise<string> {
+  const existing = getVercelScope();
+  if (existing) {
+    return existing;
+  }
+
+  const cfg = readVercelConfig();
+  const teamSlug = cfg.team || 'dayof';
+
+  await setScope(teamSlug);
+  const after = getVercelScope();
+  if (!after) {
+    throw new CliError(
+      `Unable to set Vercel scope automatically for team '${teamSlug}'.`,
+      'NO_SCOPE'
+    );
+  }
+  return after;
+}
+
 function fileForEnv(env: string): string {
   switch (env) {
     case 'development':
@@ -33,28 +54,20 @@ function fileForEnv(env: string): string {
   }
 }
 
-function linkProject(appDir: string, projectName: string): Promise<void> {
+async function linkProject(appDir: string, projectName: string): Promise<void> {
   const projectJsonPath = resolve(appDir, '.vercel', 'project.json');
   if (existsSync(projectJsonPath)) {
     try {
       const projectJson = JSON.parse(readFileSync(projectJsonPath, 'utf-8'));
       if (projectJson.projectId || projectJson.orgId) {
-        return Promise.resolve();
+        return;
       }
     } catch {
       // invalid/empty project.json - continue to link
     }
   }
 
-  const scope = getVercelScope();
-  if (!scope) {
-    return Promise.reject(
-      new CliError(
-        'No Vercel scope configured. Run "bun vercel set-scope" first.',
-        'NO_SCOPE'
-      )
-    );
-  }
+  const scope = await ensureScope();
 
   return new Promise((resolvePromise, rejectPromise) => {
     const vercel = spawn(
@@ -92,7 +105,7 @@ function linkProject(appDir: string, projectName: string): Promise<void> {
   });
 }
 
-function pullEnv(
+async function pullEnv(
   appDir: string,
   projectName: string,
   environment: string,
@@ -102,13 +115,7 @@ function pullEnv(
     `\n📥 Pulling environment variables for ${projectName} (${environment})...`
   );
 
-  const scope = getVercelScope();
-  if (!scope) {
-    throw new CliError(
-      'No Vercel scope configured. Run "bun vercel set-scope" first.',
-      'NO_SCOPE'
-    );
-  }
+  const scope = await ensureScope();
 
   const args = [
     'env',
@@ -158,13 +165,7 @@ function pullEnv(
 async function addEnvVar(key: string, value: string): Promise<void> {
   console.log(`\n🔧 Adding environment variable ${key}...`);
 
-  const scope = getVercelScope();
-  if (!scope) {
-    throw new CliError(
-      'No Vercel scope configured. Run "bun vercel set-scope" first.',
-      'NO_SCOPE'
-    );
-  }
+  const scope = await ensureScope();
 
   const projects = readVercelConfig();
 
