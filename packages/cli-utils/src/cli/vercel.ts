@@ -72,15 +72,10 @@ async function linkProject(appDir: string, projectName: string): Promise<void> {
   return new Promise((resolvePromise, rejectPromise) => {
     const vercel = spawn(
       'bunx',
-      ['vercel', 'link', '--yes', '--project', projectName],
+      ['vercel', 'link', '--yes', '--project', projectName, '--scope', scope],
       {
         cwd: appDir,
         stdio: 'inherit',
-        env: {
-          ...process.env,
-          VERCEL_ORG_ID: scope,
-          VERCEL_SCOPE: scope,
-        },
       }
     );
 
@@ -123,6 +118,8 @@ async function pullEnv(
     fileForEnv(environment),
     `--environment=${environment}`,
     '--yes',
+    '--scope',
+    scope,
   ] as string[];
 
   if (gitBranch && environment === 'preview') {
@@ -133,11 +130,6 @@ async function pullEnv(
     const vercel = spawn('bunx', ['vercel', ...args], {
       cwd: appDir,
       stdio: 'inherit',
-      env: {
-        ...process.env,
-        VERCEL_ORG_ID: scope,
-        VERCEL_SCOPE: scope,
-      },
     });
 
     vercel.on('close', (code) => {
@@ -175,14 +167,9 @@ async function addEnvVar(key: string, value: string): Promise<void> {
     return new Promise<void>((resolvePromise, rejectPromise) => {
       const vercel = spawn(
         'bunx',
-        ['vercel', 'env', 'add', key, 'development'],
+        ['vercel', 'env', 'add', key, 'development', '--scope', scope],
         {
           stdio: ['pipe', 'inherit', 'inherit'],
-          env: {
-            ...process.env,
-            VERCEL_ORG_ID: scope,
-            VERCEL_SCOPE: scope,
-          },
         }
       );
 
@@ -221,61 +208,32 @@ async function addEnvVar(key: string, value: string): Promise<void> {
 function setScope(teamSlug: string): Promise<void> {
   console.log(`\n🔧 Setting Vercel scope to team: ${teamSlug}...`);
 
-  // Get team/org ID from Vercel
+  // Use modern Vercel CLI to switch team context
   return new Promise((resolvePromise, rejectPromise) => {
-    const vercel = spawn('bunx', ['vercel', 'teams', 'ls', '--json'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    vercel.stdout?.on('data', (data: Buffer) => {
-      stdout += data.toString();
-    });
-
-    vercel.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString();
+    const vercel = spawn('bunx', ['vercel', 'switch', teamSlug], {
+      stdio: 'inherit',
     });
 
     vercel.on('close', (code) => {
       if (code !== 0) {
         rejectPromise(
-          new CliError(`Failed to list teams: ${stderr}`, 'LIST_TEAMS_FAILED')
+          new CliError(
+            `Failed to switch to team: ${teamSlug}`,
+            'SWITCH_TEAM_FAILED'
+          )
         );
         return;
       }
 
-      try {
-        const teams = JSON.parse(stdout);
-        const team = teams.teams?.find(
-          (t: { slug: string; id: string }) => t.slug === teamSlug
-        );
-
-        if (!team) {
-          rejectPromise(
-            new CliError(`Team '${teamSlug}' not found`, 'TEAM_NOT_FOUND')
-          );
-          return;
-        }
-
-        // Create cache directory if it doesn't exist
-        if (!existsSync(VERCEL_CACHE_DIR)) {
-          mkdirSync(VERCEL_CACHE_DIR, { recursive: true });
-        }
-
-        // Save the team ID
-        writeFileSync(VERCEL_SCOPE_FILE, team.id);
-        console.log(`✅ Vercel scope set to team: ${teamSlug} (${team.id})`);
-        resolvePromise();
-      } catch (error) {
-        rejectPromise(
-          new CliError(
-            `Failed to parse teams response: ${error}`,
-            'PARSE_ERROR'
-          )
-        );
+      // Create cache directory if it doesn't exist
+      if (!existsSync(VERCEL_CACHE_DIR)) {
+        mkdirSync(VERCEL_CACHE_DIR, { recursive: true });
       }
+
+      // Save the team slug (not ID) for use with --scope flag
+      writeFileSync(VERCEL_SCOPE_FILE, teamSlug);
+      console.log(`✅ Vercel scope set to team: ${teamSlug}`);
+      resolvePromise();
     });
 
     vercel.on('error', (err) => {

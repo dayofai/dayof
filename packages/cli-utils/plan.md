@@ -189,3 +189,13 @@ Changelog
 
 - Docs:
   - Updated checklist statuses to reflect completed work
+  - **Dead End Alert**: `vercel teams ls --json` doesn't exist in modern Vercel CLI
+    - The command was `vercel teams ls` in old scripts but doesn't exist anymore
+    - Modern CLI uses `vercel teams list` (not `ls`)
+    - The `--json` flag is not documented/supported for teams command
+    - **Solution Implemented**:
+      - Use `vercel switch <team-slug>` to set team scope
+      - Cache the team slug (not ID) in `~/.config/dayof/vercel-scope.txt`
+      - Pass `--scope <slug>` flag explicitly to all Vercel commands
+      - Removed reliance on VERCEL_ORG_ID and VERCEL_SCOPE environment variables
+    - **Why this path works**: The `--scope` flag is the modern, explicit way to target commands at specific teams/orgs
