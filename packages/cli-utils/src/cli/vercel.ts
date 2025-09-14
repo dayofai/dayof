@@ -59,7 +59,7 @@ async function linkProject(appDir: string, projectName: string): Promise<void> {
   if (existsSync(projectJsonPath)) {
     try {
       const projectJson = JSON.parse(readFileSync(projectJsonPath, 'utf-8'));
-      if (projectJson.projectId || projectJson.orgId) {
+      if (projectJson.projectId && projectJson.orgId) {
         return;
       }
     } catch {
@@ -161,46 +161,54 @@ async function addEnvVar(key: string, value: string): Promise<void> {
 
   const projects = readVercelConfig();
 
-  const promises = Object.entries(projects.apps).map(([, projectName]) => {
-    console.log(`  Adding to ${projectName}...`);
+  const promises = Object.entries(projects.apps).map(
+    ([appName, projectName]) => {
+      const appDir = resolve(process.cwd(), 'apps', appName);
+      if (!existsSync(appDir)) {
+        console.warn(`⚠️  App directory not found: ${appDir}`);
+        return Promise.resolve();
+      }
+      console.log(`  Adding to ${projectName}...`);
 
-    return new Promise<void>((resolvePromise, rejectPromise) => {
-      const vercel = spawn(
-        'bunx',
-        ['vercel', 'env', 'add', key, 'development', '--scope', scope],
-        {
-          stdio: ['pipe', 'inherit', 'inherit'],
-        }
-      );
+      return new Promise<void>((resolvePromise, rejectPromise) => {
+        const vercel = spawn(
+          'bunx',
+          ['vercel', 'env', 'add', key, 'development', '--scope', scope],
+          {
+            cwd: appDir,
+            stdio: ['pipe', 'inherit', 'inherit'],
+          }
+        );
 
-      // Write the value to stdin
-      vercel.stdin?.write(value);
-      vercel.stdin?.end();
+        // Write the value to stdin
+        vercel.stdin?.write(value);
+        vercel.stdin?.end();
 
-      vercel.on('close', (code) => {
-        if (code !== 0) {
+        vercel.on('close', (code) => {
+          if (code !== 0) {
+            rejectPromise(
+              new CliError(
+                `Failed to add env var to ${projectName}`,
+                'ADD_FAILED'
+              )
+            );
+          } else {
+            console.log(`  ✅ Added to ${projectName}`);
+            resolvePromise();
+          }
+        });
+
+        vercel.on('error', (err) => {
           rejectPromise(
             new CliError(
-              `Failed to add env var to ${projectName}`,
-              'ADD_FAILED'
+              `Failed to spawn vercel command: ${err.message}`,
+              'SPAWN_ERROR'
             )
           );
-        } else {
-          console.log(`  ✅ Added to ${projectName}`);
-          resolvePromise();
-        }
+        });
       });
-
-      vercel.on('error', (err) => {
-        rejectPromise(
-          new CliError(
-            `Failed to spawn vercel command: ${err.message}`,
-            'SPAWN_ERROR'
-          )
-        );
-      });
-    });
-  });
+    }
+  );
 
   await Promise.all(promises);
 }

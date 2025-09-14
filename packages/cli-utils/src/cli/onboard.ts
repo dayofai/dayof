@@ -160,9 +160,8 @@ async function checkAuthStatus(
 function checkEnvironmentFiles(): CheckResult[] {
   const results: CheckResult[] = [];
   const envFiles = [
-    { path: '.env', name: 'Root .env' },
     { path: '.env.local', name: 'Root .env.local' },
-    { path: 'packages/database/.env', name: 'Database .env' },
+    { path: 'packages/database/.env.local', name: 'Database .env.local' },
   ];
 
   for (const { path, name } of envFiles) {
@@ -182,23 +181,23 @@ function checkEnvironmentFiles(): CheckResult[] {
 
 function checkDatabaseConnection(): CheckResult {
   try {
-    const dbEnvPath = 'packages/database/.env';
+    const dbEnvPath = 'packages/database/.env.local';
     if (!existsSync(dbEnvPath)) {
       return {
         name: 'Database Connection',
         status: 'warning',
-        message: 'No .env file found',
-        action: 'Create packages/database/.env with DEV_DATABASE_URL',
+        message: 'No .env.local file found',
+        action: 'Create packages/database/.env.local with DATABASE_URL',
       };
     }
 
     const env = loadEnv(dbEnvPath);
-    if (!env.DEV_DATABASE_URL) {
+    if (!env.DATABASE_URL) {
       return {
         name: 'Database Connection',
         status: 'warning',
-        message: 'DEV_DATABASE_URL not configured',
-        action: 'Add DEV_DATABASE_URL to packages/database/.env',
+        message: 'DATABASE_URL not configured',
+        action: 'Add DATABASE_URL to packages/database/.env.local',
       };
     }
 

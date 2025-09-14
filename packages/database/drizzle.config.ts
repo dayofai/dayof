@@ -11,10 +11,8 @@ function loadEnvFiles(): void {
   const candidates = [
     // Current working directory first
     resolve(cwd, '.env.local'),
-    resolve(cwd, '.env'),
     // Monorepo root to package path fallback
     resolve(cwd, 'packages', 'database', '.env.local'),
-    resolve(cwd, 'packages', 'database', '.env'),
   ];
   for (const path of candidates) {
     if (!existsSync(path)) {
@@ -49,15 +47,10 @@ function loadEnvFiles(): void {
 
 loadEnvFiles();
 
-const url =
-  process.env.TEMP_BRANCH_DATABASE_URL ??
-  process.env.DEV_DATABASE_URL ??
-  process.env.DATABASE_URL;
+const url = process.env.TEMP_BRANCH_DATABASE_URL ?? process.env.DATABASE_URL;
 
 if (!url) {
-  throw new Error(
-    'Set TEMP_BRANCH_DATABASE_URL (ephemeral), DEV_DATABASE_URL, or DATABASE_URL'
-  );
+  throw new Error('Set TEMP_BRANCH_DATABASE_URL (ephemeral) or DATABASE_URL');
 }
 
 export default {
