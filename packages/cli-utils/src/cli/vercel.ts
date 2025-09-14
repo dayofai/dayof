@@ -5,8 +5,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { readVercelConfig } from '../config.js';
-import { CliError, handleError } from '../errors.js';
+import { readVercelConfig } from '../config';
+import { readEnvVarFromFile, upsertEnvVar } from '../env';
+import { CliError, handleError } from '../errors';
 
 const VERCEL_CACHE_DIR = join(homedir(), '.config', 'dayof');
 const VERCEL_SCOPE_FILE = join(VERCEL_CACHE_DIR, 'vercel-scope.txt');
@@ -19,8 +20,87 @@ function getVercelScope(): string | null {
   return null;
 }
 
-function pullEnv(appDir: string, projectName: string): Promise<void> {
-  console.log(`\n📥 Pulling environment variables for ${projectName}...`);
+function fileForEnv(env: string): string {
+  switch (env) {
+    case 'development':
+      return '.env.local';
+    case 'preview':
+      return '.env.preview.local';
+    case 'production':
+      return '.env.production.local';
+    default:
+      throw new CliError(`Unknown environment: ${env}`, 'INVALID_ENV');
+  }
+}
+
+function linkProject(appDir: string, projectName: string): Promise<void> {
+  const projectJsonPath = resolve(appDir, '.vercel', 'project.json');
+  if (existsSync(projectJsonPath)) {
+    try {
+      const projectJson = JSON.parse(readFileSync(projectJsonPath, 'utf-8'));
+      if (projectJson.projectId || projectJson.orgId) {
+        return Promise.resolve();
+      }
+    } catch {
+      // invalid/empty project.json - continue to link
+    }
+  }
+
+  const scope = getVercelScope();
+  if (!scope) {
+    return Promise.reject(
+      new CliError(
+        'No Vercel scope configured. Run "bun vercel set-scope" first.',
+        'NO_SCOPE'
+      )
+    );
+  }
+
+  return new Promise((resolvePromise, rejectPromise) => {
+    const vercel = spawn(
+      'bunx',
+      ['vercel', 'link', '--yes', '--project', projectName],
+      {
+        cwd: appDir,
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          VERCEL_ORG_ID: scope,
+          VERCEL_SCOPE: scope,
+        },
+      }
+    );
+
+    vercel.on('close', (code) => {
+      if (code !== 0) {
+        rejectPromise(
+          new CliError(`Failed to link project in ${appDir}`, 'LINK_FAILED')
+        );
+      } else {
+        resolvePromise();
+      }
+    });
+
+    vercel.on('error', (err) => {
+      rejectPromise(
+        new CliError(
+          `Failed to spawn vercel command: ${err.message}`,
+          'SPAWN_ERROR'
+        )
+      );
+    });
+  });
+}
+
+function pullEnv(
+  appDir: string,
+  projectName: string,
+  environment: string,
+  gitBranch?: string
+): Promise<void> {
+  console.log(
+    `\n📥 Pulling environment variables for ${projectName} (${environment})...`
+  );
 
   const scope = getVercelScope();
   if (!scope) {
@@ -33,10 +113,14 @@ function pullEnv(appDir: string, projectName: string): Promise<void> {
   const args = [
     'env',
     'pull',
-    '.env.local',
-    '--environment=development',
+    fileForEnv(environment),
+    `--environment=${environment}`,
     '--yes',
-  ];
+  ] as string[];
+
+  if (gitBranch && environment === 'preview') {
+    args.push(`--git-branch=${gitBranch}`);
+  }
 
   return new Promise((resolvePromise, rejectPromise) => {
     const vercel = spawn('bunx', ['vercel', ...args], {
@@ -204,6 +288,7 @@ function setScope(teamSlug: string): Promise<void> {
   });
 }
 
+// biome-ignore lint: command router with subcommands
 async function main() {
   try {
     const { values, positionals } = parseArgs({
@@ -242,26 +327,95 @@ Examples:
 
     switch (command) {
       case 'pull': {
+        const envName = (positionals[1] || 'development').toLowerCase();
+        const gitBranch = positionals[2];
+
         const projects = readVercelConfig();
         const appsDir = resolve(process.cwd(), 'apps');
 
-        const pullPromises = Object.entries(projects.apps)
-          .filter(([appName]) => {
-            const appDir = join(appsDir, appName);
+        // Pull source app first (for backfill)
+        const sourceApp = projects.sourceProjectForCli;
+        if (sourceApp && projects.apps[sourceApp]) {
+          const sourceDir = resolve(appsDir, sourceApp);
+          if (existsSync(sourceDir)) {
+            await linkProject(sourceDir, projects.apps[sourceApp]);
+            await pullEnv(
+              sourceDir,
+              projects.apps[sourceApp],
+              envName,
+              gitBranch
+            );
+          } else {
+            console.warn(`⚠️  App directory not found: ${sourceDir}`);
+          }
+        }
+
+        // Pull remaining apps
+        const remainingApps = Object.entries(projects.apps)
+          .filter(([appName]) => appName !== sourceApp)
+          .map(([appName, projectName]) => {
+            const appDir = resolve(appsDir, appName);
             if (!existsSync(appDir)) {
               console.warn(`⚠️  App directory not found: ${appDir}`);
-              return false;
+              return Promise.resolve();
             }
-            return true;
-          })
-          .map(([appName, projectName]) => {
-            const appDir = join(appsDir, appName);
-            return pullEnv(appDir, projectName);
+            return linkProject(appDir, projectName).then(() =>
+              pullEnv(appDir, projectName, envName, gitBranch)
+            );
           });
 
-        await Promise.all(pullPromises);
+        await Promise.all(remainingApps);
 
-        console.log('\n✅ All environment variables pulled successfully!');
+        // Backfill DATABASE_URL where neither TEMP nor DATABASE_URL exist
+        if (sourceApp && projects.apps[sourceApp]) {
+          const sourceEnvPath = resolve(
+            appsDir,
+            sourceApp,
+            fileForEnv(envName)
+          );
+          const sharedUrl = readEnvVarFromFile(sourceEnvPath, 'DATABASE_URL');
+          if (sharedUrl) {
+            // apps
+            for (const appName of Object.keys(projects.apps)) {
+              const appEnvPath = resolve(appsDir, appName, fileForEnv(envName));
+              const hasTemp = !!readEnvVarFromFile(
+                appEnvPath,
+                'TEMP_BRANCH_DATABASE_URL'
+              );
+              const hasDb = !!readEnvVarFromFile(appEnvPath, 'DATABASE_URL');
+              if (!(hasTemp || hasDb)) {
+                upsertEnvVar(appEnvPath, 'DATABASE_URL', sharedUrl);
+              }
+            }
+            // root
+            const rootEnvPath = resolve(process.cwd(), fileForEnv(envName));
+            const rootHasTemp = !!readEnvVarFromFile(
+              rootEnvPath,
+              'TEMP_BRANCH_DATABASE_URL'
+            );
+            const rootHasDb = !!readEnvVarFromFile(rootEnvPath, 'DATABASE_URL');
+            if (!(rootHasTemp || rootHasDb)) {
+              upsertEnvVar(rootEnvPath, 'DATABASE_URL', sharedUrl);
+            }
+            // packages/database
+            const dbEnvPath = resolve(
+              process.cwd(),
+              'packages',
+              'database',
+              '.env.local'
+            );
+            const dbHasTemp = !!readEnvVarFromFile(
+              dbEnvPath,
+              'TEMP_BRANCH_DATABASE_URL'
+            );
+            const dbHasDb = !!readEnvVarFromFile(dbEnvPath, 'DATABASE_URL');
+            if (!(dbHasTemp || dbHasDb)) {
+              upsertEnvVar(dbEnvPath, 'DATABASE_URL', sharedUrl);
+            }
+          }
+        }
+
+        console.log('\n✅ Environment variables pulled successfully!');
         break;
       }
 
