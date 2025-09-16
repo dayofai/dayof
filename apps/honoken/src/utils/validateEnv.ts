@@ -7,11 +7,16 @@ import type { Env } from '../types';
 
 // biome-ignore lint: Centralized env validation intentionally consolidates checks
 export function validateEnv(env: Partial<Env>): asserts env is Env {
+  const mergedEnv = {
+    ...(process.env as Record<string, string | undefined>),
+    ...(env as unknown as Record<string, string | undefined>),
+  } as Record<string, string | undefined>;
+
   const requiredVars = [
     // Database (one of these must be present)
     {
-      names: ['DATABASE_URL', 'DEV_DATABASE_URL'],
-      error: 'Either DATABASE_URL or DEV_DATABASE_URL must be set',
+      names: ['TEMP_BRANCH_DATABASE_URL', 'DATABASE_URL', 'DEV_DATABASE_URL'],
+      error: 'Either TEMP_BRANCH_DATABASE_URL or DATABASE_URL or DEV_DATABASE_URL must be set',
     },
     // Blob storage
     {
@@ -57,7 +62,7 @@ export function validateEnv(env: Partial<Env>): asserts env is Env {
   const missingVars: string[] = [];
 
   for (const requirement of requiredVars) {
-    const hasAny = requirement.names.some((name) => env[name as keyof Env]);
+    const hasAny = requirement.names.some((name) => mergedEnv[name]);
     if (!hasAny) {
       missingVars.push(requirement.error);
     }
@@ -71,12 +76,10 @@ export function validateEnv(env: Partial<Env>): asserts env is Env {
   }
 
   // Validate versioned encryption keys
-  const currentVersion = env.HONOKEN_ENCRYPTION_KEY_CURRENT;
+  const currentVersion = mergedEnv['HONOKEN_ENCRYPTION_KEY_CURRENT'];
   if (currentVersion) {
     const versionedKeyName = `HONOKEN_ENCRYPTION_KEY_${currentVersion.toUpperCase()}`;
-    const versionedKey = (env as Record<string, string | undefined>)[
-      versionedKeyName
-    ];
+    const versionedKey = mergedEnv[versionedKeyName];
 
     if (!versionedKey) {
       throw new Error(
@@ -106,7 +109,7 @@ export function validateEnv(env: Partial<Env>): asserts env is Env {
   ];
 
   for (const { name, min, max } of numericVars) {
-    const value = env[name as keyof Env];
+    const value = mergedEnv[name];
     if (value) {
       const num = Number.parseInt(value, 10);
       if (Number.isNaN(num) || num < min || num > max) {
@@ -118,11 +121,11 @@ export function validateEnv(env: Partial<Env>): asserts env is Env {
   }
 
   // Validate sample rate if present
-  if (env.LOG_SAMPLE_SUCCESS_RATE) {
-    const rate = Number.parseFloat(env.LOG_SAMPLE_SUCCESS_RATE);
+  if (mergedEnv['LOG_SAMPLE_SUCCESS_RATE']) {
+    const rate = Number.parseFloat(mergedEnv['LOG_SAMPLE_SUCCESS_RATE']!);
     if (Number.isNaN(rate) || rate < 0 || rate > 1) {
       throw new Error(
-        `Invalid LOG_SAMPLE_SUCCESS_RATE: must be a number between 0 and 1, got "${env.LOG_SAMPLE_SUCCESS_RATE}"`
+        `Invalid LOG_SAMPLE_SUCCESS_RATE: must be a number between 0 and 1, got \"${mergedEnv['LOG_SAMPLE_SUCCESS_RATE']}\"`
       );
     }
   }
