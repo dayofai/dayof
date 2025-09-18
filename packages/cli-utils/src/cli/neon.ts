@@ -8,6 +8,7 @@ import {
 } from 'node:fs';
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline';
+import { URL } from 'node:url';
 import {
   getNeonConfigPath,
   readNeonConfig,
@@ -43,7 +44,6 @@ interface LastBranchInfo {
 }
 
 const TTL_REGEX = /^(\d+)\s*([smhd])$/i;
-const PASSWORD_FROM_URL_REGEX = /\/\/[^:]+:([^@]+)@/;
 
 /**
  * Get Neon credentials from environment or config
@@ -359,19 +359,39 @@ async function branchCreate(args: string[]): Promise<void> {
     await new Promise((r) => setTimeout(r, 2000));
   }
 
-  // Construct connection URI using existing DATABASE_URL password
+  // Construct connection URI by preserving username, password, db name, and params
   console.log('→ Constructing connection URI...');
   const rootEnvPath = resolve(process.cwd(), '.env.local');
   const existingUrl =
     process.env.DATABASE_URL || readEnvVarFromFile(rootEnvPath, 'DATABASE_URL');
-  const pwdMatch = existingUrl?.match(PASSWORD_FROM_URL_REGEX);
-  const password = pwdMatch?.[1];
   assert(
-    password && endpoint.host,
-    'Unable to construct connection URI - missing password or endpoint host'
+    existingUrl && endpoint.host,
+    'Unable to construct connection URI - missing existing DATABASE_URL or endpoint host'
   );
 
-  const connectionUri = `postgresql://neondb_owner:${password}@${endpoint.host}/neondb?sslmode=require`;
+  let parsed: URL;
+  try {
+    parsed = new URL(existingUrl as string);
+  } catch {
+    throw new CliError('Invalid DATABASE_URL format');
+  }
+
+  const username = parsed.username;
+  const password = parsed.password;
+  const dbPath = parsed.pathname || '/neondb';
+  const protocol = parsed.protocol || 'postgresql:';
+
+  // Build new URL pointing to the new endpoint host while preserving creds and db
+  const newUrl = new URL(
+    `${protocol}//${username}:${password}@${endpoint.host}${dbPath}${parsed.search ?? ''}`
+  );
+  const params = new URLSearchParams(newUrl.search);
+  if (!params.has('sslmode')) {
+    params.set('sslmode', 'require');
+  }
+  newUrl.search = params.toString() ? `?${params.toString()}` : '';
+
+  const connectionUri = newUrl.toString();
   console.log('✓ Connection URI ready');
 
   // Propagate to env files across apps and packages/database
