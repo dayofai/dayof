@@ -13,7 +13,7 @@
     "setup": "node ./scripts/setup.mjs",
     "check-bundle-size": "node ./scripts/check-bundle-size.js",
     "dev": "bun run src/index.ts",
-    "dev:vercel": "vercel dev",
+    "dev:vercel": "vercel dev -p 3002",
     "build": "tsc",
     "deploy:preview": "vercel",
     "deploy:prod": "vercel --prod"

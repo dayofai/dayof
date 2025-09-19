@@ -20,7 +20,7 @@
     "db:studio": "turbo db:studio --filter=database",
     "db:generate": "turbo db:generate --filter=database",
     "db:migrate": "turbo db:migrate --filter=database",
-    "dev:inngest:events": "npx inngest-cli@latest dev -u http://localhost:3001/api/inngest",
+    "dev:inngest:events": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
     "neon": "bun packages/cli-utils/src/cli/neon.ts",
     "vercel": "bun packages/cli-utils/src/cli/vercel.ts",
     "onboard": "bun packages/cli-utils/src/cli/onboard.ts",

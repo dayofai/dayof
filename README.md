@@ -112,7 +112,13 @@ bun vercel add KEY value
 
 ### Running Applications
 
-You can run all applications simultaneously or individually.
+You can run all applications simultaneously or individually. Dev ports:
+
+- events: [http://localhost:3000](http://localhost:3000)
+- auth: [http://localhost:3001](http://localhost:3001)
+- honoken: [http://localhost:3002](http://localhost:3002)
+- backstage: [http://localhost:3003](http://localhost:3003)
+- frontrow: [http://localhost:3004](http://localhost:3004)
 
 ```bash
 # Run all web apps and services in development mode
@@ -134,7 +140,7 @@ bun run dev:backstage
 
 This repo uses Inngest for background jobs, orchestrated through the `apps/events` service.
 
-1. **Start the Events service** (serves `/api/inngest` on port 3001):
+1. **Start the Events service** (serves `/api/inngest` on port 3000):
 
    ```bash
    bun run dev:events
@@ -189,6 +195,7 @@ When you create a branch:
 
 - A new Neon branch is created from the parent (default/main)
 - A read-write endpoint is provisioned and waits until ready
+- The branch's database role password is reset to an ephemeral value via Neon API
 - `TEMP_BRANCH_DATABASE_URL` is written to all app `.env.local` files
 - The branch name is saved to `.neon-last-branch` for easy cleanup
 
@@ -273,7 +280,7 @@ The Neon CLI utility:
 
 - Creates branches with parent discovery (default → main → first)
 - Provisions read-write endpoints with readiness polling
-- Builds connection URIs using existing DATABASE_URL credentials
+- Resets branch-local role password via Neon API and builds the connection URI with it (shared `DATABASE_URL` is untouched)
 - Propagates temporary database URLs to all apps
 - Protects main/production branches from deletion
 - Supports TTL with s/m/h/d suffixes (default: 12h)

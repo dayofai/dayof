@@ -157,6 +157,95 @@ async function neonRequest<T = unknown>(
 }
 
 /**
+ * Reset a role's password on a specific branch via Neon API.
+ * Returns the newly generated password.
+ */
+async function resetBranchRolePassword(
+  projectId: string,
+  branchId: string,
+  roleName: string
+): Promise<string> {
+  const res = await neonRequest<{
+    role?: { password?: string };
+    password?: string;
+    operations?: Array<{ id: string; status?: string }>;
+  }>(
+    `/projects/${projectId}/branches/${encodeURIComponent(
+      branchId
+    )}/roles/${encodeURIComponent(roleName)}/reset_password`,
+    { method: 'POST' } as RequestInit
+  );
+
+  const password = res?.role?.password ?? res?.password;
+  assert(
+    typeof password === 'string' && password.length > 0,
+    'Neon API did not return a password when resetting role password'
+  );
+
+  const opIds = (res.operations ?? [])
+    .map((o) => o?.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+  const pollOperation = (operationId: string): Promise<void> => {
+    const deadline = Date.now() + 30_000;
+    // biome-ignore lint/nursery/noShadow: don't care right now
+    return new Promise((resolve, reject) => {
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: don't care right now
+      const tick = async (): Promise<void> => {
+        try {
+          const { operation } = await neonRequest<{
+            operation: { status?: string };
+          }>(
+            `/projects/${projectId}/operations/${encodeURIComponent(operationId)}`,
+            {
+              method: 'GET',
+            } as RequestInit
+          );
+          const status = (operation?.status ?? '').toLowerCase();
+          if (status && status !== 'running' && status !== 'queued') {
+            const ok = new Set([
+              'succeeded',
+              'ready',
+              'finished',
+              'completed',
+              'success',
+              'applied',
+            ]);
+            if (!ok.has(status)) {
+              reject(
+                new CliError(
+                  `Password reset operation did not succeed (status: ${status})`
+                )
+              );
+              return;
+            }
+            resolve();
+            return;
+          }
+          if (Date.now() > deadline) {
+            reject(
+              new CliError('Timed out waiting for Neon to apply password reset')
+            );
+            return;
+          }
+          setTimeout(tick, 1000);
+        } catch (err) {
+          reject(err as Error);
+        }
+      };
+      // Start the polling loop
+      tick().catch(reject);
+    });
+  };
+
+  if (opIds.length > 0) {
+    await Promise.all(opIds.map((id) => pollOperation(id)));
+  }
+
+  return password as string;
+}
+
+/**
  * Parse TTL string to seconds
  */
 function parseTTL(ttl: string): number {
@@ -391,7 +480,22 @@ async function branchCreate(args: string[]): Promise<void> {
   }
   newUrl.search = params.toString() ? `?${params.toString()}` : '';
 
-  const connectionUri = newUrl.toString();
+  // Reset branch-local password to an ephemeral secret to guarantee connectivity
+  let connectionUri = newUrl.toString();
+  const role = username || 'neondb_owner';
+  console.log(
+    '→ Resetting branch-local password for role to ephemeral value...'
+  );
+  const newPassword = await resetBranchRolePassword(
+    projectId,
+    newBranch.id,
+    role
+  );
+  // Rebuild connection URI with the API-returned password
+  newUrl.password = newPassword;
+  connectionUri = newUrl.toString();
+  console.log('✓ Ephemeral password set for temp branch');
+
   console.log('✓ Connection URI ready');
 
   // Propagate to env files across apps and packages/database
