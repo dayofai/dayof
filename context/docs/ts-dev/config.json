@@ -1,0 +1,147 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TanStack/tanstack.com/main/tanstack-docs-config.schema.json",
+  "docSearch": {
+    "appId": "",
+    "apiKey": "",
+    "indexName": "tanstack-devtools"
+  },
+  "sections": [
+    {
+      "label": "Getting Started",
+      "children": [
+        {
+          "label": "Overview",
+          "to": "overview"
+        },
+        {
+          "label": "Quick Start",
+          "to": "quick-start"
+        },
+        {
+          "label": "Configuration",
+          "to": "configuration"
+        },
+        {
+          "label": "Installation",
+          "to": "installation"
+        },
+        {
+          "label": "Vite plugin",
+          "to": "vite-plugin"
+        },
+        {
+          "label": "Production",
+          "to": "production"
+        }
+      ],
+      "frameworks": [
+        {
+          "label": "react",
+          "children": [
+            {
+              "label": "Basic setup",
+              "to": "framework/react/basic-setup"
+            },
+            {
+              "label": "React adapter",
+              "to": "framework/react/adapter"
+            }
+          ]
+        },
+        {
+          "label": "solid",
+          "children": [
+            {
+              "label": "Basic setup",
+              "to": "framework/solid/basic-setup"
+            },
+            {
+              "label": "Solid Adapter",
+              "to": "framework/solid/adapter"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Guides",
+      "children": [],
+      "frameworks": [
+        {
+          "label": "react",
+          "children": [
+            {
+              "label": "Custom plugins",
+              "to": "framework/react/guides/custom-plugins"
+            }
+          ]
+        },
+        {
+          "label": "solid",
+          "children": []
+        }
+      ]
+    },
+    {
+      "label": "API Reference",
+      "children": [
+        {
+          "label": "Core API Reference",
+          "to": "reference/index"
+        }
+      ],
+      "frameworks": [
+        {
+          "label": "react",
+          "children": [
+            {
+              "label": "React Hooks",
+              "to": "framework/react/reference/index"
+            }
+          ]
+        },
+        {
+          "label": "solid",
+          "children": [
+            {
+              "label": "Solid Hooks",
+              "to": "framework/solid/reference/index"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Examples",
+      "children": [],
+      "frameworks": [
+        {
+          "label": "react",
+          "children": [
+            {
+              "label": "Basic",
+              "to": "framework/react/examples/basic"
+            },
+            {
+              "label": "TanStack Start",
+              "to": "framework/react/examples/start"
+            },
+            {
+              "label": "Custom devtools",
+              "to": "framework/react/examples/custom-devtools"
+            }
+          ]
+        },
+        {
+          "label": "solid",
+          "children": [
+            {
+              "label": "Basic",
+              "to": "framework/solid/examples/basic"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
