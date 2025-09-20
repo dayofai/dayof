@@ -6,6 +6,8 @@ import { defineConfig } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
+  esbuild: { sourcemap: false },
+  build: { sourcemap: false },
   plugins: [
     devtools(),
     tsconfigPaths({ projects: ['./tsconfig.json'], ignoreConfigErrors: true }),
