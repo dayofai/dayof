@@ -316,3 +316,41 @@ All CLI utilities implement security best practices:
 - Sensitive values passed via stdin (never in command line)
 - Input validation with clear error messages
 - Protected branch safeguards
+
+---
+
+## CI/CD & Deployments
+
+### Database migrations via GitHub Actions
+
+- **PR validation (safe):**
+  - Workflow: `DB validate (PR)` runs on pull requests targeting `develop`.
+  - Creates a short‑lived Neon branch (TTL), runs Drizzle migrations against it, and reports status in the PR checks.
+  - Cleanup: `DB cleanup (PR)` removes the ephemeral branch when the PR is closed.
+
+- **Authoritative apply after merge:**
+  - Workflow: `Database migrations` runs on pushes to `develop` and `main`.
+  - `develop` → targets the GitHub Environment `Preview` (shared preview DB).
+  - `main` → targets the GitHub Environment `Production` (production DB) and requires approval.
+
+### Required approvals for Production
+
+- The `Production` environment requires approval by the user `jonpage0` before the `Database migrations` job executes.
+- Use GitHub → Settings → Environments → `Production` to adjust approvers or add wait timers if needed.
+
+### Secrets layout (GitHub)
+
+- **Repository secrets** (used by PR validation/cleanup):
+  - `NEON_API_KEY`
+  - `NEON_PROJECT_ID`
+
+- **Environment secrets**
+  - `Preview` environment: `DATABASE_URL_PREVIEW`
+  - `Production` environment: `DATABASE_URL_PRODUCTION`
+
+### Vercel monorepo deploys (per app)
+
+- Each app is its own Vercel project with Root Directory set to the app folder (e.g., `apps/frontrow`).
+- Each app’s `vercel.json` includes an `ignoreCommand` so only changes in that app (and shared `packages/` where applicable) trigger a build/deploy.
+- Preview deployments occur for pushes (e.g., branches/PRs); Production deployments occur on merges to `main`.
+- Turborepo filtering and caching minimize work during both local builds and Vercel builds.
