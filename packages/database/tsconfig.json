@@ -1,1 +1,23 @@
-{}
+{
+  "include": ["**/*.ts"],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "lib": ["ES2022"],
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "composite": true,
+    "noEmit": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "database/*": ["./*"],
+      "@dayof/database/*": ["./*"],
+      "drizzle-orm": ["./node_modules/drizzle-orm"],
+      "drizzle-kit": ["./node_modules/drizzle-kit"]
+    }
+  }
+}
