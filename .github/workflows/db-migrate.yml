@@ -1,0 +1,35 @@
+name: Database migrations
+
+on:
+  push:
+    branches: [develop, main]
+
+jobs:
+  migrate:
+    environment: ${{ startsWith(github.ref, 'refs/heads/main') && 'Production' || 'Preview' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.2.15'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Set DB URL for develop
+        if: startsWith(github.ref, 'refs/heads/develop')
+        run: echo "DATABASE_URL=${{ secrets.DATABASE_URL_PREVIEW }}" >> $GITHUB_ENV
+
+      - name: Set DB URL for main
+        if: startsWith(github.ref, 'refs/heads/main')
+        run: echo "DATABASE_URL=${{ secrets.DATABASE_URL_PRODUCTION }}" >> $GITHUB_ENV
+
+      - name: Apply migrations
+        run: bun run db:migrate
+

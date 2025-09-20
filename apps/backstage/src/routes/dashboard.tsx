@@ -1,26 +1,30 @@
-import { authClient } from "@/lib/auth-client";
-import { orpc } from "@/utils/orpc";
-import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { createFileRoute } from '@tanstack/react-router';
+import { createServerFn } from '@tanstack/react-start';
+import { useEffect } from 'react';
+import { authClient } from '@/lib/auth-client';
 
-export const Route = createFileRoute("/dashboard")({
+export const getPrivateData = createServerFn({ method: 'GET' }).handler(() => {
+  return { message: 'ok' } as const;
+});
+
+export const Route = createFileRoute('/dashboard')({
+  loader: async () => getPrivateData(),
   component: RouteComponent,
 });
 
 function RouteComponent() {
   const navigate = Route.useNavigate();
   const { data: session, isPending } = authClient.useSession();
-
-  const privateData = useQuery(orpc.privateData.queryOptions());
+  const privateData = Route.useLoaderData();
 
   useEffect(() => {
-    if (!session && !isPending) {
-      navigate({
-        to: "/login",
-      });
+    if (isPending) {
+      return;
     }
-  }, [session, isPending]);
+    if (!session) {
+      navigate({ to: '/login' });
+    }
+  }, [session, isPending, navigate]);
 
   if (isPending) {
     return <div>Loading...</div>;
@@ -30,7 +34,7 @@ function RouteComponent() {
     <div>
       <h1>Dashboard</h1>
       <p>Welcome {session?.user.name}</p>
-      <p>privateData: {privateData.data?.message}</p>
+      <p>privateData: {privateData.message}</p>
     </div>
   );
 }

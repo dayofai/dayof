@@ -1,3 +1,4 @@
+import { Link, useNavigate } from '@tanstack/react-router';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -5,12 +6,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { authClient } from "@/lib/auth-client";
-import { useNavigate } from "@tanstack/react-router";
-import { Button } from "./ui/button";
-import { Skeleton } from "./ui/skeleton";
-import { Link } from "@tanstack/react-router";
+} from '@/components/ui/dropdown-menu';
+import { authClient } from '@/lib/auth-client';
+import { queryClient } from '@/lib/query-client';
+import { Button } from './ui/button';
+import { Skeleton } from './ui/skeleton';
 
 export default function UserMenu() {
   const navigate = useNavigate();
@@ -22,8 +22,8 @@ export default function UserMenu() {
 
   if (!session) {
     return (
-      <Button variant="outline" asChild>
-        <Link to="/login">Sign In</Link>
+      <Button asChild variant="outline">
+        <Link to="/auth/sign-in">Sign In</Link>
       </Button>
     );
   }
@@ -39,19 +39,20 @@ export default function UserMenu() {
         <DropdownMenuItem>{session.user.email}</DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Button
-            variant="destructive"
             className="w-full"
             onClick={() => {
               authClient.signOut({
                 fetchOptions: {
                   onSuccess: () => {
+                    queryClient.resetQueries({ queryKey: ['session'] });
                     navigate({
-                      to: "/",
+                      to: '/',
                     });
                   },
                 },
               });
             }}
+            variant="destructive"
           >
             Sign Out
           </Button>

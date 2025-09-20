@@ -10,7 +10,7 @@
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    "composite": true,
+    "noEmit": true,
 
     "skipLibCheck": true,
     "strict": true,
@@ -25,7 +25,7 @@
   },
   "references": [
     {
-      "path": "../packages/database"
+      "path": "../../packages/database"
     }
   ]
 }

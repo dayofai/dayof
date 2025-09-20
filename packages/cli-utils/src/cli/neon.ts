@@ -8,6 +8,7 @@ import {
 } from 'node:fs';
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline';
+import { URL } from 'node:url';
 import {
   getNeonConfigPath,
   readNeonConfig,
@@ -43,7 +44,6 @@ interface LastBranchInfo {
 }
 
 const TTL_REGEX = /^(\d+)\s*([smhd])$/i;
-const PASSWORD_FROM_URL_REGEX = /\/\/[^:]+:([^@]+)@/;
 
 /**
  * Get Neon credentials from environment or config
@@ -154,6 +154,95 @@ async function neonRequest<T = unknown>(
   }
 
   return (await response.json()) as T;
+}
+
+/**
+ * Reset a role's password on a specific branch via Neon API.
+ * Returns the newly generated password.
+ */
+async function resetBranchRolePassword(
+  projectId: string,
+  branchId: string,
+  roleName: string
+): Promise<string> {
+  const res = await neonRequest<{
+    role?: { password?: string };
+    password?: string;
+    operations?: Array<{ id: string; status?: string }>;
+  }>(
+    `/projects/${projectId}/branches/${encodeURIComponent(
+      branchId
+    )}/roles/${encodeURIComponent(roleName)}/reset_password`,
+    { method: 'POST' } as RequestInit
+  );
+
+  const password = res?.role?.password ?? res?.password;
+  assert(
+    typeof password === 'string' && password.length > 0,
+    'Neon API did not return a password when resetting role password'
+  );
+
+  const opIds = (res.operations ?? [])
+    .map((o) => o?.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+  const pollOperation = (operationId: string): Promise<void> => {
+    const deadline = Date.now() + 30_000;
+    // biome-ignore lint/nursery/noShadow: don't care right now
+    return new Promise((resolve, reject) => {
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: don't care right now
+      const tick = async (): Promise<void> => {
+        try {
+          const { operation } = await neonRequest<{
+            operation: { status?: string };
+          }>(
+            `/projects/${projectId}/operations/${encodeURIComponent(operationId)}`,
+            {
+              method: 'GET',
+            } as RequestInit
+          );
+          const status = (operation?.status ?? '').toLowerCase();
+          if (status && status !== 'running' && status !== 'queued') {
+            const ok = new Set([
+              'succeeded',
+              'ready',
+              'finished',
+              'completed',
+              'success',
+              'applied',
+            ]);
+            if (!ok.has(status)) {
+              reject(
+                new CliError(
+                  `Password reset operation did not succeed (status: ${status})`
+                )
+              );
+              return;
+            }
+            resolve();
+            return;
+          }
+          if (Date.now() > deadline) {
+            reject(
+              new CliError('Timed out waiting for Neon to apply password reset')
+            );
+            return;
+          }
+          setTimeout(tick, 1000);
+        } catch (err) {
+          reject(err as Error);
+        }
+      };
+      // Start the polling loop
+      tick().catch(reject);
+    });
+  };
+
+  if (opIds.length > 0) {
+    await Promise.all(opIds.map((id) => pollOperation(id)));
+  }
+
+  return password as string;
 }
 
 /**
@@ -359,19 +448,54 @@ async function branchCreate(args: string[]): Promise<void> {
     await new Promise((r) => setTimeout(r, 2000));
   }
 
-  // Construct connection URI using existing DATABASE_URL password
+  // Construct connection URI by preserving username, password, db name, and params
   console.log('→ Constructing connection URI...');
   const rootEnvPath = resolve(process.cwd(), '.env.local');
   const existingUrl =
     process.env.DATABASE_URL || readEnvVarFromFile(rootEnvPath, 'DATABASE_URL');
-  const pwdMatch = existingUrl?.match(PASSWORD_FROM_URL_REGEX);
-  const password = pwdMatch?.[1];
   assert(
-    password && endpoint.host,
-    'Unable to construct connection URI - missing password or endpoint host'
+    existingUrl && endpoint.host,
+    'Unable to construct connection URI - missing existing DATABASE_URL or endpoint host'
   );
 
-  const connectionUri = `postgresql://neondb_owner:${password}@${endpoint.host}/neondb?sslmode=require`;
+  let parsed: URL;
+  try {
+    parsed = new URL(existingUrl as string);
+  } catch {
+    throw new CliError('Invalid DATABASE_URL format');
+  }
+
+  const username = parsed.username;
+  const password = parsed.password;
+  const dbPath = parsed.pathname || '/neondb';
+  const protocol = parsed.protocol || 'postgresql:';
+
+  // Build new URL pointing to the new endpoint host while preserving creds and db
+  const newUrl = new URL(
+    `${protocol}//${username}:${password}@${endpoint.host}${dbPath}${parsed.search ?? ''}`
+  );
+  const params = new URLSearchParams(newUrl.search);
+  if (!params.has('sslmode')) {
+    params.set('sslmode', 'require');
+  }
+  newUrl.search = params.toString() ? `?${params.toString()}` : '';
+
+  // Reset branch-local password to an ephemeral secret to guarantee connectivity
+  let connectionUri = newUrl.toString();
+  const role = username || 'neondb_owner';
+  console.log(
+    '→ Resetting branch-local password for role to ephemeral value...'
+  );
+  const newPassword = await resetBranchRolePassword(
+    projectId,
+    newBranch.id,
+    role
+  );
+  // Rebuild connection URI with the API-returned password
+  newUrl.password = newPassword;
+  connectionUri = newUrl.toString();
+  console.log('✓ Ephemeral password set for temp branch');
+
   console.log('✓ Connection URI ready');
 
   // Propagate to env files across apps and packages/database

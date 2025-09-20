@@ -1,0 +1,22 @@
+name: DB cleanup (PR)
+
+on:
+  pull_request:
+    branches: [develop]
+    types: [closed]
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.2.15'
+
+      - name: Delete ephemeral Neon branch
+        run: bun neon delete pr-${{ github.event.number }}
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+

@@ -1,0 +1,40 @@
+name: DB validate (PR)
+
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.2.15'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Set preview DATABASE_URL
+        run: echo "DATABASE_URL=${{ secrets.DATABASE_URL_PREVIEW }}" >> $GITHUB_ENV
+
+      - name: Create ephemeral Neon branch (TTL 2h)
+        run: bun neon create pr-${{ github.event.number }} 2h
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+
+      - name: Run migrations against ephemeral
+        run: bun run db:migrate
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "Validated migrations on Neon branch pr-${{ github.event.number }}" >> $GITHUB_STEP_SUMMARY
+
