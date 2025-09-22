@@ -86,22 +86,34 @@ adminApp.use('/admin/*', async (c, next) => {
   // Set up basic auth without the unsupported onSuccess option
   const auth = basicAuth({ username: user, password: pass });
 
-  const result = await auth(c, async () => {
-    c.set('adminUser', { username: user });
+  try {
+    const result = await auth(c, async () => {
+      c.set('adminUser', { username: user });
 
-    // Log successful authentication to PostHog
-    logger.info('admin_authentication_success', {
-      admin_username: user,
-      client_ip: clientIp,
-      user_agent: userAgent,
-      path: c.req.path,
+      // Log successful authentication to PostHog
+      logger.info('admin_authentication_success', {
+        admin_username: user,
+        client_ip: clientIp,
+        user_agent: userAgent,
+        path: c.req.path,
+      });
+
+      return await next();
     });
 
-    return await next();
-  });
-
-  // Check if authentication failed and log to PostHog
-  if (result instanceof Response && result.status === 401) {
+    // If middleware returned a 401 response (instead of throwing), log it and return
+    if (result instanceof Response && result.status === 401) {
+      logger.warn('admin_authentication_failure', {
+        attempted_username: attemptedUsername || 'not_provided_or_malformed',
+        client_ip: clientIp,
+        user_agent: userAgent,
+        path: c.req.path,
+        reason: 'invalid_credentials',
+      });
+    }
+    return result;
+  } catch (_err) {
+    // Hono basicAuth throws HTTPException on failure in some versions – normalize to 401 JSON
     logger.warn('admin_authentication_failure', {
       attempted_username: attemptedUsername || 'not_provided_or_malformed',
       client_ip: clientIp,
@@ -109,9 +121,8 @@ adminApp.use('/admin/*', async (c, next) => {
       path: c.req.path,
       reason: 'invalid_credentials',
     });
+    return c.json({ error: 'Unauthorized' }, 401);
   }
-
-  return result;
 });
 
 adminApp.put('/admin/certs/:certRef', async (c) => {
