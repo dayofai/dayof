@@ -67,8 +67,9 @@ export function upsertPassContentWithEtag(
   key: PassKey,
   data: unknown
 ): Promise<{ etag: string; updatedAt: Date; changed: boolean }> {
-  return db.transaction(async (tx) => {
-    const pass = await tx.query.walletPass.findFirst({
+  return (async () => {
+    // NOTE: neon-http driver does not support transactions; perform sequential operations.
+    const pass = await db.query.walletPass.findFirst({
       where: {
         passTypeIdentifier: key.passTypeIdentifier,
         serialNumber: key.serialNumber,
@@ -81,7 +82,7 @@ export function upsertPassContentWithEtag(
       );
     }
 
-    const existing = await tx.query.walletPassContent.findFirst({
+    const existing = await db.query.walletPassContent.findFirst({
       where: { passId: pass.id },
       columns: { data: true },
     });
@@ -91,11 +92,11 @@ export function upsertPassContentWithEtag(
     const changed = stableStringify(prevJson) !== stableStringify(nextJson);
 
     if (!existing) {
-      await tx
+      await db
         .insert(schema.walletPassContent)
         .values({ passId: pass.id, data: nextJson });
     } else if (changed) {
-      await tx
+      await db
         .update(schema.walletPassContent)
         .set({ data: nextJson, updatedAt: nowSeconds() })
         .where(eq(schema.walletPassContent.passId, pass.id));
@@ -118,7 +119,7 @@ export function upsertPassContentWithEtag(
       nextJson
     );
 
-    await tx
+    await db
       .update(schema.walletPass)
       .set({ etag, updatedAt })
       .where(
@@ -129,7 +130,7 @@ export function upsertPassContentWithEtag(
       );
 
     return { etag, updatedAt, changed: true };
-  });
+  })();
 }
 
 export function updatePassMetadataWithEtag(
@@ -137,8 +138,9 @@ export function updatePassMetadataWithEtag(
   key: PassKey,
   patch: Partial<{ ticketStyle: WalletPass['ticketStyle']; poster: boolean }>
 ): Promise<{ etag: string; updatedAt: Date; changed: boolean }> {
-  return db.transaction(async (tx) => {
-    await tx
+  return (async () => {
+    // Sequential updates for neon-http compatibility
+    await db
       .update(schema.walletPass)
       .set(patch)
       .where(
@@ -148,7 +150,7 @@ export function updatePassMetadataWithEtag(
         )
       );
 
-    const reloaded = await tx.query.walletPass.findFirst({
+    const reloaded = await db.query.walletPass.findFirst({
       where: {
         passTypeIdentifier: key.passTypeIdentifier,
         serialNumber: key.serialNumber,
@@ -161,7 +163,7 @@ export function updatePassMetadataWithEtag(
       );
     }
 
-    const content = await tx.query.walletPassContent.findFirst({
+    const content = await db.query.walletPassContent.findFirst({
       where: { passId: reloaded.id },
       columns: { data: true },
     });
@@ -178,7 +180,7 @@ export function updatePassMetadataWithEtag(
       content?.data ?? null
     );
 
-    await tx
+    await db
       .update(schema.walletPass)
       .set({ etag, updatedAt })
       .where(
@@ -189,5 +191,5 @@ export function updatePassMetadataWithEtag(
       );
 
     return { etag, updatedAt, changed: true };
-  });
+  })();
 }

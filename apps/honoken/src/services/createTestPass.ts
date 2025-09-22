@@ -300,28 +300,35 @@ export async function createTestPass(
     }
   }
 
-  // Check required assets in blob storage
-  const blob = new VercelBlobAssetStorage(env, logger);
-  const assetPrefix = `${passTypeIdentifier}/${serialNumber}/`;
+  // Check required assets in blob storage (optional in dev)
+  // If HONOKEN_IMAGES_READ_WRITE_TOKEN is not set, skip checks and return a warning
+  if (!env.HONOKEN_IMAGES_READ_WRITE_TOKEN) {
+    warnings.push(
+      'Asset checks skipped: HONOKEN_IMAGES_READ_WRITE_TOKEN not set in environment.'
+    );
+  } else {
+    const blob = new VercelBlobAssetStorage(env, logger);
+    const assetPrefix = `${passTypeIdentifier}/${serialNumber}/`;
 
-  // Required: icon.png (29x29), logo.png (160x50+), background@2x.png for poster
-  const assetsToCheck = [
-    { name: 'icon.png', path: assetPrefix + 'icon.png', required: true },
-    { name: 'logo.png', path: assetPrefix + 'logo.png', required: true },
-    {
-      name: 'background@2x.png',
-      path: assetPrefix + 'background@2x.png',
-      required: !!input.poster,
-    },
-  ];
+    // Required: icon.png (29x29), logo.png (160x50+), background@2x.png for poster
+    const assetsToCheck = [
+      { name: 'icon.png', path: assetPrefix + 'icon.png', required: true },
+      { name: 'logo.png', path: assetPrefix + 'logo.png', required: true },
+      {
+        name: 'background@2x.png',
+        path: assetPrefix + 'background@2x.png',
+        required: !!input.poster,
+      },
+    ];
 
-  for (const asset of assetsToCheck) {
-    if (asset.required) {
-      const found = await blob.exists(asset.path);
-      if (!found) {
-        warnings.push(
-          `Missing required asset: ${asset.name} (${asset.path})`
-        );
+    for (const asset of assetsToCheck) {
+      if (asset.required) {
+        const found = await blob.exists(asset.path);
+        if (!found) {
+          warnings.push(
+            `Missing required asset: ${asset.name} (${asset.path})`
+          );
+        }
       }
     }
   }
