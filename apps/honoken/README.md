@@ -452,20 +452,21 @@ Event Types:
 
 ### Required
 
-| Variable                         | Description                                            | Example                   |
-| -------------------------------- | ------------------------------------------------------ | ------------------------- |
-| `DATABASE_URL`                   | Neon PostgreSQL connection (set by Vercel integration) | Auto-configured           |
-| `DEV_DATABASE_URL`               | Development database connection                        | `postgresql://...`        |
-| `UPSTASH_REDIS_REST_URL`         | Upstash Redis REST endpoint                            | `https://...upstash.io`   |
-| `UPSTASH_REDIS_REST_TOKEN`       | Upstash Redis auth token                               | `AX...`                   |
-| `HONOKEN_ENCRYPTION_KEY_V1`      | Base64 AES-256 key (version 1)                         | `openssl rand -base64 32` |
-| `HONOKEN_ENCRYPTION_KEY_CURRENT` | Current key version                                    | `v1`                      |
-| `HONOKEN_ADMIN_USERNAME`         | Admin panel username (required)                        | Choose secure username    |
-| `HONOKEN_ADMIN_PASSWORD`         | Admin panel password (required)                        | Choose strong password    |
-| `SERVICE_NAME`                   | Service identifier                                     | `honoken`                 |
-| `ENVIRONMENT`                    | Runtime environment                                    | `production`              |
-| `HONOKEN_RELEASE_VERSION`        | Version for tracking                                   | `1.0.0`                   |
-| `POSTHOG_PROJECT_API_KEY`        | PostHog project API key                                | `phc_...`                 |
+| Variable                          | Description                                            | Example                   |
+| --------------------------------- | ------------------------------------------------------ | ------------------------- |
+| `DATABASE_URL`                    | Neon PostgreSQL connection (set by Vercel integration) | Auto-configured           |
+| `DEV_DATABASE_URL`                | Development database connection                        | `postgresql://...`        |
+| `UPSTASH_REDIS_REST_URL`          | Upstash Redis REST endpoint                            | `https://...upstash.io`   |
+| `UPSTASH_REDIS_REST_TOKEN`        | Upstash Redis auth token                               | `AX...`                   |
+| `HONOKEN_ENCRYPTION_KEY_V1`       | Base64 AES-256 key (version 1)                         | `openssl rand -base64 32` |
+| `HONOKEN_ENCRYPTION_KEY_CURRENT`  | Current key version                                    | `v1`                      |
+| `HONOKEN_ADMIN_USERNAME`          | Admin panel username (required)                        | Choose secure username    |
+| `HONOKEN_ADMIN_PASSWORD`          | Admin panel password (required)                        | Choose strong password    |
+| `SERVICE_NAME`                    | Service identifier                                     | `honoken`                 |
+| `ENVIRONMENT`                     | Runtime environment (inferred if missing)              | `production`              |
+| `HONOKEN_RELEASE_VERSION`         | Version for tracking                                   | `1.0.0`                   |
+| `POSTHOG_PROJECT_API_KEY`         | PostHog project API key                                | `phc_...`                 |
+| `HONOKEN_IMAGES_READ_WRITE_TOKEN` | Vercel Blob RW token for images                        | `vercel_rw_...`           |
 
 ### Optional
 

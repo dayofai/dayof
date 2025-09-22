@@ -16,12 +16,13 @@ export function validateEnv(env: Partial<Env>): asserts env is Env {
     // Database (one of these must be present)
     {
       names: ['TEMP_BRANCH_DATABASE_URL', 'DATABASE_URL', 'DEV_DATABASE_URL'],
-      error: 'Either TEMP_BRANCH_DATABASE_URL or DATABASE_URL or DEV_DATABASE_URL must be set',
+      error:
+        'Either TEMP_BRANCH_DATABASE_URL or DATABASE_URL or DEV_DATABASE_URL must be set',
     },
-    // Blob storage
+    // Blob storage (prefer new name, accept legacy for backward compatibility)
     {
-      names: ['BLOB_READ_WRITE_TOKEN'],
-      error: 'BLOB_READ_WRITE_TOKEN is required for Vercel Blob',
+      names: ['HONOKEN_IMAGES_READ_WRITE_TOKEN'],
+      error: 'HONOKEN_IMAGES_READ_WRITE_TOKEN is required for Vercel Blob',
     },
     // Admin auth
     {
@@ -46,10 +47,6 @@ export function validateEnv(env: Partial<Env>): asserts env is Env {
     {
       names: ['SERVICE_NAME'],
       error: 'SERVICE_NAME is required for logging and monitoring',
-    },
-    {
-      names: ['ENVIRONMENT'],
-      error: 'ENVIRONMENT is required for logging and monitoring',
     },
     // PostHog
     {
@@ -76,7 +73,7 @@ export function validateEnv(env: Partial<Env>): asserts env is Env {
   }
 
   // Validate versioned encryption keys
-  const currentVersion = mergedEnv['HONOKEN_ENCRYPTION_KEY_CURRENT'];
+  const currentVersion = mergedEnv.HONOKEN_ENCRYPTION_KEY_CURRENT;
   if (currentVersion) {
     const versionedKeyName = `HONOKEN_ENCRYPTION_KEY_${currentVersion.toUpperCase()}`;
     const versionedKey = mergedEnv[versionedKeyName];
@@ -121,11 +118,11 @@ export function validateEnv(env: Partial<Env>): asserts env is Env {
   }
 
   // Validate sample rate if present
-  if (mergedEnv['LOG_SAMPLE_SUCCESS_RATE']) {
-    const rate = Number.parseFloat(mergedEnv['LOG_SAMPLE_SUCCESS_RATE']!);
+  if (mergedEnv.LOG_SAMPLE_SUCCESS_RATE) {
+    const rate = Number.parseFloat(mergedEnv.LOG_SAMPLE_SUCCESS_RATE);
     if (Number.isNaN(rate) || rate < 0 || rate > 1) {
       throw new Error(
-        `Invalid LOG_SAMPLE_SUCCESS_RATE: must be a number between 0 and 1, got \"${mergedEnv['LOG_SAMPLE_SUCCESS_RATE']}\"`
+        `Invalid LOG_SAMPLE_SUCCESS_RATE: must be a number between 0 and 1, got "${mergedEnv.LOG_SAMPLE_SUCCESS_RATE}"`
       );
     }
   }
