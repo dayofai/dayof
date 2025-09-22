@@ -29,7 +29,10 @@ const cachedKeys = new Map<string, webcrypto.CryptoKey>();
  * @returns The current key version (e.g., 'v1')
  */
 export function getCurrentKeyVersion(env: Env): string {
-  const version = env.HONOKEN_ENCRYPTION_KEY_CURRENT;
+  // Prefer runtime-provided binding, but fall back to process.env for Node/Bun
+  const version =
+    env.HONOKEN_ENCRYPTION_KEY_CURRENT ||
+    (process.env.HONOKEN_ENCRYPTION_KEY_CURRENT as string | undefined);
   if (!version) {
     throw new Error(
       'HONOKEN_ENCRYPTION_KEY_CURRENT is not set. Please specify the current key version.'
@@ -59,7 +62,10 @@ export async function getVersionedEncryptionKey(
 
   // Get the versioned key from environment
   const envVarName = `HONOKEN_ENCRYPTION_KEY_${version.toUpperCase()}`;
-  const dynamicValue = (env as unknown as Record<string, unknown>)[envVarName];
+  // Try c.env first, then process.env for local Node/Bun runtime support
+  const dynamicValue =
+    (env as unknown as Record<string, unknown>)[envVarName] ??
+    (process.env as Record<string, string | undefined>)[envVarName];
   if (typeof dynamicValue !== 'string' || dynamicValue.length === 0) {
     throw new Error(`Encryption key ${envVarName} is not set.`);
   }
@@ -102,11 +108,17 @@ export async function encryptWithVersion(
   // Generate random IV
   const iv = crypto.getRandomValues(new Uint8Array(12));
 
+  // Ensure data is a Uint8Array for WebCrypto BufferSource compatibility
+  const plaintext = data instanceof Uint8Array ? data : new Uint8Array(data);
+
   // Encrypt the data
+  // Create a plain ArrayBuffer to avoid SharedArrayBuffer typing in Node types
+  const plaintextBuffer = new ArrayBuffer(plaintext.byteLength);
+  new Uint8Array(plaintextBuffer).set(plaintext);
   const encryptedData = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     cryptoKey,
-    data
+    plaintextBuffer
   );
 
   // Format: version:iv:encryptedData
