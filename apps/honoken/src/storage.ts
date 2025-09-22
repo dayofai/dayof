@@ -82,32 +82,26 @@ export async function registerDevice(
   const dbClient = getDbClient(env, logger);
 
   try {
-    const outcome = await dbClient.transaction(async (tx) => {
-      await tx
-        .insert(sharedSchema.walletDevice)
-        .values({
-          deviceLibraryIdentifier,
-          pushToken,
-        })
-        .onConflictDoUpdate({
-          target: sharedSchema.walletDevice.deviceLibraryIdentifier,
-          set: { pushToken },
-        });
-
-      const existingReg = await tx.query.walletRegistration.findFirst({
-        columns: {
-          deviceLibraryIdentifier: true,
-          active: true,
-        },
-        where: { deviceLibraryIdentifier, passTypeIdentifier, serialNumber },
+    // neon-http has no transactions; perform sequential operations
+    await dbClient
+      .insert(sharedSchema.walletDevice)
+      .values({ deviceLibraryIdentifier, pushToken })
+      .onConflictDoUpdate({
+        target: sharedSchema.walletDevice.deviceLibraryIdentifier,
+        set: { pushToken },
       });
 
-      if (existingReg) {
-        if (existingReg.active) {
-          return 'already_active' as const;
-        }
-        // If it exists but is inactive, let's reactivate it.
-        await tx
+    const existingReg = await dbClient.query.walletRegistration.findFirst({
+      columns: { deviceLibraryIdentifier: true, active: true },
+      where: { deviceLibraryIdentifier, passTypeIdentifier, serialNumber },
+    });
+
+    let outcome: 'already_active' | 'reactivated' | 'created';
+    if (existingReg) {
+      if (existingReg.active) {
+        outcome = 'already_active';
+      } else {
+        await dbClient
           .update(sharedSchema.walletRegistration)
           .set({ active: true })
           .where(
@@ -123,10 +117,10 @@ export async function registerDevice(
               eq(sharedSchema.walletRegistration.serialNumber, serialNumber)
             )
           );
-        return 'reactivated' as const;
+        outcome = 'reactivated';
       }
-      // Look up the pass to get its id for the registration row
-      const passRow = await tx.query.walletPass.findFirst({
+    } else {
+      const passRow = await dbClient.query.walletPass.findFirst({
         columns: { id: true },
         where: { passTypeIdentifier, serialNumber },
       });
@@ -135,18 +129,18 @@ export async function registerDevice(
         throw new Error('PASS_NOT_FOUND');
       }
 
-      await tx
+      await dbClient
         .insert(sharedSchema.walletRegistration)
         .values({
           passId: passRow.id,
           deviceLibraryIdentifier,
           passTypeIdentifier,
           serialNumber,
-          active: true, // New registrations are active
+          active: true,
         })
-        .onConflictDoNothing(); // Should be new, but onConflictDoNothing is safe
-      return 'created' as const;
-    });
+        .onConflictDoNothing();
+      outcome = 'created';
+    }
 
     // Track device registration in PostHog (only for new registrations)
     if (outcome === 'created' && posthog) {
