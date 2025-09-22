@@ -29,14 +29,14 @@ export class VercelBlobAssetStorage {
 
   constructor(env: Env, logger: Logger, opts?: { prefix?: string }) {
     this.logger = logger;
-    this.token = env.BLOB_READ_WRITE_TOKEN;
+    this.token = env.HONOKEN_IMAGES_READ_WRITE_TOKEN;
     if (!this.token) {
       logger.error(
-        'BLOB_READ_WRITE_TOKEN missing in env',
+        'HONOKEN_IMAGES_READ_WRITE_TOKEN missing in env',
         new Error('BlobConfigError')
       );
       throw new Error(
-        'BLOB_READ_WRITE_TOKEN is required for Vercel Blob operations'
+        'HONOKEN_IMAGES_READ_WRITE_TOKEN is required for Vercel Blob operations'
       );
     }
     this.prefix = opts?.prefix;

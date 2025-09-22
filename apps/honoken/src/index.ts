@@ -252,6 +252,12 @@ const envValidationMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (
 ) => {
   if (!envValidated) {
     try {
+      // Provide a sensible default for ENVIRONMENT if missing
+      // Prefer Vercel's environment, then NODE_ENV, defaulting to 'development'
+      const derivedEnvironment =
+        process.env.VERCEL_ENV || process.env.NODE_ENV || 'development';
+      c.env.ENVIRONMENT = c.env.ENVIRONMENT || derivedEnvironment;
+
       validateEnv(c.env);
       envValidated = true;
     } catch (error) {

@@ -52,7 +52,7 @@ export function createMockEnv(
     VERBOSE_LOGGING: 'true', // Enable verbose logging in tests
 
     // Blob token for asset storage adapter paths used in pass builder
-    BLOB_READ_WRITE_TOKEN: 'test-blob-token',
+    HONOKEN_IMAGES_READ_WRITE_TOKEN: 'test-blob-token',
 
     // PostHog Configuration
     POSTHOG_PROJECT_API_KEY: 'phc_test_key',
