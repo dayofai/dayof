@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { basicAuth } from 'hono/basic-auth';
 import { HTTPException } from 'hono/http-exception';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { z } from 'zod/v4';
 import { getDbClient } from '../db/index';
 import { pushToMany } from '../passkit/apnsFetch';
@@ -36,6 +37,7 @@ type AdminAppVariables = {
 const adminApp = new Hono<{ Bindings: Env; Variables: AdminAppVariables }>();
 
 // Basic Auth Middleware (ensure ADMIN_USERNAME and ADMIN_PASSWORD are set as secrets)
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: needed complexity
 adminApp.use('/admin/*', async (c, next) => {
   const logger = createLogger(c);
   c.set('logger', logger);
@@ -286,7 +288,7 @@ adminApp.post('/admin/create-test-pass', async (c) => {
   try {
     const payload = await c.req.json();
 
-    let input;
+    let input: z.infer<typeof CreateTestPassSchema>;
     try {
       input = CreateTestPassSchema.parse(payload);
     } catch (zodErr) {
@@ -350,7 +352,7 @@ adminApp.post('/admin/create-test-pass', async (c) => {
           error: 'Test Pass Creation Error',
           message: err.friendlyMessage || err.message,
         },
-        err.statusCode
+        err.statusCode as ContentfulStatusCode
       );
     }
     if (err instanceof z.ZodError) {
@@ -368,7 +370,7 @@ adminApp.post('/admin/create-test-pass', async (c) => {
     logger.error(
       'Unhandled error during admin test pass creation',
       err instanceof Error ? err : new Error(String(err)),
-      { input: c.req.body }
+      { path: c.req.path }
     );
     throw new HTTPException(500, {
       message: 'Internal server error during test pass creation.',
