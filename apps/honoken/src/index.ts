@@ -405,6 +405,18 @@ app.route('/v1', createV1App());
 
 app.route('/', adminRoutes);
 
+// Stub common browser requests to avoid noisy 404s
+app.get('/favicon.ico', (c) => {
+  c.header('Cache-Control', 'public, max-age=86400, immutable');
+  return c.body(null, 204);
+});
+
+app.get('/fix-tprotocol-service-worker.js', (c) => {
+  c.header('Content-Type', 'application/javascript; charset=utf-8');
+  c.header('Cache-Control', 'no-store');
+  return c.text('// no-op service worker');
+});
+
 app.get('/', handleRootHealth);
 
 // Export the Hono app instance for Vercel

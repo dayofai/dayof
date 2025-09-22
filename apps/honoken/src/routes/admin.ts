@@ -6,21 +6,24 @@ import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod/v4';
 import { getDbClient } from '../db/index';
 import { pushToMany } from '../passkit/apnsFetch';
+import { invalidateApnsKeyCache, storeApnsKey } from '../passkit/apnsKeys';
 import { invalidateCertCache, storeCertBundle } from '../passkit/certs';
-import { storeApnsKey, invalidateApnsKeyCache } from '../passkit/apnsKeys';
 import { CertificateRotationBodySchema } from '../schemas';
 
 import { CreateTestPassSchema } from '../schemas/createTestPassSchema';
-import { createTestPass, CreateTestPassError } from '../services/createTestPass';
+import {
+  CreateTestPassError,
+  createTestPass,
+} from '../services/createTestPass';
 import type { Env } from '../types';
 import { createLogger, type Logger } from '../utils/logger';
 
 // Zod schema for APNs key uploads
 const ApnsKeyUploadSchema = z.object({
-  keyRef: z.string().min(1, { message: "keyRef is required" }),
-  teamId: z.string().min(1, { message: "teamId is required" }),
-  keyId: z.string().min(1, { message: "keyId is required" }),
-  p8Pem: z.string().min(1, { message: "p8Pem is required" }),
+  keyRef: z.string().min(1, { message: 'keyRef is required' }),
+  teamId: z.string().min(1, { message: 'teamId is required' }),
+  keyId: z.string().min(1, { message: 'keyId is required' }),
+  p8Pem: z.string().min(1, { message: 'p8Pem is required' }),
 });
 
 type AdminAppVariables = {
@@ -37,8 +40,12 @@ adminApp.use('/admin/*', async (c, next) => {
   const logger = createLogger(c);
   c.set('logger', logger);
 
-  const user = c.env.HONOKEN_ADMIN_USERNAME;
-  const pass = c.env.HONOKEN_ADMIN_PASSWORD;
+  // On Vercel/Node, environment variables are exposed via process.env.
+  // c.env is not automatically populated like on Workers. Fall back to process.env.
+  const user =
+    c.env.HONOKEN_ADMIN_USERNAME || process.env.HONOKEN_ADMIN_USERNAME;
+  const pass =
+    c.env.HONOKEN_ADMIN_PASSWORD || process.env.HONOKEN_ADMIN_PASSWORD;
   if (!(user && pass)) {
     logger.error(
       'Admin Basic Auth secrets not set. HONOKEN_ADMIN_USERNAME or HONOKEN_ADMIN_PASSWORD missing.',
@@ -305,7 +312,10 @@ adminApp.post('/admin/create-test-pass', async (c) => {
     });
 
     // Build absolute downloadUrl for pass file
-    const downloadUrl = new URL(result.downloadPath, requestUrlOrigin || c.req.url).toString();
+    const downloadUrl = new URL(
+      result.downloadPath,
+      requestUrlOrigin || c.req.url
+    ).toString();
 
     return c.json(
       {
