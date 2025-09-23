@@ -21,8 +21,8 @@ export function validateEnv(env: Partial<Env>): asserts env is Env {
     },
     // Blob storage (prefer new name, accept legacy for backward compatibility)
     {
-      names: ['BLOB_READ_WRITE_TOKEN'],
-      error: 'BLOB_READ_WRITE_TOKEN is required for Vercel Blob',
+      names: ['HONOKEN_IMAGES_READ_WRITE_TOKEN'],
+      error: 'HONOKEN_IMAGES_READ_WRITE_TOKEN is required for Vercel Blob',
     },
     // Admin auth
     {

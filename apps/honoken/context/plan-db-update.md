@@ -25,7 +25,7 @@ One Neon Postgres database and a single monorepo‑wide DB package (Drizzle V2).
 - **Soft delete**: `timeStamps({ softDelete: true })` on wallet tables where noted.
 - **Logs**: PostHog only; no DB table.
 - **APNs**: Keep dev trigger endpoint optional; production fan‑out run via Inngest step.
-- **Assets**: **Vercel Blob** via `BLOB_READ_WRITE_TOKEN` (your adapter is good).
+- **Assets**: **Vercel Blob** via `HONOKEN_IMAGES_READ_WRITE_TOKEN` (your adapter is good).
 
 ---
 
@@ -323,7 +323,7 @@ Add ESLint `no-restricted-imports` to prevent raw updates to `wallet_pass[_conte
 
 ## Vercel Blob (assets)
 
-- Use your `VercelBlobAssetStorage` class with `BLOB_READ_WRITE_TOKEN`.
+- Use your `VercelBlobAssetStorage` class with `HONOKEN_IMAGES_READ_WRITE_TOKEN`.
 - Asset keys remain `${passTypeIdentifier}/${serialNumber}/...` and `brand-assets/...`.
 - PNG header probing via range requests — keep as implemented.
 
@@ -334,7 +334,7 @@ Add ESLint `no-restricted-imports` to prevent raw updates to `wallet_pass[_conte
 - **Node 22**: set `"engines": { "node": ">=22 <23" }` in root and apps; `vercel.json` runtime Node 22.
 - **Drizzle Kit**: set in `packages/database/drizzle.config.ts`.
 - **ESLint**: add restricted import rule; allow in `src/repo/**`.
-- **Env**: document `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`, APNs/cert secrets, PostHog (optional in dev).
+- **Env**: document `DATABASE_URL`, `HONOKEN_IMAGES_READ_WRITE_TOKEN`, APNs/cert secrets, PostHog (optional in dev).
 
 ---
 

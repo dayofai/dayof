@@ -301,10 +301,10 @@ export async function createTestPass(
   }
 
   // Check required assets in blob storage (optional in dev)
-  // If BLOB_READ_WRITE_TOKEN is not set, skip checks and return a warning
-  if (!env.BLOB_READ_WRITE_TOKEN) {
+  // If HONOKEN_IMAGES_READ_WRITE_TOKEN is not set, skip checks and return a warning
+  if (!env.HONOKEN_IMAGES_READ_WRITE_TOKEN) {
     warnings.push(
-      'Asset checks skipped: BLOB_READ_WRITE_TOKEN not set in environment.'
+      'Asset checks skipped: HONOKEN_IMAGES_READ_WRITE_TOKEN not set in environment.'
     );
   } else {
     const blob = new VercelBlobAssetStorage(env, logger);
