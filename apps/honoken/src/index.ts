@@ -258,6 +258,17 @@ const envValidationMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (
         process.env.VERCEL_ENV || process.env.NODE_ENV || 'development';
       c.env.ENVIRONMENT = c.env.ENVIRONMENT || derivedEnvironment;
 
+      // Hydrate c.env with process.env when running in Node/Vercel/Bun so downstream code
+      // that reads from c.env directly (instead of process.env) sees all variables.
+      // This mirrors what Cloudflare Workers does automatically.
+      const nodeEnvVars = process.env as Record<string, string | undefined>;
+      for (const [key, value] of Object.entries(nodeEnvVars)) {
+        if (value !== undefined && !(key in c.env)) {
+          // biome-ignore lint/suspicious/noExplicitAny: runtime env stitching
+          (c.env as any)[key] = value;
+        }
+      }
+
       validateEnv(c.env);
       envValidated = true;
     } catch (error) {
