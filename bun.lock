@@ -254,6 +254,9 @@
     "packages/database": {
       "name": "database",
       "version": "0.0.0",
+      "dependencies": {
+        "ws": "^8.18.0",
+      },
     },
     "packages/inngest": {
       "name": "inngest-kit",

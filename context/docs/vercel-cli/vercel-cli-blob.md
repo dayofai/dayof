@@ -16,7 +16,7 @@ The `vercel blob` command supports the following operations:
 - [`store remove`](./vercel-cli-blob.md#store-remove-rm) \- Remove a Blob store
 - [`store get`](./vercel-cli-blob.md#store-get) \- Get a Blob store
 
-For authentication, the CLI reads the `HONOKEN_IMAGES_READ_WRITE_TOKEN` value from your env file, or you can use the [`--rw-token` option](./vercel-cli-blob.md#rw-token).
+For authentication, the CLI reads the `BLOB_READ_WRITE_TOKEN` value from your env file, or you can use the [`--rw-token` option](./vercel-cli-blob.md#rw-token).
 
 ### [list (ls)](https://vercel.com/docs/cli/blob#list-ls)
 
