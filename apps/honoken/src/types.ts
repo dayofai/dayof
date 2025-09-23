@@ -39,7 +39,7 @@ export interface Env {
   LOG_SAMPLE_SUCCESS_RATE?: string; // For configurable success log sampling e.g. "0.01"
 
   // Vercel Blob
-  HONOKEN_IMAGES_READ_WRITE_TOKEN: string; // replaces deprecated BLOB_READ_WRITE_TOKEN
+  BLOB_READ_WRITE_TOKEN: string; // replaces deprecated BLOB_READ_WRITE_TOKEN
 }
 
 /**
