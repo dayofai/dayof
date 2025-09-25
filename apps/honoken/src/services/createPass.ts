@@ -7,7 +7,7 @@ import { getDbClient } from '../db';
 import type { Env } from '../types';
 import type { Logger } from '../utils/logger';
 import { upsertPassContentWithEtag } from '../repo/wallet';
-import type { CreateTestPassInput } from '../schemas/createTestPassSchema';
+import type { CreatePassInput } from '../schemas/createPassSchema';
 
 // Inngest integration for pass creation notification
 import { Inngest } from 'inngest';
@@ -21,7 +21,7 @@ const inngest = new Inngest({
   eventKey: INNGEST_EVENT_KEY,
 });
 
-export class CreateTestPassError extends Error {
+export class CreatePassError extends Error {
   statusCode: number;
   friendlyMessage?: string;
   constructor(msg: string, opts?: { statusCode?: number; friendlyMessage?: string }) {
@@ -31,7 +31,7 @@ export class CreateTestPassError extends Error {
   }
 }
 
-export type CreateTestPassResult = {
+export type CreatePassResult = {
   passTypeIdentifier: string;
   serialNumber: string;
   authenticationToken: string;
@@ -66,11 +66,11 @@ const DEFAULT_PASS_TYPE_IDENTIFIER = 'pass.cards.dayof.tickets';
 const DEFAULT_CERT_REF = 'dayof-tickets';
 
 // Returns { result, warnings[] }
-export async function createTestPass(
+export async function createPass(
   env: Env,
   logger: Logger,
-  input: CreateTestPassInput
-): Promise<CreateTestPassResult> {
+  input: CreatePassInput
+): Promise<CreatePassResult> {
   const db = getDbClient(env, logger);
 
   const warnings: string[] = [];
@@ -88,7 +88,7 @@ export async function createTestPass(
     columns: { certRef: true },
   });
   if (!cert) {
-    throw new CreateTestPassError(
+    throw new CreatePassError(
       `No certificate found with certRef '${certRef}'`,
       {
         statusCode: 400,
@@ -117,7 +117,7 @@ export async function createTestPass(
     });
   }
   if (!passTypeRow) {
-    throw new CreateTestPassError(
+    throw new CreatePassError(
       `Failed to create pass type ${passTypeIdentifier}`,
       { statusCode: 500 }
     );
@@ -145,11 +145,11 @@ export async function createTestPass(
     .then((rows) => rows[0]);
 
   if (existingPass) {
-    throw new CreateTestPassError(
+    throw new CreatePassError(
       `A pass already exists for ${passTypeIdentifier} / ${serialNumber}`,
       {
         friendlyMessage:
-          'A test pass with this passTypeIdentifier and serialNumber already exists. Please provide a unique serial.',
+          'A pass with this passTypeIdentifier and serialNumber already exists. Please provide a unique serial.',
         statusCode: 409,
       }
     );
@@ -164,7 +164,7 @@ export async function createTestPass(
       authenticationToken,
       ticketStyle: 'event',
       poster: !!input.poster,
-      // For admin/manual test passes, actorType is system; set userId/orgId to null.
+      // For admin/manual passes, actorType is system; set userId/orgId to null.
       actorType: 'system',
       userId: null,
       orgId: null,
@@ -173,7 +173,7 @@ export async function createTestPass(
     .then((rows) => rows[0]);
 
   if (!newPass?.id) {
-    throw new CreateTestPassError('Failed to insert pass row', {
+    throw new CreatePassError('Failed to insert pass row', {
       statusCode: 500,
     });
   }
@@ -233,9 +233,9 @@ export async function createTestPass(
 
   const passContent = {
     description:
-      input.description?.trim() || `Test Event Ticket (${serialNumber.slice(-6)})`,
-    organizationName: input.organizationName?.trim() || 'DayOf Test Organization',
-    logoText: input.logoText?.trim() || 'DayOf Test',
+      input.description?.trim() || `Event Ticket (${serialNumber.slice(-6)})`,
+    organizationName: input.organizationName?.trim() || 'DayOf',
+    logoText: input.logoText?.trim() || 'DayOf',
     eventTicket,
     groupingIdentifier: input.groupingIdentifier,
     posterVersion: input.poster ? 1 : undefined,
@@ -277,7 +277,7 @@ export async function createTestPass(
     logger.warn('INNGEST_EVENT_KEY missing, not emitting pass/update.requested', {
       passTypeIdentifier,
       serialNumber,
-      context: 'createTestPass',
+      context: 'createPass',
       error: 'INNGEST_EVENT_KEY is not set',
     });
   } else {
@@ -295,7 +295,7 @@ export async function createTestPass(
         passTypeIdentifier,
         serialNumber,
         error: error instanceof Error ? error.message : String(error),
-        context: 'createTestPass',
+        context: 'createPass',
       });
     }
   }
