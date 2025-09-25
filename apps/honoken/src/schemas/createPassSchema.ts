@@ -1,12 +1,12 @@
-// Strict Zod schema for admin test pass creation API
+// Strict Zod schema for admin pass creation API
 
 import { z } from 'zod/v4';
 
 // RGB: 'rgb(0, 0, 0)'
 export const rgbStringRegex = /^rgb\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*\)$/;
 
-// Accepts a strict object for /admin/create-test-pass
-export const CreateTestPassSchema = z
+// Accepts a strict object for /admin/create-pass
+export const CreatePassSchema = z
   .object({
     // Identifiers/metadata
     passTypeIdentifier: z.string().min(1).optional(),
@@ -63,4 +63,4 @@ export const CreateTestPassSchema = z
   })
   .strict();
 
-export type CreateTestPassInput = z.infer<typeof CreateTestPassSchema>;
+export type CreatePassInput = z.infer<typeof CreatePassSchema>;
