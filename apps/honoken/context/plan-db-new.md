@@ -202,7 +202,7 @@ Example ESLint override (if applicable):
 - Environment variables
   - `DATABASE_URL` (prod), `DEV_DATABASE_URL` (dev migrations in shared package)
   - APNs keys, cert bundle storage encryption keys
-  - `BLOB_READ_WRITE_TOKEN` for Vercel Blob assets
+  - `HONOKEN_IMAGES_READ_WRITE_TOKEN` for Vercel Blob assets
   - Admin basic auth: `HONOKEN_ADMIN_USERNAME`, `HONOKEN_ADMIN_PASSWORD`
   - Analytics: `POSTHOG_PROJECT_API_KEY`, optional `POSTHOG_HOST`
 - Node & Vercel
