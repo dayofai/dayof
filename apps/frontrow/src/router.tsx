@@ -27,6 +27,18 @@ export const createRouter = () => {
   return router;
 };
 
+let routerSingleton: ReturnType<typeof createRouter> | undefined;
+
+export function getRouter() {
+  if (import.meta.env?.DEV) {
+    if (!routerSingleton) {
+      routerSingleton = createRouter();
+    }
+    return routerSingleton;
+  }
+  return createRouter();
+}
+
 declare module '@tanstack/react-router' {
   interface Register {
     router: ReturnType<typeof createRouter>;
