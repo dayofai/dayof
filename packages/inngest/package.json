@@ -3,19 +3,49 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "main": "./index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./index.ts",
-    "./client": "./client.ts",
-    "./functions": "./functions/index.ts",
-    "./adapters/hono": "./adapters/hono.ts",
-    "./events": "./events.ts",
-    "./client.browser": "./client.browser.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    },
+    "./functions": {
+      "types": "./dist/functions/index.d.ts",
+      "default": "./dist/functions/index.js"
+    },
+    "./adapters/hono": {
+      "types": "./dist/adapters/hono.d.ts",
+      "default": "./dist/adapters/hono.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "default": "./dist/events.js"
+    },
+    "./client.browser": {
+      "types": "./dist/client.browser.d.ts",
+      "default": "./dist/client.browser.js"
+    }
+  },
+  "scripts": {
+    "build": "tsdown -c tsdown.config.ts",
+    "dev": "tsdown -c tsdown.config.ts -w",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "inngest": "^3.40.1",
-    "@effect/platform-node": "^0.96.0",
-    "@effect/schema": "^0.75.5",
-    "effect": "^3.17.9"
+    "inngest": "^3.43.1",
+    "hono": "^4.9.9",
+    "honoken": "workspace:*",
+    "database": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "inngest": "^3.43.1",
+    "tsdown": "^0.15.5",
+    "typescript": "^5.9.2"
   }
 }

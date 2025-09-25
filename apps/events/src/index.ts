@@ -14,4 +14,3 @@ import { serve } from '@hono/node-server';
 serve({ fetch: app.fetch, port: Number(process.env.PORT) || 3000 });
 
 export default app;
-export const config = { runtime: 'nodejs20.x' };

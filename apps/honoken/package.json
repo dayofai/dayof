@@ -12,11 +12,17 @@
     "test:unit": "vitest run tests/unit",
     "setup": "node ./scripts/setup.mjs",
     "check-bundle-size": "node ./scripts/check-bundle-size.js",
-    "dev": "bun --env-file=.env.local run src/index.ts",
+    "dev": "bun run src/index.ts",
     "dev:vercel": "vercel dev -p 3002",
     "build": "tsc",
     "deploy:preview": "vercel",
     "deploy:prod": "vercel --prod"
+  },
+  "exports": {
+    "./db": "./src/db/index.ts",
+    "./passkit/apnsFetch": "./src/passkit/apnsFetch.ts",
+    "./repo/wallet": "./src/repo/wallet.ts",
+    "./types": "./src/types.ts"
   },
   "dependencies": {
     "@vercel/blob": "^1.1.1",

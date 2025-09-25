@@ -1,9 +1,9 @@
-import { getDbClient } from '@honoken/db';
-import { pushToMany } from '@honoken/passkit/apnsFetch';
-import { upsertPassContentWithEtag } from '@honoken/repo/wallet';
-import type { Env as HonokenEnv } from '@honoken/types';
 import { schema } from 'database/schema';
 import { and, eq } from 'drizzle-orm';
+import { getDbClient } from 'honoken/db';
+import { pushToMany } from 'honoken/passkit/apnsFetch';
+import { upsertPassContentWithEtag } from 'honoken/repo/wallet';
+import type { Env as HonokenEnv } from 'honoken/types';
 import { inngest } from '../client';
 
 export const walletPassUpdate = inngest.createFunction(

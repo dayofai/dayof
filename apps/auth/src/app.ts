@@ -1,8 +1,11 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { auth } from './auth';
+import { logger } from 'hono/logger';
+import { auth } from './auth.js';
 
 const app = new Hono();
+
+app.use('*', logger());
 
 const ALLOW = (process.env.ALLOWED_ORIGINS ?? '')
   .split(',')
@@ -10,10 +13,9 @@ const ALLOW = (process.env.ALLOWED_ORIGINS ?? '')
   .filter(Boolean);
 
 app.use(
-  '/auth/*',
+  '/*',
   cors({
-    origin: (origin) =>
-      origin ? (ALLOW.includes(origin) ? origin : 'null') : 'null',
+    origin: (origin) => (origin && ALLOW.includes(origin) ? origin : undefined),
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
@@ -21,10 +23,9 @@ app.use(
   })
 );
 
-// Handle all methods under /auth/*
-app.all('/auth/*', (c) => auth.handler(c.req.raw));
-
 app.get('/health', (c) => c.json({ ok: true }));
 
+// Handle all methods at the domain root
+app.all('/*', (c) => auth.handler(c.req.raw));
+
 export default app;
-export const config = { runtime: 'nodejs20.x' };

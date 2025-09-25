@@ -11,11 +11,11 @@ import { invalidateApnsKeyCache, storeApnsKey } from '../passkit/apnsKeys';
 import { invalidateCertCache, storeCertBundle } from '../passkit/certs';
 import { CertificateRotationBodySchema } from '../schemas';
 
-import { CreateTestPassSchema } from '../schemas/createTestPassSchema';
+import { CreatePassSchema } from '../schemas/createPassSchema';
 import {
-  CreateTestPassError,
-  createTestPass,
-} from '../services/createTestPass';
+  CreatePassError,
+  createPass,
+} from '../services/createPass';
 import type { Env } from '../types';
 import { createLogger, type Logger } from '../utils/logger';
 
@@ -272,9 +272,9 @@ adminApp.post('/admin/apns-keys', async (c) => {
 });
 
 // -----------------------------------------------------------------------------
-// Admin-only endpoint: POST /admin/create-test-pass
+// Admin-only endpoint: POST /admin/create-pass
 // -----------------------------------------------------------------------------
-adminApp.post('/admin/create-test-pass', async (c) => {
+adminApp.post('/admin/create-pass', async (c) => {
   const logger = c.get('logger');
   const adminUser = c.get('adminUser');
   // Use request URL's origin directly for downloadUrl
@@ -288,12 +288,12 @@ adminApp.post('/admin/create-test-pass', async (c) => {
   try {
     const payload = await c.req.json();
 
-    let input: z.infer<typeof CreateTestPassSchema>;
+    let input: z.infer<typeof CreatePassSchema>;
     try {
-      input = CreateTestPassSchema.parse(payload);
+      input = CreatePassSchema.parse(payload);
     } catch (zodErr) {
       if (zodErr instanceof z.ZodError) {
-        logger.warn('Test pass creation validation error', {
+        logger.warn('Pass creation validation error', {
           zodDetails: z.prettifyError(zodErr),
           input: payload,
         });
@@ -309,14 +309,14 @@ adminApp.post('/admin/create-test-pass', async (c) => {
       throw zodErr;
     }
 
-    logger.info('Attempting admin test pass creation', {
+    logger.info('Attempting admin pass creation', {
       adminUser: adminUser?.username || 'unknown',
       input,
     });
 
-    const result = await createTestPass(c.env, logger, input);
+    const result = await createPass(c.env, logger, input);
 
-    logger.info('Test pass created', {
+    logger.info('Pass created', {
       adminUser: adminUser?.username || 'unknown',
       passTypeIdentifier: result.passTypeIdentifier,
       serialNumber: result.serialNumber,
@@ -336,27 +336,27 @@ adminApp.post('/admin/create-test-pass', async (c) => {
         downloadUrl,
         warnings: result.warnings,
         success: true,
-        message: 'Test pass created.',
+        message: 'Pass created.',
       },
       201
     );
   } catch (err) {
-    if (err instanceof CreateTestPassError) {
-      logger.warn('Admin test pass creation error', {
+    if (err instanceof CreatePassError) {
+      logger.warn('Admin pass creation error', {
         message: err.message,
         friendlyMessage: err.friendlyMessage,
         statusCode: err.statusCode,
       });
       return c.json(
         {
-          error: 'Test Pass Creation Error',
+          error: 'Pass Creation Error',
           message: err.friendlyMessage || err.message,
         },
         err.statusCode as ContentfulStatusCode
       );
     }
     if (err instanceof z.ZodError) {
-      logger.warn('Admin test pass creation Zod error', {
+      logger.warn('Admin pass creation Zod error', {
         errorDetails: z.prettifyError(err),
       });
       return c.json(
@@ -368,12 +368,12 @@ adminApp.post('/admin/create-test-pass', async (c) => {
       );
     }
     logger.error(
-      'Unhandled error during admin test pass creation',
+      'Unhandled error during admin pass creation',
       err instanceof Error ? err : new Error(String(err)),
       { path: c.req.path }
     );
     throw new HTTPException(500, {
-      message: 'Internal server error during test pass creation.',
+      message: 'Internal server error during pass creation.',
     });
   }
 });
