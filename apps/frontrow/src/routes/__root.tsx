@@ -13,7 +13,7 @@ import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
 import Loader from '@/components/loader';
 import { Toaster } from '@/components/ui/sonner';
 import Header from '../components/header';
-import appCss from '../index.css?url';
+import '../index.css';
 
 export interface RouterAppContext {
   queryClient: QueryClient;
@@ -31,12 +31,6 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       },
       {
         title: 'My App',
-      },
-    ],
-    links: [
-      {
-        rel: 'stylesheet',
-        href: appCss,
       },
     ],
   }),
