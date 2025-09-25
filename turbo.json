@@ -1,38 +1,56 @@
 {
-	"$schema": "https://turbo.build/schema.json",
-	"ui": "tui",
-	"tasks": {
-		"build": {
-			"dependsOn": ["^build"],
-			"inputs": ["$TURBO_DEFAULT$", ".env*"],
-			"outputs": ["dist/**"]
-		},
-		"lint": {
-			"dependsOn": ["^lint"]
-		},
-		"check-types": {
-			"dependsOn": ["^check-types"]
-		},
-		"dev": {
-			"cache": false,
-			"persistent": true
-		},
-		"db:push": {
-			"cache": false,
-			"persistent": true
-		},
-		"db:studio": {
-			"cache": false,
-			"persistent": true
-		},
-		"db:migrate": {
-			"cache": false,
-			"persistent": true
-		},
-		"db:generate": {
-			"cache": false,
-			"persistent": true
-		}
-		
-			}
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".output/**"],
+      "env": [
+        "DATABASE_URL",
+        "DASH0_AUTH_TOKEN",
+        "OTEL_EXPORTER_OTLP_HEADERS",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "DASH0_LOG_DRAIN_ENDPOINT",
+        "DASH0_DATASET",
+        "OTEL_EXPORTER_OTLP_COMPRESSION",
+        "BETTER_AUTH_URL",
+        "VITE_AUTH_BASE_URL",
+        "VITE_AUTH_PROXY_BASE",
+        "AUTH_PROXY_BASE",
+        "BETTER_AUTH_SECRET",
+        "AUTH_COOKIE_DOMAIN",
+        "ALLOWED_ORIGINS",
+        "INNGEST_EVENT_KEY",
+        "NEON_API_KEY",
+        "NEON_PROJECT_ID",
+        "FRONTROW_PUBLIC_SITE_URL"
+      ]
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "check-types": {
+      "dependsOn": ["^check-types"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "db:push": {
+      "cache": false,
+      "persistent": true
+    },
+    "db:studio": {
+      "cache": false,
+      "persistent": true
+    },
+    "db:migrate": {
+      "cache": false,
+      "persistent": true
+    },
+    "db:generate": {
+      "cache": false,
+      "persistent": true
+    }
+  }
 }

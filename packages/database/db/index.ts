@@ -1,5 +1,6 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
+import { neonConfig, Pool } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
+import { WebSocket as NodeWebSocket } from 'ws';
 import { schema } from '../schema';
 import { relations } from '../schema/relations';
 
@@ -12,19 +13,11 @@ if (!DATABASE_URL) {
   );
 }
 
-// Configure Neon to use WebSocket connections where available so transactions are supported.
-// Bun, Deno, and many runtimes expose a global WebSocket; Node requires the 'ws' polyfill.
-// We prefer the global if present to avoid bundling Node-only deps in edge-like runtimes.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore - global WebSocket may not be typed in all environments
-const GlobalWebSocket: typeof WebSocket | undefined = (globalThis as any)
-  ?.WebSocket;
-if (GlobalWebSocket) {
-  // Use the runtime's WebSocket implementation (Bun, Deno, browser-like)
-  // Types across runtimes may not align exactly, but the constructor shape matches at runtime.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  neonConfig.webSocketConstructor = GlobalWebSocket as any;
-}
+// Configure Neon to use a WebSocket constructor across runtimes
+const globalWebSocket = (globalThis as { WebSocket?: typeof WebSocket })
+  .WebSocket;
+neonConfig.webSocketConstructor =
+  globalWebSocket ?? (NodeWebSocket as unknown as typeof WebSocket);
 
 // Create a Pool using Neon serverless driver. WebSocket is required for transactions.
 const client = new Pool({ connectionString: DATABASE_URL });

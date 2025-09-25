@@ -1,9 +1,11 @@
-import {
-  createStartHandler,
-  defaultStreamHandler,
-} from '@tanstack/react-start/server';
-import { createRouter } from './router';
+import { QueryClient } from '@tanstack/react-query';
+import { createRequestHandler } from '@tanstack/react-start/server';
+import { getRouter } from './router';
+import type { RouterAppContext } from './routes/__root';
 
-export default createStartHandler({
-  createRouter,
-})(defaultStreamHandler);
+export default createRequestHandler(({ request }) => {
+  const queryClient = new QueryClient();
+  const context: RouterAppContext = { queryClient };
+  const router = getRouter(context);
+  return { router };
+});

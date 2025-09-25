@@ -1,3 +1,5 @@
+import * as Schema from '@effect/schema/Schema';
+
 // Initial non-Effect event contracts can be refined later
 export type UserSignedIn = {
   userId: string;
@@ -14,6 +16,11 @@ export type SessionRevoked = {
 export type UserUpdated = {
   userId: string;
 };
+
+export const ExampleEvent = Schema.Struct({
+  userId: Schema.String,
+  action: Schema.String,
+});
 
 export const events = {
   'user/signed_in': {} as UserSignedIn,
