@@ -3,13 +3,29 @@ import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { basicAuth } from 'hono/basic-auth';
 import { HTTPException } from 'hono/http-exception';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { z } from 'zod/v4';
 import { getDbClient } from '../db/index';
 import { pushToMany } from '../passkit/apnsFetch';
+import { invalidateApnsKeyCache, storeApnsKey } from '../passkit/apnsKeys';
 import { invalidateCertCache, storeCertBundle } from '../passkit/certs';
 import { CertificateRotationBodySchema } from '../schemas';
+
+import { CreateTestPassSchema } from '../schemas/createTestPassSchema';
+import {
+  CreateTestPassError,
+  createTestPass,
+} from '../services/createTestPass';
 import type { Env } from '../types';
 import { createLogger, type Logger } from '../utils/logger';
+
+// Zod schema for APNs key uploads
+const ApnsKeyUploadSchema = z.object({
+  keyRef: z.string().min(1, { message: 'keyRef is required' }),
+  teamId: z.string().min(1, { message: 'teamId is required' }),
+  keyId: z.string().min(1, { message: 'keyId is required' }),
+  p8Pem: z.string().min(1, { message: 'p8Pem is required' }),
+});
 
 type AdminAppVariables = {
   logger: Logger;
@@ -21,12 +37,17 @@ type AdminAppVariables = {
 const adminApp = new Hono<{ Bindings: Env; Variables: AdminAppVariables }>();
 
 // Basic Auth Middleware (ensure ADMIN_USERNAME and ADMIN_PASSWORD are set as secrets)
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: needed complexity
 adminApp.use('/admin/*', async (c, next) => {
   const logger = createLogger(c);
   c.set('logger', logger);
 
-  const user = c.env.HONOKEN_ADMIN_USERNAME;
-  const pass = c.env.HONOKEN_ADMIN_PASSWORD;
+  // On Vercel/Node, environment variables are exposed via process.env.
+  // c.env is not automatically populated like on Workers. Fall back to process.env.
+  const user =
+    c.env.HONOKEN_ADMIN_USERNAME || process.env.HONOKEN_ADMIN_USERNAME;
+  const pass =
+    c.env.HONOKEN_ADMIN_PASSWORD || process.env.HONOKEN_ADMIN_PASSWORD;
   if (!(user && pass)) {
     logger.error(
       'Admin Basic Auth secrets not set. HONOKEN_ADMIN_USERNAME or HONOKEN_ADMIN_PASSWORD missing.',
@@ -67,22 +88,34 @@ adminApp.use('/admin/*', async (c, next) => {
   // Set up basic auth without the unsupported onSuccess option
   const auth = basicAuth({ username: user, password: pass });
 
-  const result = await auth(c, async () => {
-    c.set('adminUser', { username: user });
+  try {
+    const result = await auth(c, async () => {
+      c.set('adminUser', { username: user });
 
-    // Log successful authentication to PostHog
-    logger.info('admin_authentication_success', {
-      admin_username: user,
-      client_ip: clientIp,
-      user_agent: userAgent,
-      path: c.req.path,
+      // Log successful authentication to PostHog
+      logger.info('admin_authentication_success', {
+        admin_username: user,
+        client_ip: clientIp,
+        user_agent: userAgent,
+        path: c.req.path,
+      });
+
+      return await next();
     });
 
-    return await next();
-  });
-
-  // Check if authentication failed and log to PostHog
-  if (result instanceof Response && result.status === 401) {
+    // If middleware returned a 401 response (instead of throwing), log it and return
+    if (result instanceof Response && result.status === 401) {
+      logger.warn('admin_authentication_failure', {
+        attempted_username: attemptedUsername || 'not_provided_or_malformed',
+        client_ip: clientIp,
+        user_agent: userAgent,
+        path: c.req.path,
+        reason: 'invalid_credentials',
+      });
+    }
+    return result;
+  } catch (_err) {
+    // Hono basicAuth throws HTTPException on failure in some versions – normalize to 401 JSON
     logger.warn('admin_authentication_failure', {
       attempted_username: attemptedUsername || 'not_provided_or_malformed',
       client_ip: clientIp,
@@ -90,9 +123,8 @@ adminApp.use('/admin/*', async (c, next) => {
       path: c.req.path,
       reason: 'invalid_credentials',
     });
+    return c.json({ error: 'Unauthorized' }, 401);
   }
-
-  return result;
 });
 
 adminApp.put('/admin/certs/:certRef', async (c) => {
@@ -165,6 +197,183 @@ adminApp.put('/admin/certs/:certRef', async (c) => {
 
     throw new HTTPException(500, {
       message: `Failed to update certificate bundle: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Admin endpoint: POST /admin/apns-keys for APNs .p8 key upload
+// -----------------------------------------------------------------------------
+adminApp.post('/admin/apns-keys', async (c) => {
+  const logger = c.get('logger');
+  const adminUser = c.get('adminUser');
+  try {
+    const body = await c.req.json();
+    const validatedBody = ApnsKeyUploadSchema.parse(body);
+
+    logger.info('Admin attempting APNs key upload', {
+      adminUsername: adminUser?.username || 'unknown',
+      keyRef: validatedBody.keyRef,
+      teamId: validatedBody.teamId,
+      keyId: validatedBody.keyId,
+    });
+
+    await storeApnsKey(
+      validatedBody.keyRef,
+      validatedBody.teamId,
+      validatedBody.keyId,
+      validatedBody.p8Pem,
+      c.env,
+      logger
+    );
+
+    // Invalidate APNs key cache to refresh immediately
+    invalidateApnsKeyCache(validatedBody.keyRef, logger);
+
+    logger.info('APNs key upload successful', {
+      adminUsername: adminUser?.username || 'unknown',
+      keyRef: validatedBody.keyRef,
+      teamId: validatedBody.teamId,
+      keyId: validatedBody.keyId,
+    });
+
+    return c.json(
+      {
+        success: true,
+        message: `APNs key uploaded for keyRef '${validatedBody.keyRef}' successfully.`,
+        keyRef: validatedBody.keyRef,
+      },
+      201
+    );
+  } catch (error: unknown) {
+    if (error instanceof z.ZodError) {
+      logger.error('APNs key upload validation failed', error, {
+        errorDetails: z.prettifyError(error),
+      });
+      return c.json(
+        {
+          success: false,
+          message: 'Invalid request data',
+          errors: z.prettifyError(error),
+        },
+        400
+      );
+    }
+
+    logger.error(
+      'APNs key upload failed',
+      error instanceof Error ? error : new Error(String(error))
+    );
+
+    throw new HTTPException(500, {
+      message: `Failed to upload APNs key: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Admin-only endpoint: POST /admin/create-test-pass
+// -----------------------------------------------------------------------------
+adminApp.post('/admin/create-test-pass', async (c) => {
+  const logger = c.get('logger');
+  const adminUser = c.get('adminUser');
+  // Use request URL's origin directly for downloadUrl
+  let requestUrlOrigin: string;
+  try {
+    requestUrlOrigin = new URL(c.req.url).origin;
+  } catch {
+    requestUrlOrigin = '';
+  }
+
+  try {
+    const payload = await c.req.json();
+
+    let input: z.infer<typeof CreateTestPassSchema>;
+    try {
+      input = CreateTestPassSchema.parse(payload);
+    } catch (zodErr) {
+      if (zodErr instanceof z.ZodError) {
+        logger.warn('Test pass creation validation error', {
+          zodDetails: z.prettifyError(zodErr),
+          input: payload,
+        });
+        return c.json(
+          {
+            error: 'Validation Failed',
+            message: 'Input is invalid.',
+            validation_issues: z.prettifyError(zodErr),
+          },
+          400
+        );
+      }
+      throw zodErr;
+    }
+
+    logger.info('Attempting admin test pass creation', {
+      adminUser: adminUser?.username || 'unknown',
+      input,
+    });
+
+    const result = await createTestPass(c.env, logger, input);
+
+    logger.info('Test pass created', {
+      adminUser: adminUser?.username || 'unknown',
+      passTypeIdentifier: result.passTypeIdentifier,
+      serialNumber: result.serialNumber,
+      certRef: result.certRef,
+      warnings: result.warnings,
+    });
+
+    // Build absolute downloadUrl for pass file
+    const downloadUrl = new URL(
+      result.downloadPath,
+      requestUrlOrigin || c.req.url
+    ).toString();
+
+    return c.json(
+      {
+        ...result,
+        downloadUrl,
+        warnings: result.warnings,
+        success: true,
+        message: 'Test pass created.',
+      },
+      201
+    );
+  } catch (err) {
+    if (err instanceof CreateTestPassError) {
+      logger.warn('Admin test pass creation error', {
+        message: err.message,
+        friendlyMessage: err.friendlyMessage,
+        statusCode: err.statusCode,
+      });
+      return c.json(
+        {
+          error: 'Test Pass Creation Error',
+          message: err.friendlyMessage || err.message,
+        },
+        err.statusCode as ContentfulStatusCode
+      );
+    }
+    if (err instanceof z.ZodError) {
+      logger.warn('Admin test pass creation Zod error', {
+        errorDetails: z.prettifyError(err),
+      });
+      return c.json(
+        {
+          error: 'Validation Failed',
+          message: z.prettifyError(err),
+        },
+        400
+      );
+    }
+    logger.error(
+      'Unhandled error during admin test pass creation',
+      err instanceof Error ? err : new Error(String(err)),
+      { path: c.req.path }
+    );
+    throw new HTTPException(500, {
+      message: 'Internal server error during test pass creation.',
     });
   }
 });

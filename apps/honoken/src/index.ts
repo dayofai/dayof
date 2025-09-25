@@ -252,6 +252,23 @@ const envValidationMiddleware: MiddlewareHandler<{ Bindings: Env }> = async (
 ) => {
   if (!envValidated) {
     try {
+      // Provide a sensible default for ENVIRONMENT if missing
+      // Prefer Vercel's environment, then NODE_ENV, defaulting to 'development'
+      const derivedEnvironment =
+        process.env.VERCEL_ENV || process.env.NODE_ENV || 'development';
+      c.env.ENVIRONMENT = c.env.ENVIRONMENT || derivedEnvironment;
+
+      // Hydrate c.env with process.env when running in Node/Vercel/Bun so downstream code
+      // that reads from c.env directly (instead of process.env) sees all variables.
+      // This mirrors what Cloudflare Workers does automatically.
+      const nodeEnvVars = process.env as Record<string, string | undefined>;
+      for (const [key, value] of Object.entries(nodeEnvVars)) {
+        if (value !== undefined && !(key in c.env)) {
+          // biome-ignore lint/suspicious/noExplicitAny: runtime env stitching
+          (c.env as any)[key] = value;
+        }
+      }
+
       validateEnv(c.env);
       envValidated = true;
     } catch (error) {
@@ -398,6 +415,18 @@ app.onError(async (err, c) => {
 app.route('/v1', createV1App());
 
 app.route('/', adminRoutes);
+
+// Stub common browser requests to avoid noisy 404s
+app.get('/favicon.ico', (c) => {
+  c.header('Cache-Control', 'public, max-age=86400, immutable');
+  return c.body(null, 204);
+});
+
+app.get('/fix-tprotocol-service-worker.js', (c) => {
+  c.header('Content-Type', 'application/javascript; charset=utf-8');
+  c.header('Cache-Control', 'no-store');
+  return c.text('// no-op service worker');
+});
 
 app.get('/', handleRootHealth);
 

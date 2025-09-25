@@ -5,3 +5,5 @@ node_modules
 context/backup/
 /context/backup/**
 .neon-last-branch
+*.DS_STORE
+.DS_Store

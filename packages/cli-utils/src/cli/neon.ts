@@ -449,6 +449,7 @@ async function branchCreate(args: string[]): Promise<void> {
   }
 
   // Construct connection URI by preserving username, password, db name, and params
+  // Construct connection URI by preserving username, password, db name, and params
   console.log('→ Constructing connection URI...');
   const rootEnvPath = resolve(process.cwd(), '.env.local');
   const existingUrl =

@@ -28,7 +28,9 @@ function stableStringify(value: unknown): string {
 async function sha256Hex(input: string | Uint8Array): Promise<string> {
   const data =
     typeof input === 'string' ? new TextEncoder().encode(input) : input;
-  const digest = await crypto.subtle.digest('SHA-256', data);
+  const buf = new ArrayBuffer(data.byteLength);
+  new Uint8Array(buf).set(data);
+  const digest = await crypto.subtle.digest('SHA-256', buf);
   const bytes = new Uint8Array(digest);
   let hex = '';
   for (const b of bytes) {
