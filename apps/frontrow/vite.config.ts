@@ -1,10 +1,12 @@
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import { devtools } from '@tanstack/devtools-vite';
+import { nitroV2Plugin } from '@tanstack/nitro-v2-vite-plugin';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import react from '@vitejs/plugin-react';
+import viteReact from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
-import tsconfigPaths from 'vite-tsconfig-paths';
+import tsConfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig({
   esbuild: { sourcemap: false },
@@ -16,8 +18,10 @@ export default defineConfig({
   },
   plugins: [
     devtools(),
-    tsconfigPaths({ projects: ['./tsconfig.json'], ignoreConfigErrors: true }),
-    tanstackStart({ customViteReactPlugin: true }),
+    tsConfigPaths({ projects: ['./tsconfig.json'] }),
+    tanstackStart(),
+    nitroV2Plugin(),
+    viteReact(),
     react(),
     tailwindcss(),
   ],
