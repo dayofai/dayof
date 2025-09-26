@@ -40,6 +40,10 @@ export interface Env {
 
   // Vercel Blob
   HONOKEN_IMAGES_READ_WRITE_TOKEN: string; // replaces deprecated HONOKEN_IMAGES_READ_WRITE_TOKEN
+
+  // Optional: Explicit base URL for Apple PassKit web service (e.g. https://example.com/api/v1/)
+  // If present, new passes will embed this as webServiceURL (with trailing slash ensured)
+  HONOKEN_WEB_SERVICE_URL?: string;
 }
 
 /**

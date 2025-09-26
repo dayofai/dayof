@@ -257,6 +257,12 @@ export async function createPass(
       message: input.barcodeMessage?.trim() || generateBarcodeValue(),
       messageEncoding: 'iso-8859-1',
     },
+    // Provide webServiceURL if supplied or configured via environment, ensuring trailing slash as per Apple spec
+    webServiceURL: (() => {
+      const explicit = input.webServiceURL?.trim() || env.HONOKEN_WEB_SERVICE_URL?.trim();
+      if (!explicit) return undefined;
+      return explicit.endsWith('/') ? explicit : explicit + '/';
+    })(),
   };
 
   // Validate via PassDataEventTicketSchema (throws if not valid)

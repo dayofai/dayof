@@ -60,6 +60,7 @@ export const CreatePassSchema = z
         ]),
       )
       .optional(),
+    webServiceURL: z.string().url().optional(),
   })
   .strict();
 
