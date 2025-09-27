@@ -26,6 +26,7 @@ async function proxyHandler({ request }: { request: Request }) {
     headers,
     body,
     redirect: 'manual',
+    duplex: 'half',
   });
 
   return res;
