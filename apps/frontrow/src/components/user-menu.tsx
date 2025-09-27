@@ -12,9 +12,6 @@ import { Button } from './ui/button';
 import { Skeleton } from './ui/skeleton';
 
 export default function UserMenu() {
-  if (import.meta.env.SSR) {
-    return <Skeleton className="h-9 w-24" />;
-  }
   return <UserMenuClient />;
 }
 
