@@ -2,6 +2,12 @@ import { schema as sharedSchema } from 'database/schema';
 import { and, eq } from 'drizzle-orm';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { PassDataEventTicketSchema } from '../schemas/passContentSchemas';
+import {
+  CANONICAL_PASS_SCHEMA_VERSION,
+  projectCanonicalToPassData,
+  normalizeWebServiceURL,
+  type CanonicalPassV1,
+} from '../domain/canonicalPass';
 import { VercelBlobAssetStorage } from '../storage/vercel-blob-storage';
 import { getDbClient } from '../db';
 import type { Env } from '../types';
@@ -231,42 +237,45 @@ export async function createPass(
     eventTicket.secondaryFields = secondaryFields;
   }
 
-  const passContent = {
-    description:
-      input.description?.trim() || `Event Ticket (${serialNumber.slice(-6)})`,
-    organizationName: input.organizationName?.trim() || 'DayOf',
-    logoText: input.logoText?.trim() || 'DayOf',
-    eventTicket,
-    groupingIdentifier: input.groupingIdentifier,
-    posterVersion: input.poster ? 1 : undefined,
-    foregroundColor:
-      input.foregroundColor ||
-      (input.poster ? 'rgb(255,255,255)' : 'rgb(0,0,0)'),
-    backgroundColor:
-      input.backgroundColor ||
-      (input.poster ? 'rgb(0,0,0)' : 'rgb(255,255,255)'),
-    labelColor:
-      input.labelColor ||
-      (input.poster ? 'rgb(255,255,255)' : 'rgb(0,0,0)'),
-    maxDistance: input.maxDistance,
-    relevantDate: input.relevantDate,
-    locations: input.locations,
-    semanticTags: input.semanticTags,
-    barcode: {
-      format: 'PKBarcodeFormatQR' as const,
-      message: input.barcodeMessage?.trim() || generateBarcodeValue(),
-      messageEncoding: 'iso-8859-1',
+  // Build canonical representation first
+  const canonical: CanonicalPassV1 = {
+    _schemaVersion: CANONICAL_PASS_SCHEMA_VERSION,
+    event: {
+      name: input.eventName?.trim() || 'DayOf Sample Event',
+      startsAt: input.eventDateISO,
+      venue: { name: input.venueName?.trim() || undefined },
+      seat: { seat: input.seat, section: input.section },
     },
-    // Provide webServiceURL if supplied or configured via environment, ensuring trailing slash as per Apple spec
-    webServiceURL: (() => {
-      const explicit = input.webServiceURL?.trim() || env.HONOKEN_WEB_SERVICE_URL?.trim();
-      if (!explicit) return undefined;
-      return explicit.endsWith('/') ? explicit : explicit + '/';
-    })(),
+    style: {
+      logoText: input.logoText?.trim() || 'DayOf',
+      foregroundColor:
+        input.foregroundColor || (input.poster ? 'rgb(255,255,255)' : 'rgb(0,0,0)'),
+      backgroundColor:
+        input.backgroundColor || (input.poster ? 'rgb(0,0,0)' : 'rgb(255,255,255)'),
+      labelColor:
+        input.labelColor || (input.poster ? 'rgb(255,255,255)' : 'rgb(0,0,0)'),
+      posterVersion: input.poster ? 1 : undefined,
+    },
+    distribution: {
+      webServiceURL: normalizeWebServiceURL(
+        input.webServiceURL?.trim() || env.HONOKEN_WEB_SERVICE_URL?.trim()
+      ),
+      barcodeMessage: input.barcodeMessage?.trim() || generateBarcodeValue(),
+    },
+    meta: {
+      description:
+        input.description?.trim() || `Event Ticket (${serialNumber.slice(-6)})`,
+      organizationName: input.organizationName?.trim() || 'DayOf',
+      groupingIdentifier: input.groupingIdentifier,
+      relevantDate: input.relevantDate,
+      maxDistance: input.maxDistance,
+    },
+    semanticTags: input.semanticTags,
   };
 
-  // Validate via PassDataEventTicketSchema (throws if not valid)
-  const validPassContent = PassDataEventTicketSchema.parse(passContent);
+  // Project canonical -> passData shape used elsewhere & validate
+  const projected = projectCanonicalToPassData(canonical);
+  const validPassContent = PassDataEventTicketSchema.parse(projected);
 
   // Store content + compute ETag
   const { etag } = await upsertPassContentWithEtag(
@@ -275,7 +284,7 @@ export async function createPass(
       passTypeIdentifier,
       serialNumber,
     },
-    validPassContent
+    canonical // store canonical, not the projected
   );
 
   // Emit Inngest event for pass update (to trigger downstream workflow)
@@ -293,7 +302,7 @@ export async function createPass(
         data: {
           passTypeIdentifier,
           serialNumber,
-          content: validPassContent,
+          content: canonical,
         },
       });
     } catch (error) {
@@ -350,7 +359,7 @@ export async function createPass(
     authenticationToken,
     certRef,
     downloadPath,
-    passContent: validPassContent,
+    passContent: canonical,
     warnings,
     etag,
   };

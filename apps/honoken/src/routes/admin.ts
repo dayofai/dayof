@@ -10,6 +10,16 @@ import { pushToMany } from '../passkit/apnsFetch';
 import { invalidateApnsKeyCache, storeApnsKey } from '../passkit/apnsKeys';
 import { invalidateCertCache, storeCertBundle } from '../passkit/certs';
 import { CertificateRotationBodySchema } from '../schemas';
+import { PassDataEventTicketSchema } from '../schemas/passContentSchemas';
+import {
+  adaptLegacyToCanonical,
+  projectCanonicalToPassData,
+  normalizeWebServiceURL,
+  CANONICAL_PASS_SCHEMA_VERSION,
+  CanonicalPassSchemaV1,
+  type AnyCanonicalPass,
+} from '../domain/canonicalPass';
+import { upsertPassContentWithEtag } from '../repo/wallet';
 
 import { CreatePassSchema } from '../schemas/createPassSchema';
 import {
@@ -376,6 +386,183 @@ adminApp.post('/admin/create-pass', async (c) => {
       message: 'Internal server error during pass creation.',
     });
   }
+});
+
+// -----------------------------------------------------------------------------
+// Admin-only endpoint: PATCH /admin/update-pass/:passTypeIdentifier/:serialNumber
+// Shallow merges JSON body into existing pass content, recomputes ETag.
+// Optional query param ?push=1 to immediately send silent push if content changed.
+// -----------------------------------------------------------------------------
+adminApp.patch('/admin/update-pass/:passTypeIdentifier/:serialNumber', async (c) => {
+  const logger = c.get('logger');
+  const passTypeIdentifier = c.req.param('passTypeIdentifier');
+  const serialNumber = c.req.param('serialNumber');
+  const shouldPush = c.req.query('push') === '1';
+
+  if (!(passTypeIdentifier && serialNumber)) {
+    throw new HTTPException(400, { message: 'passTypeIdentifier and serialNumber path params are required.' });
+  }
+
+  try {
+    const db = getDbClient(c.env, logger);
+    const passRow = await db.query.walletPass.findFirst({
+      where: { passTypeIdentifier, serialNumber },
+      columns: { id: true },
+    });
+    if (!passRow) {
+      throw new HTTPException(404, { message: 'Pass not found.' });
+    }
+    const existingContent = await db.query.walletPassContent.findFirst({
+      where: { passId: passRow.id },
+      columns: { data: true },
+    });
+    const rawCurrent = existingContent?.data ?? {};
+    let currentCanonical: AnyCanonicalPass | null = null;
+    if (
+      rawCurrent &&
+      typeof rawCurrent === 'object' &&
+      '_schemaVersion' in rawCurrent
+    ) {
+      currentCanonical = rawCurrent as AnyCanonicalPass;
+    } else {
+      currentCanonical = adaptLegacyToCanonical(rawCurrent);
+    }
+
+    let incoming: unknown;
+    try {
+      incoming = await c.req.json();
+    } catch {
+      throw new HTTPException(400, { message: 'Body must be valid JSON object.' });
+    }
+    if (typeof incoming !== 'object' || incoming === null || Array.isArray(incoming)) {
+      throw new HTTPException(400, { message: 'Body must be a JSON object.' });
+    }
+
+    // Decide pathway: if body contains _schemaVersion or canonical keys, treat as canonical full/partial replacement.
+    let toStore: AnyCanonicalPass;
+    const isCanonicalIncoming = '_schemaVersion' in (incoming as any);
+    if (isCanonicalIncoming) {
+      // Normalize webServiceURL if present
+      if (typeof (incoming as any).distribution?.webServiceURL === 'string') {
+        (incoming as any).distribution.webServiceURL = normalizeWebServiceURL(
+          (incoming as any).distribution.webServiceURL
+        );
+      }
+      const validated = CanonicalPassSchemaV1.parse(incoming);
+      toStore = validated;
+    } else {
+      // Legacy-style patch: we require full eventTicket or loose fields; merge then adapt -> canonical
+      const mergedLegacy = {
+        ...(currentCanonical ? projectCanonicalToPassData(currentCanonical) : {}),
+        ...(incoming as Record<string, unknown>),
+      };
+      // Validate merged legacy shape first to give meaningful errors
+      try {
+        PassDataEventTicketSchema.parse(mergedLegacy);
+      } catch (err) {
+        if (err instanceof z.ZodError) {
+          return c.json(
+            {
+              error: 'Validation Failed',
+              message: 'Updated pass content invalid.',
+              issues: z.prettifyError(err),
+            },
+            400
+          );
+        }
+        throw err;
+      }
+      const adapted = adaptLegacyToCanonical(mergedLegacy);
+      if (!adapted) {
+        throw new HTTPException(400, { message: 'Unable to adapt legacy payload.' });
+      }
+      // Ensure normalized webServiceURL
+      if (adapted.distribution.webServiceURL) {
+        adapted.distribution.webServiceURL = normalizeWebServiceURL(
+          adapted.distribution.webServiceURL
+        );
+      }
+      toStore = adapted;
+    }
+
+    const { etag, changed } = await upsertPassContentWithEtag(
+      db,
+      { passTypeIdentifier, serialNumber },
+      toStore
+    );
+    logger.info('Pass updated', { passTypeIdentifier, serialNumber, changed, etag });
+
+    let pushed: number | undefined = undefined;
+    if (shouldPush && changed) {
+      // Load active registrations
+      const regs = await db
+        .select({
+          pushToken: sharedSchema.walletDevice.pushToken,
+          deviceLibraryIdentifier: sharedSchema.walletDevice.deviceLibraryIdentifier,
+        })
+        .from(sharedSchema.walletRegistration)
+        .innerJoin(
+          sharedSchema.walletDevice,
+          eq(
+            sharedSchema.walletRegistration.deviceLibraryIdentifier,
+            sharedSchema.walletDevice.deviceLibraryIdentifier
+          )
+        )
+        .where(
+          and(
+            eq(sharedSchema.walletRegistration.passTypeIdentifier, passTypeIdentifier),
+            eq(sharedSchema.walletRegistration.serialNumber, serialNumber),
+            eq(sharedSchema.walletRegistration.active, true)
+          )
+        );
+      if (regs.length > 0) {
+        const report = await pushToMany(c.env, regs, passTypeIdentifier, logger);
+        pushed = report.summary.attempted;
+      } else {
+        pushed = 0;
+      }
+    }
+
+    return c.json({ success: true, changed, etag, pushed }, 200);
+  } catch (error) {
+    if (error instanceof HTTPException) throw error;
+    logger.error('Unhandled error in update-pass', error instanceof Error ? error : new Error(String(error)), {
+      passTypeIdentifier,
+      serialNumber,
+    });
+    throw new HTTPException(500, { message: 'Internal error updating pass.' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Admin-only endpoint: GET /admin/pass-raw/:passTypeIdentifier/:serialNumber
+// Returns the raw stored JSON plus flags (canonical, adaptedFromLegacy)
+// -----------------------------------------------------------------------------
+adminApp.get('/admin/pass-raw/:passTypeIdentifier/:serialNumber', async (c) => {
+  const logger = c.get('logger');
+  const passTypeIdentifier = c.req.param('passTypeIdentifier');
+  const serialNumber = c.req.param('serialNumber');
+  if (!(passTypeIdentifier && serialNumber)) {
+    throw new HTTPException(400, { message: 'passTypeIdentifier and serialNumber required.' });
+  }
+  const db = getDbClient(c.env, logger);
+  const passRow = await db.query.walletPass.findFirst({
+    where: { passTypeIdentifier, serialNumber },
+    columns: { id: true },
+  });
+  if (!passRow) throw new HTTPException(404, { message: 'Pass not found.' });
+  const content = await db.query.walletPassContent.findFirst({
+    where: { passId: passRow.id },
+    columns: { data: true },
+  });
+  const raw = content?.data ?? null;
+  const canonical =
+    raw && typeof raw === 'object' && '_schemaVersion' in raw ? true : false;
+  const adapted = !canonical && !!adaptLegacyToCanonical(raw);
+  return c.json(
+    { success: true, canonical, adaptedFromLegacy: adapted, raw },
+    200
+  );
 });
 
 adminApp.post('/admin/invalidate/certs/:certRef', async (c) => {

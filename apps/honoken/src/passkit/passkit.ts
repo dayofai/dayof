@@ -19,6 +19,11 @@ import type { ZodIssue } from 'zod/v4';
 import { z } from 'zod/v4';
 import { getDbClient } from '../db';
 import { PassDataEventTicketSchema } from '../schemas';
+import {
+  adaptLegacyToCanonical,
+  projectCanonicalToPassData,
+  CANONICAL_PASS_SCHEMA_VERSION,
+} from '../domain/canonicalPass';
 import { VercelBlobAssetStorage } from '../storage/vercel-blob-storage';
 import type { Env } from '../types';
 import type { Logger } from '../utils/logger';
@@ -247,6 +252,26 @@ async function getValidatedPassData(
     .then((r) => r[0]);
   const rawPassDataFromDb: unknown = contentRow?.data ?? {};
   try {
+    // Detect canonical shape
+    if (
+      rawPassDataFromDb &&
+      typeof rawPassDataFromDb === 'object' &&
+      '_schemaVersion' in rawPassDataFromDb &&
+      (rawPassDataFromDb as { _schemaVersion?: unknown })._schemaVersion ===
+        CANONICAL_PASS_SCHEMA_VERSION
+    ) {
+      const projected = projectCanonicalToPassData(
+        rawPassDataFromDb as any
+      );
+      return projected; // already validated by projector
+    }
+    // Legacy path: adapt then project if possible
+    const adapted = adaptLegacyToCanonical(rawPassDataFromDb);
+    if (adapted) {
+      const projected = projectCanonicalToPassData(adapted);
+      return projected;
+    }
+    // Fallback: treat JSON as passData directly (legacy original)
     return PassDataEventTicketSchema.parse(rawPassDataFromDb);
   } catch (validationError: unknown) {
     if (validationError instanceof z.ZodError) {
