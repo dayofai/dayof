@@ -6,7 +6,11 @@
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@honoken/*": ["../../apps/honoken/src/*"]
+    }
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules"]
