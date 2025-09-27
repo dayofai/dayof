@@ -22,12 +22,6 @@
       "dependsOn": ["^check-types"]
     },
     "dev": {
-      "dotEnv": [
-        ".env.production.local",
-        ".env.local",
-        ".env.production",
-        ".env"
-      ],
       "cache": false,
       "persistent": true
     },
