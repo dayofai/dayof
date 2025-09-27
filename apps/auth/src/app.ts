@@ -15,10 +15,15 @@ const ALLOW = (process.env.ALLOWED_ORIGINS ?? '')
 app.use(
   '/*',
   cors({
-    origin: (origin) =>
-      origin ? (ALLOW.includes(origin) ? origin : 'null') : 'null',
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    origin: (origin) => {
+      // Return the origin if it's in the allowed list, otherwise undefined
+      if (!origin || ALLOW.includes(origin)) {
+        return origin || '*';
+      }
+      return;
+    },
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     credentials: true,
     maxAge: 600,
   })
