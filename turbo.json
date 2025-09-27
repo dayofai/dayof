@@ -12,7 +12,10 @@
         "OTEL_EXPORTER_OTLP_ENDPOINT",
         "DASH0_LOG_DRAIN_ENDPOINT",
         "DASH0_DATASET",
-        "OTEL_EXPORTER_OTLP_COMPRESSION"
+        "OTEL_EXPORTER_OTLP_COMPRESSION",
+        "BETTER_AUTH_URL",
+        "VITE_AUTH_BASE_URL",
+        "AUTH_PROXY_BASE"
       ]
     },
     "lint": {
