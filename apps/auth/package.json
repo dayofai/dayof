@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "mkdir -p .output && touch .output/.keep",
-    "dev": "vercel dev -p 3001"
+    "dev": "bun src/dev.ts"
   },
   "engines": {
     "node": "22.x"
