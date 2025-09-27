@@ -20,8 +20,6 @@ export default defineConfig({
     tsConfigPaths({ projects: ['./tsconfig.json'] }),
     tanstackStart({
       customViteReactPlugin: true,
-      serverEntry: 'src/entry-server.tsx',
-      clientEntry: 'src/entry-client.tsx',
     }),
     nitroV2Plugin(),
     viteReact(),
