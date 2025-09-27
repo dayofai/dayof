@@ -1,5 +1,6 @@
-// @ts-expect-error: built server bundle has no type declarations
-import server from '../dist/server/server.js';
+import handler from '@tanstack/react-start/server-entry';
 
-export default server;
+export default function vercelEdgeHandler(req: Request) {
+  return handler.fetch(req);
+}
 export const config = { runtime: 'edge' };
