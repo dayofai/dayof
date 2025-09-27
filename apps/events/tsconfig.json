@@ -4,6 +4,7 @@
     "outDir": "dist",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": false,
     "noEmit": false,
     "paths": {
       "database/*": ["../../packages/database/*"],
