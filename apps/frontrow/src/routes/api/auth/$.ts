@@ -2,7 +2,6 @@ import { createFileRoute } from '@tanstack/react-router';
 
 const AUTH_PROXY_BASE =
   import.meta.env.VITE_AUTH_PROXY_BASE || process.env.AUTH_PROXY_BASE;
-const API_AUTH_PREFIX = /^\/api\/auth/;
 
 async function proxyHandler({ request }: { request: Request }) {
   if (!AUTH_PROXY_BASE) {
@@ -10,8 +9,7 @@ async function proxyHandler({ request }: { request: Request }) {
   }
 
   const url = new URL(request.url);
-  const path = url.pathname.replace(API_AUTH_PREFIX, '');
-  const target = new URL(path + url.search, AUTH_PROXY_BASE);
+  const target = new URL(url.pathname + url.search, AUTH_PROXY_BASE);
 
   const method = request.method;
   const isBodyless = method === 'GET' || method === 'HEAD';
@@ -26,7 +24,6 @@ async function proxyHandler({ request }: { request: Request }) {
     headers,
     body,
     redirect: 'manual',
-    duplex: 'half',
   });
 
   return res;
