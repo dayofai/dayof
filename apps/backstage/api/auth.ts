@@ -14,11 +14,21 @@ export default async function handler(req: Request) {
     AUTH_PROXY_BASE
   );
 
+  const method = req.method;
+  const isBodyless = method === 'GET' || method === 'HEAD';
+  const headers = new Headers(req.headers);
+  headers.delete('content-length');
+  headers.delete('host');
+
+  const body = isBodyless ? undefined : await req.text();
+
   const res = await fetch(target.toString(), {
-    method: req.method,
-    headers: req.headers,
-    body: req.method === 'GET' || req.method === 'HEAD' ? undefined : req.body,
+    method,
+    headers,
+    body,
     redirect: 'manual',
+    // Required by undici when sending a body in Node runtimes
+    duplex: 'half',
   });
   return res;
 }

@@ -1,11 +1,11 @@
 # Auth Service (Better Auth + Hono)
 
-This repo uses a standalone Better Auth service (Hono, Vercel Node) mounted at `/auth`. Web apps use a proxy (`/api/auth/*`) only in dev/preview. Expo calls the auth service directly.
+This repo uses a standalone Better Auth service (Hono, Vercel Node) hosted at `https://auth.dayof.ai`. Web apps use a proxy (`/api/auth/*`) only in dev/preview. Expo calls the auth service directly.
 
 ## Hosts
 
 - Production web: `https://dayof.ai` (Frontrow), `https://app.dayof.ai` (Backstage)
-- Auth: `https://auth.dayof.ai/auth`
+- Auth: `https://auth.dayof.ai`
 
 ## Environments and cookies
 
@@ -18,15 +18,15 @@ Auth (apps/auth)
 
 - DATABASE_URL
 - BETTER_AUTH_SECRET
-- BETTER_AUTH_URL (must include path, e.g. `https://auth.dayof.ai/auth`)
+- BETTER_AUTH_URL (e.g. `https://auth.dayof.ai`)
 - AUTH_COOKIE_DOMAIN=dayof.ai (prod only)
 - ALLOWED_ORIGINS=`https://dayof.ai,https://app.dayof.ai[,http://localhost:3001,http://localhost:5173]`
 - INNGEST_EVENT_KEY (optional: required if emitting events from auth)
 
 Frontrow / Backstage (web)
 
-- VITE_AUTH_BASE_URL: `https://auth.dayof.ai/auth` (prod) or `/api/auth` (preview/dev)
-- AUTH_PROXY_BASE: `https://<auth-preview>/auth` (preview/dev only)
+- VITE_AUTH_BASE_URL: `https://auth.dayof.ai` (prod) or `/api/auth` (preview/dev)
+- AUTH_PROXY_BASE: `https://<auth-preview>` (preview/dev only)
 
 Crew (Expo)
 
@@ -35,13 +35,13 @@ Crew (Expo)
 
 ## Runtime/Routes
 
-- Auth service (Node runtime): `/auth/*`
+- Auth service (Node runtime): `/` (served from `auth.dayof.ai`)
 - Frontrow SSR remains on Edge; `/api/auth` proxy (Edge) forwards to `AUTH_PROXY_BASE`.
 - Backstage `/api/auth` proxy (Edge) forwards to `AUTH_PROXY_BASE`.
 
 ## Better Auth configuration (server)
 
-- Base URL includes the path `/auth`.
+- Base URL uses the domain root.
 - CORS allowlist reads `ALLOWED_ORIGINS` and enables `credentials`.
 - Cookie domain (`AUTH_COOKIE_DOMAIN=dayof.ai`) enabled only in production.
 
@@ -90,7 +90,7 @@ Auth (.env)
 ```bash
 DATABASE_URL=
 BETTER_AUTH_SECRET=
-BETTER_AUTH_URL=https://auth.dayof.ai/auth
+BETTER_AUTH_URL=https://auth.dayof.ai
 # prod only
 AUTH_COOKIE_DOMAIN=dayof.ai
 ALLOWED_ORIGINS=https://dayof.ai,https://app.dayof.ai,http://localhost:3001,http://localhost:5173
@@ -101,26 +101,26 @@ Frontrow (.env)
 
 ```bash
 # prod
-VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth
+VITE_AUTH_BASE_URL=https://auth.dayof.ai
 # preview/dev
 # VITE_AUTH_BASE_URL=/api/auth
-# AUTH_PROXY_BASE=https://<auth-preview>.vercel.app/auth
+# AUTH_PROXY_BASE=https://<auth-preview>.vercel.app
 ```
 
 Backstage (.env)
 
 ```bash
 # prod
-VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth
+VITE_AUTH_BASE_URL=https://auth.dayof.ai
 # preview/dev
 # VITE_AUTH_BASE_URL=/api/auth
-# AUTH_PROXY_BASE=https://<auth-preview>.vercel.app/auth
+# AUTH_PROXY_BASE=https://<auth-preview>.vercel.app
 ```
 
 Crew (.env)
 
 ```bash
-EXPO_PUBLIC_AUTH_BASE_URL=https://auth.dayof.ai/auth
+EXPO_PUBLIC_AUTH_BASE_URL=https://auth.dayof.ai
 EXPO_PUBLIC_SERVER_URL=
 ```
 
