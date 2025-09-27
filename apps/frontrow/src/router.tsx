@@ -5,6 +5,8 @@ import './index.css';
 import type { RouterAppContext } from './routes/__root';
 import { routeTree } from './routeTree.gen';
 
+// Updated: Force deployment with TanStack Start fixes
+
 export const getRouter = (ctx?: RouterAppContext) => {
   const queryClient = ctx?.queryClient ?? new QueryClient();
   const router = createTanStackRouter({
