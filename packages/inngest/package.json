@@ -15,7 +15,8 @@
   "dependencies": {
     "inngest": "^3.43.1",
     "hono": "^4.9.9",
-    "honoken": "workspace:*"
+    "honoken": "workspace:*",
+    "database": "workspace:*"
   },
   "devDependencies": {
     "inngest": "^3.43.1"
