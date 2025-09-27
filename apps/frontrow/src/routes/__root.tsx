@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query';
 import {
   createRootRouteWithContext,
   HeadContent,
@@ -5,6 +6,8 @@ import {
   Scripts,
   useRouterState,
 } from '@tanstack/react-router';
+// @ts-expect-error - TanStack Start types
+import type { HandlerCallback } from '@tanstack/react-start/server';
 import { Devtools } from '@/components/devtools';
 import Loader from '@/components/loader';
 import { Toaster } from '@/components/ui/sonner';
