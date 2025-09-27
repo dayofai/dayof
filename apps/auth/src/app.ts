@@ -26,7 +26,7 @@ app.use(
 
 app.get('/health', (c) => c.json({ ok: true }));
 
-// Handle all methods under the /auth base path
+// Handle all methods at the domain root
 app.all('/*', (c) => auth.handler(c.req.raw));
 
 export default app;
