@@ -27,4 +27,3 @@ app.all('/auth/*', (c) => auth.handler(c.req.raw));
 app.get('/health', (c) => c.json({ ok: true }));
 
 export default app;
-export const config = { runtime: 'nodejs20.x' };
