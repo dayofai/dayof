@@ -8,5 +8,3 @@ export const PUT = h;
 export const PATCH = h;
 export const DELETE = h;
 export const OPTIONS = h;
-
-export const config = { runtime: 'nodejs20.x' };
