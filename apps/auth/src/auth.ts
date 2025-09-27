@@ -2,22 +2,20 @@ import { expo } from '@better-auth/expo';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { createAuthMiddleware } from 'better-auth/api';
+import { reactStartCookies } from 'better-auth/react-start';
 import { db } from 'database/db';
-import { Inngest } from 'inngest';
+import { inngest } from 'inngest-kit';
 
 const BASE_URL = process.env.BETTER_AUTH_URL; // e.g. https://auth.dayof.ai/auth
 const COOKIE_DOMAIN = process.env.AUTH_COOKIE_DOMAIN; // prod only: dayof.ai
 const SECRET = process.env.BETTER_AUTH_SECRET;
-const INNGEST_EVENT_KEY = process.env.INNGEST_EVENT_KEY;
-
-const inngest = new Inngest({ id: 'dayof', eventKey: INNGEST_EVENT_KEY });
 
 export const auth = betterAuth({
   baseURL: BASE_URL,
   secret: SECRET,
   database: drizzleAdapter(db, { provider: 'pg' }),
   emailAndPassword: { enabled: true },
-  plugins: [expo()],
+  plugins: [expo(), reactStartCookies()],
   hooks: {
     after: createAuthMiddleware(async (ctx) => {
       try {
