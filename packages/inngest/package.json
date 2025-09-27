@@ -14,8 +14,10 @@
   },
   "dependencies": {
     "inngest": "^3.43.1",
-    "@effect/platform-node": "^0.97.1",
-    "@effect/schema": "^0.75.5",
-    "effect": "^3.17.14"
+    "hono": "^4.9.9",
+    "honoken": "workspace:*"
+  },
+  "devDependencies": {
+    "inngest": "^3.43.1"
   }
 }
