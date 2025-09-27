@@ -4,6 +4,7 @@
     "outDir": "dist",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "noEmit": false,
     "paths": {
       "database/*": ["../../packages/database/*"],
       "@honoken/*": ["../honoken/src/*"]
