@@ -18,6 +18,12 @@
     "deploy:preview": "vercel",
     "deploy:prod": "vercel --prod"
   },
+  "exports": {
+    "./db": "./src/db/index.ts",
+    "./passkit/apnsFetch": "./src/passkit/apnsFetch.ts",
+    "./repo/wallet": "./src/repo/wallet.ts",
+    "./types": "./src/types.ts"
+  },
   "dependencies": {
     "@vercel/blob": "^1.1.1",
     "@hono/zod-validator": "^0.7.2",

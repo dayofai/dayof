@@ -48,6 +48,10 @@
     "oxlint": "^1.13.0",
     "@types/node": "^20.12.12"
   },
+  "resolutions": {
+    "effect": "^3.17.9",
+    "@effect/schema": "^0.75.5"
+  },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,jsonc,css,scss,md,mdx}": [
       "npx ultracite format"

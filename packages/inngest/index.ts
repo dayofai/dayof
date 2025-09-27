@@ -1,5 +1,3 @@
-export * from "./client";
-export * from "./functions";
-export * from "./events";
-
-
+export * from './client';
+export * from './events';
+export * from './functions';
