@@ -19,5 +19,12 @@
   "devDependencies": {
     "@hono/node-server": "^1.19.4",
     "typescript": "^5.9.2"
+  },
+  "turbo": {
+    "tasks": {
+      "build": {
+        "outputs": []
+      }
+    }
   }
 }
