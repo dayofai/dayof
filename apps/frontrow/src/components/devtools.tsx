@@ -2,13 +2,13 @@ import { TanStackDevtools } from '@tanstack/react-devtools';
 import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools';
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools';
 
-export default function Devtools() {
-  if (!import.meta.env.DEV || import.meta.env.SSR) {
-    return null;
-  }
-
+export function Devtools() {
   return (
     <TanStackDevtools
+      config={{
+        position: 'bottom-left',
+        hideUntilHover: false,
+      }}
       plugins={[
         { name: 'TanStack Query', render: <ReactQueryDevtoolsPanel /> },
         { name: 'TanStack Router', render: <TanStackRouterDevtoolsPanel /> },
