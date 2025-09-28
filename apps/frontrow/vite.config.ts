@@ -21,7 +21,9 @@ export default defineConfig({
     tanstackStart({
       customViteReactPlugin: true,
     }),
-    nitroV2Plugin(),
+    nitroV2Plugin({
+      compatibilityDate: '2025-09-28',
+    }),
     viteReact(),
     tailwindcss(),
   ],
