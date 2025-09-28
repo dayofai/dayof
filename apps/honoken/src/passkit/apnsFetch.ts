@@ -1,7 +1,10 @@
 import { createBoundedMap } from '@honoken/utils/bounded-cache';
 import { importPKCS8, SignJWT } from 'jose';
 import pRetry, { type Options as PRetryOpts } from 'p-retry';
-import { Agent, fetch as undiciFetch } from 'undici';
+// NOTE: Apple APNs requires HTTP/2. The previous implementation used undici (HTTP/1.1) which can
+// produce malformed responses / connection errors. We switch to native http2 for compliance.
+// Removed undici Agent usage after migrating to native http2
+import * as http2 from 'node:http2';
 import { loadApnsKeyData } from './apnsKeys';
 // Types moved inline since original APNs module was removed
 export interface DeviceRegistration {
@@ -67,9 +70,9 @@ const JWT_REFRESH_BEFORE_SEC = 30; // Refresh if <30s left
 // Provider token cache: teamId-keyId → {jwt, exp}
 const tokenCache = createBoundedMap<string, { jwt: string; exp: number }>();
 
-// HTTP/2 agents per host (prevents socket explosion while isolating prod/sandbox)
-// Module-level map to maintain separate agents for each APNs environment
-const h2Agents = new Map<string, Agent>();
+// HTTP/2 session pool per host. We keep a small map of active sessions and lazily create.
+// Sessions are auto-destroyed on error/close and recreated on demand.
+const h2Sessions = new Map<string, http2.ClientHttp2Session>();
 
 // Circuit breaker for auth failures: teamId-keyId → {count, resetAt}
 const authFailures = new Map<string, { count: number; resetAt: number }>();
@@ -87,37 +90,26 @@ export function invalidateApnsClientCache(
 ): void {
   const cacheKey = `${teamId}:${keyId}`;
   tokenCache.delete(cacheKey);
-
-  // Close and remove all HTTP/2 agents to ensure fresh connections with new credentials
-  // This prevents stale ALPN session tickets from being used with invalidated tokens
-  for (const [host, agent] of h2Agents) {
+  // Close all existing sessions so new credentials take effect
+  for (const [host, session] of h2Sessions) {
     try {
-      // Note: agent.close() is async but we don't await to avoid blocking
-      // The agent will close connections gracefully in the background
-      agent.close().catch((error) => {
-        logger.error('Failed to close h2Agent during cache invalidation', {
-          host,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-      h2Agents.delete(host);
+      session.close();
     } catch (error) {
-      logger.error('Error removing h2Agent during cache invalidation', {
+      logger.error('Error closing HTTP/2 session during cache invalidation', {
         host,
         error: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      h2Sessions.delete(host);
     }
   }
 
-  logger.info(
-    'Invalidated APNs provider token cache and closed HTTP/2 agents',
-    {
-      teamId,
-      keyId,
-      triggeredByKeyCacheInvalidation,
-      agentsClosed: h2Agents.size,
-    }
-  );
+  logger.info('Invalidated APNs provider token cache and closed HTTP/2 sessions', {
+    teamId,
+    keyId,
+    triggeredByKeyCacheInvalidation,
+    activeSessionsAfter: h2Sessions.size,
+  });
 
   // Note: Key cache coordination is handled by the apnsKeys module
   // This parameter ensures we don't create circular invalidation loops
@@ -203,23 +195,32 @@ async function getProviderToken(
 /* -------------------------------------------------------------------------- */
 /* HTTP/2 Connection Pooling (Socket Explosion Fix)                         */
 /* -------------------------------------------------------------------------- */
-function getH2Agent(host: string): Agent {
-  // Check if we already have an agent for this host
-  let agent = h2Agents.get(host);
-  if (agent) {
-    return agent;
+function getH2Session(host: string, logger?: Logger): http2.ClientHttp2Session {
+  let session = h2Sessions.get(host);
+  if (session && !session.closed && !session.destroyed) return session;
+
+  // Ensure previous dirty session removed
+  if (session) {
+    try { session.destroy(); } catch {/* ignore */}
+    h2Sessions.delete(host);
   }
 
-  // Create a new agent for this specific host (prod or sandbox)
-  agent = new Agent({
-    // Reduced timeouts to limit socket lifetime while maintaining performance
-    keepAliveTimeout: 10_000, // 10s (reduced from 60s)
-    keepAliveMaxTimeout: 30_000, // 30s (reduced from 300s)
+  session = http2.connect(host, {
+    // ALPN handled automatically; Bun/Node will negotiate h2.
   });
-
-  // Store for reuse - maintains separate agents for prod vs sandbox
-  h2Agents.set(host, agent);
-  return agent;
+  session.setTimeout(30_000, () => {
+    try { session?.close(); } catch {/* ignore */}
+  });
+  session.on('error', (err) => {
+    logger?.error('APNs HTTP/2 session error', err instanceof Error ? err : new Error(String(err)), { host });
+    try { session?.destroy(); } catch {/* ignore */}
+    h2Sessions.delete(host);
+  });
+  session.on('close', () => {
+    h2Sessions.delete(host);
+  });
+  h2Sessions.set(host, session);
+  return session;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -228,7 +229,9 @@ function getH2Agent(host: string): Agent {
 function classifyApnsError(
   status: number,
   reason: string
-): 'retryable' | 'unregistered' | 'fatal' {
+): 'success' | 'retryable' | 'unregistered' | 'fatal' {
+  // Explicit success
+  if (status === 200) return 'success';
   // Retryable server errors
   if (status === 500 || status === 503 || status === 429) {
     return 'retryable';
@@ -255,28 +258,59 @@ function classifyApnsError(
 /* -------------------------------------------------------------------------- */
 async function sendOnce(
   device: DeviceRegistration,
-  opts: {
-    jwt: string;
-    topic: string;
-    host: string;
-    agent: Agent;
-  }
+  opts: { jwt: string; topic: string; host: string; logger: Logger }
 ) {
-  const res = await undiciFetch(`${opts.host}/3/device/${device.pushToken}`, {
-    method: 'POST',
-    dispatcher: opts.agent,
-    headers: {
+  // Always use production host for Wallet passes; Apple's docs note sandbox does not deliver for active passes.
+  const host = APNS_PROD;
+  const session = getH2Session(host, opts.logger);
+  const path = `/3/device/${device.pushToken}`;
+
+  return await new Promise<{ status: number; reason: string; retryAfter: string | null }>((resolve) => {
+    let responded = false;
+    const headers: http2.OutgoingHttpHeaders = {
+      ':method': 'POST',
+      ':path': path,
       authorization: `bearer ${opts.jwt}`,
       'apns-topic': opts.topic,
-      'apns-push-type': 'background',
+      'apns-push-type': 'background', // For pass updates background is acceptable
       'apns-priority': '5',
-    },
-    body: '{}',
-  });
+      'content-length': '2',
+      'content-type': 'application/json',
+    };
+    const req = session.request(headers, { endStream: false });
+    let status = 0;
+    let dataBuf = '';
+    let retryAfter: string | null = null;
 
-  const reason = (await res.text()) || res.headers.get('apns-error') || '';
-  const retryAfter = res.headers.get('retry-after');
-  return { status: res.status, reason, retryAfter };
+    req.on('response', (h) => {
+      status = Number(h[':status'] || 0);
+      if (h['retry-after']) retryAfter = String(h['retry-after']);
+    });
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => { dataBuf += chunk; });
+    req.on('error', (err) => {
+      if (responded) return;
+      responded = true;
+      opts.logger.error('APNs HTTP/2 request error', err, { path });
+      resolve({ status: 500, reason: err.message || 'http2_error', retryAfter: null });
+    });
+    req.on('close', () => {
+      if (responded) return;
+      responded = true;
+      let reason = '';
+      if (dataBuf.trim()) {
+        try {
+          const parsed = JSON.parse(dataBuf);
+            reason = parsed.reason || dataBuf;
+        } catch {
+          reason = dataBuf;
+        }
+      }
+      resolve({ status, reason, retryAfter });
+    });
+    req.write('{}');
+    req.end();
+  });
 }
 
 type RetryError = Error & {
@@ -465,8 +499,7 @@ async function sendWithRetry(
   ctx: {
     jwt: string;
     topic: string;
-    host: string;
-    agent: Agent;
+    host: string; // retained for logging; actual host forced to prod in sendOnce
     logger: Logger;
     teamId: string;
     keyId: string;
@@ -502,8 +535,8 @@ async function sendWithRetry(
 
   const outcome = await pRetry(async () => {
     attemptCount++;
-    const { status, reason, retryAfter } = await sendOnce(device, ctx);
-    const classification = classifyApnsError(status, reason);
+  const { status, reason, retryAfter } = await sendOnce(device, ctx);
+  const classification = classifyApnsError(status, reason);
 
     if (classification === 'retryable') {
       throw createRetryError(status, reason, retryAfter, attemptCount);
@@ -516,7 +549,7 @@ async function sendWithRetry(
     handlePushSuccess(ctx, status, attemptCount, startTime, classification);
 
     const result: PushResult = {
-      ok: status === 200,
+      ok: classification === 'success',
       unregistered: classification === 'unregistered',
       reason: classification !== 'unregistered' ? reason : undefined,
     };
@@ -598,8 +631,8 @@ export async function pushToManyFetch(
   }
 
   const jwt = await getProviderToken(teamId, keyId, p8Pem);
-  const host = env.ENVIRONMENT === 'development' ? APNS_DEV : APNS_PROD;
-  const agent = getH2Agent(host);
+  // Force production host for Wallet passes (sandbox does not deliver active pass updates)
+  const host = APNS_PROD;
 
   // Process all devices in parallel
   const outcomes = await Promise.all(
@@ -608,7 +641,6 @@ export async function pushToManyFetch(
         jwt,
         topic,
         host,
-        agent,
         logger,
         teamId,
         keyId,
@@ -628,6 +660,19 @@ export async function pushToManyFetch(
     ).length,
   };
 
+  if (
+    summary.failed === 0 &&
+    summary.unregistered === 0 &&
+    summary.attempted > 0 &&
+    summary.attempted <= 10
+  ) {
+    logger.info('APNs batch success', {
+      ...summary,
+      topic,
+      host,
+    });
+  }
+
   // Log batch-level metrics for monitoring (only if significant issues or large batches)
   const failureRate = summary.failed / summary.attempted;
   const shouldLogBatch =
@@ -643,6 +688,20 @@ export async function pushToManyFetch(
     });
   }
 
+  // Per-device outcome logging (small batches only) with hashed device ID for privacy
+  if (regs.length <= 10) {
+    outcomes.forEach((o) => {
+      const hashed = hashDeviceId(o.deviceId || o.pushToken);
+      logger.info('apns_device_outcome', {
+        passType: topic,
+        device: hashed,
+        ok: o.result.ok,
+        unregistered: !!o.result.unregistered,
+        reason: o.result.reason,
+      });
+    });
+  }
+
   return { outcomes, summary };
 }
 
@@ -654,37 +713,12 @@ export const pushToMany = pushToManyFetch;
 /* -------------------------------------------------------------------------- */
 
 // Handle graceful shutdown to prevent connection leaks during Vercel deployments
-process.on('beforeExit', async () => {
-  const closers: Promise<void>[] = [];
-  for (const [host, agent] of h2Agents) {
-    closers.push(
-      agent
-        .close()
-        .catch(() => {
-          /* ignore */
-        })
-        .then(() => {
-          h2Agents.delete(host);
-        })
-    );
+function closeAllSessions() {
+  for (const [host, session] of h2Sessions) {
+    try { session.close(); } catch {/* ignore */}
+    h2Sessions.delete(host);
   }
-  await Promise.all(closers);
-});
+}
 
-// Also handle explicit termination signals in case they're sent
-process.on('SIGTERM', async () => {
-  const closers: Promise<void>[] = [];
-  for (const [host, agent] of h2Agents) {
-    closers.push(
-      agent
-        .close()
-        .catch(() => {
-          /* ignore */
-        })
-        .then(() => {
-          h2Agents.delete(host);
-        })
-    );
-  }
-  await Promise.all(closers);
-});
+process.on('beforeExit', closeAllSessions);
+process.on('SIGTERM', closeAllSessions);
