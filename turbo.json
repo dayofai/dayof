@@ -15,7 +15,14 @@
         "OTEL_EXPORTER_OTLP_COMPRESSION",
         "BETTER_AUTH_URL",
         "VITE_AUTH_BASE_URL",
-        "AUTH_PROXY_BASE"
+        "VITE_AUTH_PROXY_BASE",
+        "AUTH_PROXY_BASE",
+        "BETTER_AUTH_SECRET",
+        "AUTH_COOKIE_DOMAIN",
+        "ALLOWED_ORIGINS",
+        "INNGEST_EVENT_KEY",
+        "NEON_API_KEY",
+        "NEON_PROJECT_ID"
       ]
     },
     "lint": {
