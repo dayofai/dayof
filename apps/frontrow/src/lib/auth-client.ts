@@ -2,9 +2,9 @@ import { createAuthClient } from 'better-auth/react';
 
 export const authClient: ReturnType<typeof createAuthClient> = createAuthClient(
   {
-    baseURL: import.meta.env.VITE_AUTH_BASE_URL,
+    baseURL: '/auth', // Use local proxy for same-origin requests (no CORS)
     fetchOptions: {
-      credentials: 'include', // Required for sending cookies cross-origin
+      credentials: 'include',
     },
   }
 );
