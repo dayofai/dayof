@@ -390,6 +390,31 @@ export async function verifyListAccessToken(
   return Array.isArray(result) ? result.length > 0 : !!result;
 }
 
+/**
+ * Fallback verification for list-updated-serials when the device uses the deviceLibraryIdentifier
+ * itself as the shared secret (some Wallet clients omit the Authorization header entirely).
+ * We consider it authorized if there exists at least one active registration for this
+ * deviceLibraryIdentifier + passTypeIdentifier. This aligns with Apple docs stating the
+ * device library identifier is the other shared secret for listing updated passes.
+ */
+export async function verifyListAccessByDeviceSecret(
+  env: Env,
+  passTypeIdentifier: string,
+  deviceLibraryIdentifier: string,
+  logger?: Logger
+): Promise<boolean> {
+  const dbClient = getDbClient(env, logger);
+  const result = await dbClient.query.walletRegistration.findFirst({
+    columns: { deviceLibraryIdentifier: true },
+    where: {
+      passTypeIdentifier,
+      deviceLibraryIdentifier,
+      active: true,
+    },
+  });
+  return !!result;
+}
+
 export async function getPassData(
   env: Env,
   passTypeIdentifier: string,
