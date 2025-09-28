@@ -10,7 +10,7 @@ async function proxyHandler({ request }: { request: Request }) {
 
   const url = new URL(request.url);
   // Strip /auth from the path to forward clean URLs
-  // Frontend: /auth/sign-in → Auth service: /sign-in
+  // Frontend: /auth/get-session → Auth service: /get-session
   const pathWithoutPrefix = url.pathname.replace('/auth', '');
   const target = new URL(pathWithoutPrefix + url.search, AUTH_PROXY_BASE);
 
