@@ -16,7 +16,10 @@ import {
   normalizeWebServiceURL,
   CANONICAL_PASS_SCHEMA_VERSION,
   CanonicalPassSchemaV1,
+  PartialCanonicalPassSchemaV1,
+  deepMerge,
   type AnyCanonicalPass,
+  type PartialCanonicalPassV1,
 } from '../domain/canonicalPass';
 import { upsertPassContentWithEtag } from '../repo/wallet';
 
@@ -433,27 +436,56 @@ adminApp.patch('/admin/update-pass/:passTypeIdentifier/:serialNumber', async (c)
       throw new HTTPException(400, { message: 'Body must be a JSON object.' });
     }
 
-    // Decide pathway: if body contains _schemaVersion or canonical keys, treat as canonical full/partial replacement.
+    // Support full canonical replacement or partial patch.
+    const hasExistingCanonical = !!currentCanonical;
     let toStore: AnyCanonicalPass;
-    const isCanonicalIncoming = '_schemaVersion' in (incoming as any);
-    if (isCanonicalIncoming) {
-      // Normalize webServiceURL if present
-      if (typeof (incoming as any).distribution?.webServiceURL === 'string') {
-        (incoming as any).distribution.webServiceURL = normalizeWebServiceURL(
-          (incoming as any).distribution.webServiceURL
-        );
+    let isFullReplacement = false;
+
+    const looksCanonical = '_schemaVersion' in (incoming as any) || 'event' in (incoming as any) || 'meta' in (incoming as any);
+    if (!looksCanonical) {
+      return c.json({ error: 'Unsupported Payload', message: 'Body must contain canonical pass fields (e.g. event/meta).' }, 400);
+    }
+
+    const missingRequiredTopLevel = ['event', 'style', 'distribution', 'meta'].some((k) => !(k in (incoming as any)));
+    const canTreatAsPartial = hasExistingCanonical && (missingRequiredTopLevel || !(incoming as any)._schemaVersion);
+
+    if (canTreatAsPartial) {
+      let partial: PartialCanonicalPassV1;
+      try {
+        partial = PartialCanonicalPassSchemaV1.parse(incoming);
+      } catch (err) {
+        if (err instanceof z.ZodError) {
+          return c.json({ error: 'Validation Failed', message: z.prettifyError(err) }, 400);
+        }
+        throw err;
       }
-      const validated = CanonicalPassSchemaV1.parse(incoming);
-      toStore = validated;
+      const merged = deepMerge(currentCanonical as AnyCanonicalPass, {
+        ...partial,
+        _schemaVersion: currentCanonical!._schemaVersion,
+      });
+      if (partial.distribution?.webServiceURL) {
+        merged.distribution.webServiceURL = normalizeWebServiceURL(partial.distribution.webServiceURL);
+      }
+      toStore = CanonicalPassSchemaV1.parse(merged);
     } else {
-      return c.json(
-        {
-          error: 'Unsupported Payload',
-          message:
-            '_schemaVersion required',
-        },
-        400
-      );
+      if (!(incoming as any)._schemaVersion) {
+        if (!hasExistingCanonical) {
+          return c.json({ error: 'Full Canonical Required', message: 'Initial update must include full canonical object with _schemaVersion.' }, 400);
+        }
+        (incoming as any)._schemaVersion = currentCanonical!._schemaVersion;
+      }
+      if (typeof (incoming as any).distribution?.webServiceURL === 'string') {
+        (incoming as any).distribution.webServiceURL = normalizeWebServiceURL((incoming as any).distribution.webServiceURL);
+      }
+      try {
+        toStore = CanonicalPassSchemaV1.parse(incoming);
+        isFullReplacement = true;
+      } catch (err) {
+        if (err instanceof z.ZodError) {
+          return c.json({ error: 'Validation Failed', message: z.prettifyError(err) }, 400);
+        }
+        throw err;
+      }
     }
 
     const { etag, changed } = await upsertPassContentWithEtag(
@@ -494,7 +526,7 @@ adminApp.patch('/admin/update-pass/:passTypeIdentifier/:serialNumber', async (c)
       }
     }
 
-    return c.json({ success: true, changed, etag, pushed }, 200);
+  return c.json({ success: true, changed, etag, pushed, mode: isFullReplacement ? 'full' : 'partial' }, 200);
   } catch (error) {
     if (error instanceof HTTPException) throw error;
     logger.error('Unhandled error in update-pass', error instanceof Error ? error : new Error(String(error)), {
