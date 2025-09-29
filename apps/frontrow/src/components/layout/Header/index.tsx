@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Logo } from '../icons/logo';
+import { Logo } from '../../icons/logo';
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -209,122 +209,131 @@ export default function Header() {
           </button>
 
           {mobileMenuOpen ? (
-            <div className="fixed inset-x-0 top-14 z-50 flex justify-center px-4 md:hidden">
-              <div
-                className={cn(
-                  'w-full rounded bg-white text-black shadow-lg ring-1 ring-black/10',
-                  'transition-all duration-200 ease-out',
-                  mobileMenuOpen
-                    ? 'translate-y-0 opacity-100'
-                    : 'translate-y-1 opacity-0'
-                )}
-                role="menu"
-              >
-                <nav className="divide-y divide-black/10">
-                  <Link
-                    className="block px-6 py-5 text-lg"
-                    onClick={() => setMobileMenuOpen(false)}
-                    to="/"
-                  >
-                    Browse events
-                  </Link>
-                  <Link
-                    className="block px-6 py-5 text-lg"
-                    onClick={() => setMobileMenuOpen(false)}
-                    to="/"
-                  >
-                    Get help
-                  </Link>
-                  <Link
-                    className="block px-6 py-5 text-lg"
-                    onClick={() => setMobileMenuOpen(false)}
-                    to="/"
-                  >
-                    Log in / Sign up
-                  </Link>
-                </nav>
-              </div>
-            </div>
+            <MobileMenuPanel onClose={() => setMobileMenuOpen(false)} />
           ) : null}
         </div>
       </div>
 
       {/* Mobile full-screen search overlay */}
       {mobileSearchOpen ? (
-        <div
-          className={`fixed inset-0 z-50 bg-black/80 backdrop-blur-sm transition-opacity duration-200 md:hidden ${
-            mobileSearchEntering ? 'opacity-100' : 'opacity-0'
-          }`}
-        >
-          <div className="px-4 pt-4">
-            <div
-              className={`relative transform transition-all duration-200 ease-out ${
-                mobileSearchEntering
-                  ? 'translate-y-0 scale-100 opacity-100'
-                  : 'translate-y-3 scale-[0.98] opacity-0'
-              }`}
-            >
-              <input
-                autoFocus
-                className="h-12 w-full rounded-full bg-white pr-12 pl-12 text-black placeholder-black/60 shadow-[0_2px_12px_rgba(0,0,0,0.25)] outline-none ring-1 ring-black/10"
-                placeholder="Search by event, venue or city"
-                type="text"
-              />
-              <svg
-                className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-6 text-black/80"
-                fill="none"
-                height="20"
-                viewBox="0 0 24 24"
-                width="20"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <title>Search</title>
-                <path
-                  d="M21 21l-4.35-4.35"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeWidth="2"
-                />
-                <circle
-                  cx="11"
-                  cy="11"
-                  r="7"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-              </svg>
-              <button
-                aria-label="Close search"
-                className="-translate-y-1/2 absolute top-1/2 right-2 rounded-full p-2 text-black/60 hover:bg-black/5"
-                onClick={closeMobileSearch}
-                type="button"
-              >
-                <svg
-                  fill="none"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  width="20"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <title>Close search</title>
-                  <path
-                    d="M18 6L6 18"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeWidth="2"
-                  />
-                  <path
-                    d="M6 6L18 18"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeWidth="2"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
+        <MobileSearchOverlay
+          entering={mobileSearchEntering}
+          onClose={closeMobileSearch}
+        />
       ) : null}
     </header>
+  );
+}
+
+function MobileSearchOverlay({
+  entering,
+  onClose,
+}: {
+  entering: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      aria-label="Search"
+      aria-modal="true"
+      className={`fixed inset-0 z-50 bg-black/80 backdrop-blur-sm transition-opacity duration-200 md:hidden ${
+        entering ? 'opacity-100' : 'opacity-0'
+      }`}
+      role="dialog"
+    >
+      <div className="px-4 pt-4">
+        <div
+          className={`relative transform transition-all duration-200 ease-out ${
+            entering
+              ? 'translate-y-0 scale-100 opacity-100'
+              : 'translate-y-3 scale-[0.98] opacity-0'
+          }`}
+        >
+          <input
+            autoFocus
+            className="h-12 w-full rounded-full bg-white pr-12 pl-12 text-black placeholder-black/60 shadow-[0_2px_12px_rgba(0,0,0,0.25)] outline-none ring-1 ring-black/10"
+            placeholder="Search by event, venue or city"
+            type="text"
+          />
+          <svg
+            className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-6 text-black/80"
+            fill="none"
+            height="20"
+            viewBox="0 0 24 24"
+            width="20"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <title>Search</title>
+            <path
+              d="M21 21l-4.35-4.35"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeWidth="2"
+            />
+            <circle
+              cx="11"
+              cy="11"
+              r="7"
+              stroke="currentColor"
+              strokeWidth="2"
+            />
+          </svg>
+          <button
+            aria-label="Close search"
+            className="-translate-y-1/2 absolute top-1/2 right-2 rounded-full p-2 text-black/60 hover:bg-black/5"
+            onClick={onClose}
+            type="button"
+          >
+            <svg
+              fill="none"
+              height="20"
+              viewBox="0 0 24 24"
+              width="20"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <title>Close search</title>
+              <path
+                d="M18 6L6 18"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeWidth="2"
+              />
+              <path
+                d="M6 6L18 18"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeWidth="2"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileMenuPanel({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-x-0 top-14 z-50 flex justify-center px-4 md:hidden">
+      <div
+        className={cn(
+          'w-full rounded bg-white text-black shadow-lg ring-1 ring-black/10',
+          'translate-y-0 opacity-100 transition-all duration-200 ease-out'
+        )}
+        role="menu"
+      >
+        <nav className="divide-y divide-black/10">
+          <Link className="block px-6 py-5 text-lg" onClick={onClose} to="/">
+            Browse events
+          </Link>
+          <Link className="block px-6 py-5 text-lg" onClick={onClose} to="/">
+            Get help
+          </Link>
+          <Link className="block px-6 py-5 text-lg" onClick={onClose} to="/">
+            Log in / Sign up
+          </Link>
+        </nav>
+      </div>
+    </div>
   );
 }
