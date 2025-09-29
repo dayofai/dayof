@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { getHealth } from '../server/health';
 
 export const Route = createFileRoute('/')({
@@ -32,6 +32,13 @@ function HomeComponent() {
             <span className="text-muted-foreground text-sm">{statusText}</span>
           </div>
         </section>
+        <Link
+            className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 font-semibold text-black hover:bg-white/90"
+            params={{ eventName: 'la-guns' }}
+            to="/event/$eventName"
+          >
+            View L.A. Guns Event
+        </Link>
       </div>
     </div>
   );
