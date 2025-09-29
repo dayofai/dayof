@@ -21,7 +21,7 @@ const inngest = new Inngest({
   eventKey: INNGEST_EVENT_KEY,
 });
 
-export class CreatePassError extends Error {
+export class CreatePassDirectError extends Error {
   statusCode: number;
   friendlyMessage?: string;
   constructor(msg: string, opts?: { statusCode?: number; friendlyMessage?: string }) {
@@ -31,7 +31,7 @@ export class CreatePassError extends Error {
   }
 }
 
-export type CreatePassResult = {
+export type CreatePassDirectResult = {
   passTypeIdentifier: string;
   serialNumber: string;
   authenticationToken: string;
@@ -65,12 +65,13 @@ function generateBarcodeValue(): string {
 const DEFAULT_PASS_TYPE_IDENTIFIER = 'pass.cards.dayof.tickets';
 const DEFAULT_CERT_REF = 'dayof-tickets';
 
+// Direct pass creation (legacy approach without canonical pattern)
 // Returns { result, warnings[] }
-export async function createPass(
+export async function createPassDirect(
   env: Env,
   logger: Logger,
   input: CreatePassInput
-): Promise<CreatePassResult> {
+): Promise<CreatePassDirectResult> {
   const db = getDbClient(env, logger);
 
   const warnings: string[] = [];
@@ -88,7 +89,7 @@ export async function createPass(
     columns: { certRef: true },
   });
   if (!cert) {
-    throw new CreatePassError(
+    throw new CreatePassDirectError(
       `No certificate found with certRef '${certRef}'`,
       {
         statusCode: 400,
@@ -117,7 +118,7 @@ export async function createPass(
     });
   }
   if (!passTypeRow) {
-    throw new CreatePassError(
+    throw new CreatePassDirectError(
       `Failed to create pass type ${passTypeIdentifier}`,
       { statusCode: 500 }
     );
@@ -145,7 +146,7 @@ export async function createPass(
     .then((rows) => rows[0]);
 
   if (existingPass) {
-    throw new CreatePassError(
+    throw new CreatePassDirectError(
       `A pass already exists for ${passTypeIdentifier} / ${serialNumber}`,
       {
         friendlyMessage:
@@ -173,7 +174,7 @@ export async function createPass(
     .then((rows) => rows[0]);
 
   if (!newPass?.id) {
-    throw new CreatePassError('Failed to insert pass row', {
+    throw new CreatePassDirectError('Failed to insert pass row', {
       statusCode: 500,
     });
   }
