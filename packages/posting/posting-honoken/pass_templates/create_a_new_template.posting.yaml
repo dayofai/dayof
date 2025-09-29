@@ -1,0 +1,87 @@
+name: Create a new template
+method: POST
+url: '{{honoken_api_base_uri}}/api/v2/pass-template'
+body:
+  content: "{\n    \"name\": \"My template\",\n    \"description\": \"An example template\"\
+    ,\n    \"organizationName\": \"Passcreator\",\n    \"type\": \"storeCard\",\n\
+    \    \"transitType\": \"PKTransitTypeAir\",\n    \"googlePayActive\": false,\n\
+    \    \"huaweiWalletActive\": false,\n    \"passTypeId\": \"{{honoken_passTypeId}}\"\
+    ,\n    \"passTypeIdExpiration\": \"2021-09-17 14:02\",\n    \"expiration\": {\n\
+    \        \"expirationDate\": \"2021-04-08 14:54\",\n        \"expirationDateDifferentForEachPass\"\
+    : true,\n        \"limitExpirationDateOfPassWithTemplate\": false,\n        \"\
+    fallbackToTemplateExpirationDateIfEmpty\": true,\n        \"validityInDays\":\
+    \ null\n    },\n    \"relevantDate\": \"2021-04-08 14:54\",\n    \"relevantDateDifferentForEachPass\"\
+    : false,\n    \"logoText\": \"\",\n    \"bundlingOrder\": 0,\n    \"fields\":\
+    \ {\n        \"headerFields\": [],\n        \"primaryFields\": [],\n        \"\
+    secondaryFields\": [\n            {\n                \"type\": \"text\",\n   \
+    \             \"label\": \"Level\",\n                \"value\": \"I bims\",\n\
+    \                \"changeMessage\": \"Level updated: %@\",\n                \"\
+    useAutoId\": false,\n                \"ignoresTimezone\": false,\n           \
+    \     \"isRelative\": false,\n                \"dateStyle\": \"PKDateStyleShort\"\
+    ,\n                \"timeStyle\": \"PKDateStyleShort\",\n                \"numberStyle\"\
+    : \"PKNumberStyleDecimal\",\n                \"currencyCode\": \"EUR\",\n    \
+    \            \"alignment\": \"PKTextAlignmentNatural\",\n                \"voidedLabel\"\
+    : \"\",\n                \"voidedValue\": \"\"\n            }\n        ],\n  \
+    \      \"auxiliaryFields\": [],\n        \"backFields\": [\n            {\n  \
+    \              \"type\": \"text\",\n                \"label\": \"\",\n       \
+    \         \"value\": \"hello@passcreator.com\",\n                \"changeMessage\"\
+    : \"Changed to %@\",\n                \"useAutoId\": false,\n                \"\
+    ignoresTimezone\": false,\n                \"isRelative\": false,\n          \
+    \      \"dateStyle\": \"\",\n                \"timeStyle\": \"\",\n          \
+    \      \"numberStyle\": \"\",\n                \"currencyCode\": \"\",\n     \
+    \           \"alignment\": \"\",\n                \"voidedLabel\": \"\",\n   \
+    \             \"voidedValue\": \"\"\n            }\n        ]\n    },\n    \"\
+    nfcEnabled\": false,\n    \"barcode\": {\n        \"format\": \"PKBarcodeFormatQR\"\
+    ,\n        \"value\": \"123456789\",\n        \"valueDifferentForEachPass\": false,\n\
+    \        \"useAutoIdForValue\": false,\n        \"prefix\": \"\",\n        \"\
+    alternativeText\": \"\",\n        \"alternativeTextDifferentForEachPass\": false,\n\
+    \        \"useAutoIdForAlternativeText\": false\n    },\n    \"links\": [\n  \
+    \      {\n            \"label\": \"Contact\",\n            \"value\": \"tel:004989123456789\"\
+    \n        },\n        {\n            \"label\": \"Website\",\n            \"value\"\
+    : \"https://www.passcreator.com\"\n        }\n    ],\n    \"images\": {\n    \
+    \    \"logo\": \"https://app.passcreator.com/_Resources/Static/Packages/SporerWebservices.PassbookPasses/Images/passcreator_logo.png\"\
+    ,\n        \"logoDifferentForEachPass\": false,\n        \"logoHidden\": false,\n\
+    \        \"background\": \"https://app.passcreator.com/_Resources/Static/Packages/SporerWebservices.PassbookPasses/Images/passcreator_logo.png\"\
+    ,\n        \"backgroundHidden\": false,\n        \"backgroundDifferentForEachPass\"\
+    : true,\n        \"thumbnail\": null,\n        \"thumbnailHidden\": true,\n  \
+    \      \"thumbnailDifferentForEachPass\": false,\n        \"icon\": \"https://app.passcreator.com/_Resources/Static/Packages/SporerWebservices.PassbookPasses/Images/passcreator_logo.png\"\
+    ,\n        \"googlePayLogo\": \"https://app.passcreator.com/_Resources/Static/Packages/SporerWebservices.PassbookPasses/Images/passcreator_logo.png\"\
+    \n    },\n    \"colors\": {\n        \"labelColor\": \"#FFFFFF\",\n        \"\
+    labelColorDifferentForEachPass\": false,\n        \"foregroundColor\": \"#FFFFFF\"\
+    ,\n        \"foregroundColorDifferentForEachPass\": false,\n        \"backgroundColor\"\
+    : \"#CE4400\",\n        \"backgroundColorDifferentForEachPass\": false,\n    \
+    \    \"voidedBackgroundColor\": \"#FFFFFF\"\n    },\n    \"additionalProperties\"\
+    : [\n        {\n            \"id\": \"5cb1a40ac68f80.15012600\",\n           \
+    \ \"name\": \"Email\",\n            \"type\": \"email\",\n            \"required\"\
+    : false,\n            \"hidden\": true\n        },\n        {\n            \"\
+    id\": \"5e2721b93da442.17595709\",\n            \"name\": \"Phone number\",\n\
+    \            \"type\": \"text\"\n        },\n        {\n            \"id\": \"\
+    5e552028e62805.33020425\",\n            \"name\": \"INTERNALMARKER\",\n      \
+    \      \"type\": \"text\",\n            \"required\": true\n        },\n     \
+    \   {\n            \"id\": \"5e5e0adfc1b6e4.84503451\",\n            \"name\"\
+    : \"Name\",\n            \"type\": \"text\"\n        },\n        {\n         \
+    \   \"id\": \"5f7216b0297200.36897838\",\n            \"name\": \"label\",\n \
+    \           \"type\": \"text\"\n        },\n        {\n            \"id\": \"\
+    5f7216b02972e2.34068785\",\n            \"name\": \"salutation\",\n          \
+    \  \"type\": \"select\",\n            \"required\": false,\n            \"hidden\"\
+    : false,\n            \"options\": [\n                \"Mrs\",\n             \
+    \   \"Mr\"\n            ]\n        }\n    ],\n    \"maximumNumberOfPasses\": 0,\n\
+    \    \"linkedApps\": {\n        \"iOS\": {\n            \"associatedStoreIdentifiers\"\
+    : \"123456\",\n            \"appLaunchUrl\": \"myapp://myparameter\"\n       \
+    \ },\n        \"android\": {\n            \"associatedStoreIdentifier\": \"de.my.app.identifier\"\
+    ,\n            \"name\": \"My app\"\n        }\n    },\n    \"customDataOverview\"\
+    : \"\",\n    \"hidePrintVersion\": false,\n    \"hideSendEmailButton\": false,\n\
+    \    \"limitToOneActivePerPass\": false,\n    \"sharingProhibited\": false,\n\
+    \    \"includeSocialOnDownloadPage\": false,\n    \"redirectToPassOnAndroid\"\
+    : false,\n    \"excludeFromDataRetention\": false,\n    \"genericProperties\"\
+    : [],\n    \"locationsDisabled\": false,\n    \"locations\": [\n        {\n  \
+    \          \"latitude\": \"53.2729641\",\n            \"longitude\": \"9.181269799999999\"\
+    ,\n            \"relevantText\": \"My store\"\n        },\n        {\n       \
+    \     \"latitude\": \"53.2391921\",\n            \"longitude\": \"10.4605743\"\
+    ,\n            \"relevantText\": \"Burger Store\"\n        }\n    ],\n    \"beaconsDisabled\"\
+    : false,\n    \"beacons\": [\n        {\n            \"name\": \"Test\",\n   \
+    \         \"proximityUUID\": \"868D3225-5F1A-4CAC-8CCA-372D41B9C8C5\",\n     \
+    \       \"relevantText\": \"Test message from beacon\",\n            \"major\"\
+    : \"789\",\n            \"minor\": \"123\"\n        }\n    ],\n    \"validValidationPlaces\"\
+    : [\"room1\", \"room2\"]\n}"
+  type: json

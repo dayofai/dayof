@@ -1,0 +1,7 @@
+name: Create/Update a bundle
+method: POST
+url: '{{honoken_api_base_uri}}/api/v2/pass-bundle/{{honoken_bundle_identifier}}'
+body:
+  content: "{\n    \"passes\": [\n        \"92c21f9a-4244-4adc-87f0-xxxxxxxxxxxx\"\
+    ,\n        \"5a47ad28-08f8-4263-b503-xxxxxxxxxxxx\"\n    ]\n}"
+  type: json

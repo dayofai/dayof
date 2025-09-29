@@ -1,0 +1,3 @@
+name: Delete a pass
+method: DELETE
+url: '{{honoken_api_base_uri}}/api/pass/{{honoken_pass_identifier}}'

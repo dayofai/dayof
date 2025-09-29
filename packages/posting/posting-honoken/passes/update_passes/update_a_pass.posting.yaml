@@ -1,0 +1,9 @@
+name: Update a Pass
+method: POST
+url: '{{honoken_api_base_uri}}/api/pass/{{honoken_pass_identifier}}?zapierStyle=true'
+params:
+- name: zapierStyle
+  value: 'true'
+body:
+  content: "{\n\t\"barcodeValue\": \"updatedBarcodeValue\"\n}"
+  type: json

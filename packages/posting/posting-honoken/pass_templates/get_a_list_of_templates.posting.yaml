@@ -1,0 +1,3 @@
+name: Get a list of templates
+method: GET
+url: '{{honoken_api_base_uri}}/api/pass-template'

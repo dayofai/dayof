@@ -1,0 +1,8 @@
+name: Subscription endpoint
+method: POST
+url: '{{honoken_api_base_uri}}/api/hook/subscribe/{{honoken_template_identifier}}'
+body:
+  content: "{\n    \"subscription_url\": \"https://yourdomain.com/hooks/standard/your-individual-hook-id/\"\
+    ,\n    \"target_url\": \"https://yourdomain.com/hooks/standard/your-individual-hook-id/\"\
+    ,\n    \"event\": \"pass_created\"\n}"
+  type: json

@@ -1,0 +1,6 @@
+name: Copy a Pass Template
+method: POST
+url: '{{honoken_api_base_uri}}/api/pass-template/copy/{{honoken_template_identifier}}'
+body:
+  content: "{\n    \"name\": \"My template copy\"\n}"
+  type: json

@@ -1,0 +1,6 @@
+name: Void all passes of a bundle
+method: PUT
+url: '{{honoken_api_base_uri}}/api/v2/pass-bundle/void/{{honoken_bundle_identifier}}'
+body:
+  content: "{\n    \"voided\": true\n}"
+  type: json

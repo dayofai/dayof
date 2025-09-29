@@ -1,0 +1,8 @@
+name: Create a new Pass
+method: POST
+url: '{{honoken_api_base_uri}}/api/pass?passtemplate={{honoken_template_identifier}}&zapierStyle=true'
+params:
+- name: passtemplate
+  value: '{{honoken_template_identifier}}'
+- name: zapierStyle
+  value: 'true'

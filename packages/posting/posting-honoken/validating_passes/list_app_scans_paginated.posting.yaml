@@ -1,0 +1,8 @@
+name: List App Scans (Paginated)
+method: GET
+url: '{{honoken_api_base_uri}}/api/appscan/list/{{honoken_appconfiguration_identifier}}?start=0&pageSize=100'
+params:
+- name: start
+  value: '0'
+- name: pageSize
+  value: '100'

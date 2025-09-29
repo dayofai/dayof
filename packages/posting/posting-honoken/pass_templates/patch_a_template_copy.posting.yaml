@@ -1,0 +1,6 @@
+name: Patch a template Copy
+method: PATCH
+url: '{{honoken_api_base_uri}}/api/v2/pass-template/{{honoken_template_identifier}}'
+body:
+  content: "{\n    \"name\": \"My template patched\"\n}"
+  type: json

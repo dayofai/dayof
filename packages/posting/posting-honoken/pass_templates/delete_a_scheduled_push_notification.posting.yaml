@@ -1,0 +1,3 @@
+name: Delete a scheduled Push Notification
+method: DELETE
+url: '{{honoken_api_base_uri}}/api/pass-template/notification/{{honoken_notification_identifier}}'

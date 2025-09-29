@@ -1,0 +1,3 @@
+name: Get all passes of a template
+method: GET
+url: '{{honoken_api_base_uri}}/api/pass/list/{{honoken_template_identifier}}'

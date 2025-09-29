@@ -1,0 +1,9 @@
+name: Create an App Scan
+method: POST
+url: '{{honoken_api_base_uri}}/api/appscan'
+body:
+  content: "{\n\t\"appConfigurationId\": {{honoken_appconfiguration_identifier}},\n\
+    \    \"passId\": {{honoken_pass_identifier}},\n\t\"scanStatus\": 2,\n\t\"\
+    createdOn\": \"2023-05-17 08:00:00\",\n\t\"scannedBarcodeValue\": \"myBarcodeValue\"\
+    ,\n\t\"deviceName\": \"My iPhone\",\n\t\"setVoided\": false\n}"
+  type: json

@@ -1,0 +1,3 @@
+name: Send a pass via email
+method: POST
+url: '{{honoken_api_base_uri}}/api/pass/deliver/{{honoken_pass_identifier}}/email/{{honoken_recipientMail}}'
