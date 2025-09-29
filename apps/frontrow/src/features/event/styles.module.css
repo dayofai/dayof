@@ -91,6 +91,7 @@
     rgba(0, 0, 0, 0.004) 98.2%,
     transparent 100%
   );
+  top: 100px; 
 }
 
 .bgImageBlur {

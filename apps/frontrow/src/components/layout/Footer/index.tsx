@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { Divider } from '@/components/ui/divider';
 import styles from './styles.module.css';
 import { Logo } from '@/components/icons/logo';
+import { Divider } from '@/components/ui/divider';
 
 const BREAKPOINT_LG = 1024;
 const RESIZE_DEBOUNCE_MS = 100;
@@ -137,7 +137,7 @@ export default function Footer() {
 
       <div className="mx-auto px-4 lg:container lg:px-0">
         <Divider className="dark:border-gray-200" spacing="tight" />
-        <div className="container flex flex-col items-center justify-between gap-4 lg:py-6 py-3 text-base text-black leading-5 md:flex-row lg:mx-auto">
+        <div className="container flex flex-col lg:items-center justify-between gap-4 lg:py-6 py-3 text-base text-black leading-5 md:flex-row lg:mx-auto">
           <p className="hidden text-base text-black leading-5 lg:block">
             {FOOTER_DATA.legal.copyright}
           </p>
