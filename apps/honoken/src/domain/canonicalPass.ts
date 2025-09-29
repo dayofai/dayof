@@ -48,6 +48,30 @@ export const CanonicalPassSchemaV1 = z.object({
 });
 export type CanonicalPassV1 = z.infer<typeof CanonicalPassSchemaV1>;
 
+// Partial schema used for PATCH operations. All top-level keys optional; retains same inner constraints.
+export const PartialCanonicalPassSchemaV1 = z.object({
+  _schemaVersion: z.literal(CANONICAL_PASS_SCHEMA_VERSION).optional(),
+  event: CanonicalPassSchemaV1.shape.event.partial().optional(),
+  style: CanonicalPassSchemaV1.shape.style.partial().optional(),
+  distribution: CanonicalPassSchemaV1.shape.distribution.partial().optional(),
+  meta: CanonicalPassSchemaV1.shape.meta.partial().optional(),
+  semanticTags: CanonicalPassSchemaV1.shape.semanticTags.optional(),
+});
+export type PartialCanonicalPassV1 = z.infer<typeof PartialCanonicalPassSchemaV1>;
+
+// Shallow-ish deep merge for plain objects; arrays are replaced (not merged).
+export function deepMerge<T extends Record<string, any>, U extends Record<string, any>>(base: T, patch: U): T & U {
+  const out: any = { ...base };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v && typeof v === 'object' && !Array.isArray(v) && typeof out[k] === 'object' && out[k] !== null && !Array.isArray(out[k])) {
+      out[k] = deepMerge(out[k], v);
+    } else if (v !== undefined) {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 export type AnyCanonicalPass = CanonicalPassV1; // future union on version bump
 
 // Project canonical -> PassDataEventTicket (the DB/display shape used by existing builder)
