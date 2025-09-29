@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { auth } from './auth';
+import { auth } from './auth.js';
 
 const app = new Hono();
 
@@ -15,8 +15,7 @@ const ALLOW = (process.env.ALLOWED_ORIGINS ?? '')
 app.use(
   '/*',
   cors({
-    origin: (origin) =>
-      origin && ALLOW.includes(origin) ? origin : undefined,
+    origin: (origin) => (origin && ALLOW.includes(origin) ? origin : undefined),
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
     credentials: true,

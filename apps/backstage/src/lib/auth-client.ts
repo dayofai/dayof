@@ -1,10 +1,6 @@
 import { createAuthClient } from 'better-auth/react';
 
-export const authClient: ReturnType<typeof createAuthClient> = createAuthClient(
-  {
-    baseURL: '/api/auth', // Use local proxy for same-origin requests (no CORS)
-    fetchOptions: {
-      credentials: 'include',
-    },
-  }
-);
+export const authClient = createAuthClient({
+  // SPA mode: let client default to window origin and default /api/auth path
+  fetchOptions: { credentials: 'include' },
+});
