@@ -32,7 +32,9 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsdown -c tsdown.config.ts",
+    "dev": "tsdown -c tsdown.config.ts -w",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "inngest": "^3.43.1",
@@ -41,6 +43,9 @@
     "database": "workspace:*"
   },
   "devDependencies": {
-    "inngest": "^3.43.1"
+    "@types/node": "^24.5.2",
+    "inngest": "^3.43.1",
+    "tsdown": "^0.15.5",
+    "typescript": "^5.9.2"
   }
 }
