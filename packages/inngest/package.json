@@ -32,7 +32,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "inngest": "^3.43.1",
