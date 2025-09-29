@@ -42,7 +42,7 @@ async function proxyHandler({ request }: { request: Request }) {
   });
 }
 
-export const Route = createFileRoute()({
+export const Route = createFileRoute('/api/auth/$')({
   server: {
     handlers: {
       GET: proxyHandler,
