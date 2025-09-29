@@ -17,16 +17,27 @@ async function proxyHandler({ request }: { request: Request }) {
   const headers = new Headers(request.headers);
   headers.delete('content-length');
   headers.delete('host');
+  headers.set('accept-encoding', 'identity');
 
   const body = isBodyless ? undefined : await request.text();
 
-  const res = await fetch(target.toString(), {
+  const upstream = await fetch(target.toString(), {
     method,
     headers,
     body,
     redirect: 'manual',
   });
-  return res;
+
+  const resHeaders = new Headers(upstream.headers);
+  resHeaders.delete('content-encoding');
+  resHeaders.delete('transfer-encoding');
+  resHeaders.delete('content-length');
+
+  const resBody = await upstream.arrayBuffer();
+  return new Response(resBody, {
+    status: upstream.status,
+    headers: resHeaders,
+  });
 }
 
 export const Route = createFileRoute('/api/auth/$')({
