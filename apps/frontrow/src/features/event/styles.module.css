@@ -1,0 +1,108 @@
+.scrollContainer {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.scrollContainer::-webkit-scrollbar {
+  height: 6px;
+}
+
+.scrollContainer::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollContainer::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.scrollContainer::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.asideContainer {
+  flex: 1 1 0%;
+  text-size-adjust: 100%;
+  line-height: 1.4;
+  width: 100%;
+  z-index: 1;
+  align-self: start;
+  top: 112px;
+}
+
+.topTrackTitle {
+  letter-spacing: 0.02em;
+  font-weight: normal;
+  margin: 0;
+  font-size: 18px;
+  line-height: 120%;
+  color: rgb(255, 255, 255);
+}
+
+.topTrackSub {
+  letter-spacing: 0.02em;
+  font-weight: normal;
+  color: rgba(255, 255, 255, 0.66);
+  margin-bottom: 8px;
+  font-size: 14px;
+  line-height: 130%;
+}
+
+.brandAccent {
+  color: var(--brand-accent);
+}
+
+.noUnderline {
+  text-decoration: none;
+}
+
+/* Background layers */
+.bgContainer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  z-index: 0;
+  max-height: 100vh;
+  min-height: 900px;
+}
+
+.bgGradient {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  background: linear-gradient(
+    to top,
+    black 0%,
+    rgba(0, 0, 0, 0.737) 19%,
+    rgba(0, 0, 0, 0.54) 34%,
+    rgba(0, 0, 0, 0.38) 47%,
+    rgba(0, 0, 0, 0.28) 56.5%,
+    rgba(0, 0, 0, 0.192) 65%,
+    rgba(0, 0, 0, 0.125) 73%,
+    rgba(0, 0, 0, 0.075) 80.2%,
+    rgba(0, 0, 0, 0.043) 86.1%,
+    rgba(0, 0, 0, 0.02) 91%,
+    rgba(0, 0, 0, 0.008) 95.2%,
+    rgba(0, 0, 0, 0.004) 98.2%,
+    transparent 100%
+  );
+  top: 100px; 
+}
+
+.bgImageBlur {
+  position: absolute;
+  top: -100px;
+  left: -100px;
+  right: -100px;
+  height: 1000px;
+  opacity: 0.4;
+  pointer-events: none;
+  filter: blur(50px);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
