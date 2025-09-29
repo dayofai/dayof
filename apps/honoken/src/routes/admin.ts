@@ -12,7 +12,6 @@ import { invalidateCertCache, storeCertBundle } from '../passkit/certs';
 import { CertificateRotationBodySchema } from '../schemas';
 import { PassDataEventTicketSchema } from '../schemas/passContentSchemas';
 import {
-  adaptLegacyToCanonical,
   projectCanonicalToPassData,
   normalizeWebServiceURL,
   CANONICAL_PASS_SCHEMA_VERSION,
@@ -417,16 +416,12 @@ adminApp.patch('/admin/update-pass/:passTypeIdentifier/:serialNumber', async (c)
       columns: { data: true },
     });
     const rawCurrent = existingContent?.data ?? {};
-    let currentCanonical: AnyCanonicalPass | null = null;
-    if (
+    const currentCanonical: AnyCanonicalPass | null =
       rawCurrent &&
       typeof rawCurrent === 'object' &&
       '_schemaVersion' in rawCurrent
-    ) {
-      currentCanonical = rawCurrent as AnyCanonicalPass;
-    } else {
-      currentCanonical = adaptLegacyToCanonical(rawCurrent);
-    }
+        ? (rawCurrent as AnyCanonicalPass)
+        : null;
 
     let incoming: unknown;
     try {
@@ -451,38 +446,14 @@ adminApp.patch('/admin/update-pass/:passTypeIdentifier/:serialNumber', async (c)
       const validated = CanonicalPassSchemaV1.parse(incoming);
       toStore = validated;
     } else {
-      // Legacy-style patch: we require full eventTicket or loose fields; merge then adapt -> canonical
-      const mergedLegacy = {
-        ...(currentCanonical ? projectCanonicalToPassData(currentCanonical) : {}),
-        ...(incoming as Record<string, unknown>),
-      };
-      // Validate merged legacy shape first to give meaningful errors
-      try {
-        PassDataEventTicketSchema.parse(mergedLegacy);
-      } catch (err) {
-        if (err instanceof z.ZodError) {
-          return c.json(
-            {
-              error: 'Validation Failed',
-              message: 'Updated pass content invalid.',
-              issues: z.prettifyError(err),
-            },
-            400
-          );
-        }
-        throw err;
-      }
-      const adapted = adaptLegacyToCanonical(mergedLegacy);
-      if (!adapted) {
-        throw new HTTPException(400, { message: 'Unable to adapt legacy payload.' });
-      }
-      // Ensure normalized webServiceURL
-      if (adapted.distribution.webServiceURL) {
-        adapted.distribution.webServiceURL = normalizeWebServiceURL(
-          adapted.distribution.webServiceURL
-        );
-      }
-      toStore = adapted;
+      return c.json(
+        {
+          error: 'Unsupported Payload',
+          message:
+            '_schemaVersion required',
+        },
+        400
+      );
     }
 
     const { etag, changed } = await upsertPassContentWithEtag(
@@ -536,7 +507,7 @@ adminApp.patch('/admin/update-pass/:passTypeIdentifier/:serialNumber', async (c)
 
 // -----------------------------------------------------------------------------
 // Admin-only endpoint: GET /admin/pass-raw/:passTypeIdentifier/:serialNumber
-// Returns the raw stored JSON plus flags (canonical, adaptedFromLegacy)
+// Returns the raw stored JSON (diagnostic helper)
 // -----------------------------------------------------------------------------
 adminApp.get('/admin/pass-raw/:passTypeIdentifier/:serialNumber', async (c) => {
   const logger = c.get('logger');
@@ -556,13 +527,7 @@ adminApp.get('/admin/pass-raw/:passTypeIdentifier/:serialNumber', async (c) => {
     columns: { data: true },
   });
   const raw = content?.data ?? null;
-  const canonical =
-    raw && typeof raw === 'object' && '_schemaVersion' in raw ? true : false;
-  const adapted = !canonical && !!adaptLegacyToCanonical(raw);
-  return c.json(
-    { success: true, canonical, adaptedFromLegacy: adapted, raw },
-    200
-  );
+  return c.json({ success: true, raw }, 200);
 });
 
 adminApp.post('/admin/invalidate/certs/:certRef', async (c) => {
