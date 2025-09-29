@@ -13,7 +13,7 @@ export default defineConfig({
   format: ['esm'],
   dts: true,
   clean: true,
-  target: 'node20',
+  target: 'node22',
   platform: 'node',
   external: ['inngest', 'hono', 'database', 'honoken'],
 });
