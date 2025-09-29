@@ -1,4 +1,4 @@
-// Canonical pass domain model + projection into PassDataEventTicket (legacy tolerant)
+// Canonical pass domain model + projection into PassDataEventTicket.
 import { z } from 'zod/v4';
 import { PassDataEventTicketSchema, type PassDataEventTicket } from '../schemas/passContentSchemas';
 
@@ -49,64 +49,6 @@ export const CanonicalPassSchemaV1 = z.object({
 export type CanonicalPassV1 = z.infer<typeof CanonicalPassSchemaV1>;
 
 export type AnyCanonicalPass = CanonicalPassV1; // future union on version bump
-
-// Legacy adapter: takes whatever is in DB (legacy PassDataEventTicket) -> canonical
-export function adaptLegacyToCanonical(raw: unknown): AnyCanonicalPass | null {
-  // Try interpreting as PassDataEventTicket first
-  const parsed = (() => {
-    try {
-      return PassDataEventTicketSchema.parse(raw);
-    } catch {
-      return null;
-    }
-  })();
-  if (!parsed) return null;
-  // If already looks canonical (has _schemaVersion) we bail (caller should detect separately)
-  if (parsed && typeof parsed === 'object' && '_schemaVersion' in parsed) {
-    return parsed as unknown as AnyCanonicalPass; // caller will validate separately
-  }
-  const primary = parsed.eventTicket?.primaryFields ?? [];
-  const findVal = (key: string) => primary.find((f) => f.key === key)?.value;
-  // Prefer loose override fields if present (PATCH may supply eventName without rewriting eventTicket)
-  const looseEventName = (parsed as any).eventName as string | undefined;
-  const looseDate = (parsed as any).eventDateISO as string | undefined;
-  const looseVenue = (parsed as any).venueName as string | undefined;
-  const looseSeat = (parsed as any).seat as string | undefined;
-  const looseSection = (parsed as any).section as string | undefined;
-
-  const canonical: CanonicalPassV1 = {
-    _schemaVersion: CANONICAL_PASS_SCHEMA_VERSION,
-    event: {
-      name: looseEventName || (findVal('event') as string) || 'Event',
-      startsAt: looseDate || (findVal('date') as string) || undefined,
-      venue: { name: looseVenue || (findVal('venue') as string) || undefined },
-      seat: {
-        seat: looseSeat || (findVal('seat') as string) || undefined,
-        section: looseSection || (findVal('section') as string) || undefined,
-      },
-    },
-    style: {
-      foregroundColor: (parsed as any).foregroundColor,
-      backgroundColor: (parsed as any).backgroundColor,
-      labelColor: (parsed as any).labelColor,
-      logoText: (parsed as any).logoText,
-      posterVersion: (parsed as any).posterVersion,
-    },
-    distribution: {
-      webServiceURL: (parsed as any).webServiceURL,
-      barcodeMessage: (parsed as any).barcode?.message,
-    },
-    meta: {
-      description: (parsed as any).description,
-      organizationName: (parsed as any).organizationName,
-      groupingIdentifier: (parsed as any).groupingIdentifier,
-      relevantDate: (parsed as any).relevantDate,
-      maxDistance: (parsed as any).maxDistance,
-    },
-    semanticTags: (parsed as any).semanticTags,
-  };
-  return canonical;
-}
 
 // Project canonical -> PassDataEventTicket (the DB/display shape used by existing builder)
 export function projectCanonicalToPassData(c: AnyCanonicalPass): PassDataEventTicket {
