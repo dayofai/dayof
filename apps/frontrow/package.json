@@ -5,7 +5,7 @@
   "scripts": {
     "build": "vite build",
     "serve": "vite preview",
-    "dev": "vite dev --port=3014"
+    "dev": "vite dev --port=3004"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.13",
