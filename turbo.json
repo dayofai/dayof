@@ -22,7 +22,8 @@
         "ALLOWED_ORIGINS",
         "INNGEST_EVENT_KEY",
         "NEON_API_KEY",
-        "NEON_PROJECT_ID"
+        "NEON_PROJECT_ID",
+        "FRONTROW_PUBLIC_SITE_URL"
       ]
     },
     "lint": {
