@@ -430,14 +430,14 @@ async function assembleModelFiles(
     'pass.json': Buffer.from(JSON.stringify(passJsonContent)),
   };
 
-  const passSpecificIconKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/icon.png`;
+  const eventSpecificIconKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/icon.png`;
   logger.info('Attempting to fetch pass-specific icon.png', {
-    path: passSpecificIconKey,
+    path: eventSpecificIconKey,
   });
   try {
     const iconBuffer = await fetchVerifiedPngAsset(
       storage,
-      passSpecificIconKey,
+      eventSpecificIconKey,
       29,
       29,
       logger
@@ -447,7 +447,7 @@ async function assembleModelFiles(
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
     logger.warn(
-      `Failed to fetch/verify pass-specific icon.png (${passSpecificIconKey}): ${err.message}. Trying fallback.`
+      `Failed to fetch/verify pass-specific icon.png (${eventSpecificIconKey}): ${err.message}. Trying fallback.`
     );
   }
 
@@ -494,16 +494,16 @@ async function assembleModelFiles(
   const highResResults = await Promise.all(
     highResSpecs.map(async (spec) => {
       const filename = `icon${spec.suffix}.png`;
-  const passSpecificKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/${filename}`;
+  const eventSpecificKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/${filename}`;
       const globalFallbackKey = `brand-assets/${filename}`;
 
       logger.info(`Attempting to fetch pass-specific ${filename}`, {
-        path: passSpecificKey,
+        path: eventSpecificKey,
       });
       try {
         const imageBuffer = await fetchVerifiedPngAsset(
           storage,
-          passSpecificKey,
+          eventSpecificKey,
           spec.width,
           spec.height,
           logger
@@ -515,7 +515,7 @@ async function assembleModelFiles(
       } catch (error: unknown) {
         const err = error instanceof Error ? error : new Error(String(error));
         logger.warn(
-          `Failed to fetch/verify pass-specific ${filename} (${passSpecificKey}): ${err.message}. Trying fallback.`
+          `Failed to fetch/verify pass-specific ${filename} (${eventSpecificKey}): ${err.message}. Trying fallback.`
         );
       }
 
@@ -785,14 +785,14 @@ export async function buildPass(
 
     // 8) Collect all required images to add to the model files
     // --- Icon Handling ---
-    const passSpecificIconKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/icon.png`;
+    const eventSpecificIconKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/icon.png`;
     logger.info('Attempting to fetch pass-specific icon.png', {
-      path: passSpecificIconKey,
+      path: eventSpecificIconKey,
     });
     try {
       const iconBuffer = await fetchVerifiedPngAsset(
         storage,
-        passSpecificIconKey,
+        eventSpecificIconKey,
         29,
         29,
         logger
@@ -801,7 +801,7 @@ export async function buildPass(
       logger.info('Added pass-specific icon.png using fetchVerifiedPngAsset');
     } catch (error: unknown) {
       logger.warn(
-        `Failed to fetch/verify pass-specific icon.png (${passSpecificIconKey}): ${(error instanceof Error ? error : new Error(String(error))).message}. Trying fallback.`
+        `Failed to fetch/verify pass-specific icon.png (${eventSpecificIconKey}): ${(error instanceof Error ? error : new Error(String(error))).message}. Trying fallback.`
       );
       // Error here means we couldn't get this specific icon, so we fall through to global fallback logic
     }
@@ -850,16 +850,16 @@ export async function buildPass(
     const highResResults = await Promise.all(
       highResSpecs.map(async (spec) => {
         const filename = `icon${spec.suffix}.png`;
-        const passSpecificKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/${filename}`;
+        const eventSpecificKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/${filename}`;
         const globalFallbackKey = `brand-assets/${filename}`;
 
         logger.info(`Attempting to fetch pass-specific ${filename}`, {
-          path: passSpecificKey,
+          path: eventSpecificKey,
         });
         try {
           const imageBuffer = await fetchVerifiedPngAsset(
             storage,
-            passSpecificKey,
+            eventSpecificKey,
             spec.width,
             spec.height,
             logger
@@ -871,7 +871,7 @@ export async function buildPass(
         } catch (error: unknown) {
           const err = error instanceof Error ? error : new Error(String(error));
           logger.warn(
-            `Failed to fetch/verify pass-specific ${filename} (${passSpecificKey}): ${err.message}. Trying fallback.`
+            `Failed to fetch/verify pass-specific ${filename} (${eventSpecificKey}): ${err.message}. Trying fallback.`
           );
         }
 
