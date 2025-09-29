@@ -7,6 +7,6 @@ export const Route = createFileRoute('/event/$eventName')({
 
 function EventComponent() {
   const { eventName } = Route.useParams();
-  
+
   return <EventPage eventName={eventName} />;
 }
