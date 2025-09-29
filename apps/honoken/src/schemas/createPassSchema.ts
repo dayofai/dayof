@@ -12,6 +12,7 @@ export const CreatePassSchema = z
     passTypeIdentifier: z.string().min(1).optional(),
     certRef: z.string().min(1).optional(),
     serialNumber: z.string().min(1).optional(),
+  eventId: z.string().min(1, { message: 'eventId is required' }),
     // authenticationToken: removed
     // Main required metadata (Apple Wallet requirement)
     description: z.string().optional(),

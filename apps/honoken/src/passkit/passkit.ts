@@ -152,6 +152,7 @@ type PassRow = {
   id: string;
   passTypeIdentifier: string;
   serialNumber: string;
+  eventId: string;
   authenticationToken: string;
   ticketStyle: unknown;
   poster: boolean;
@@ -185,6 +186,7 @@ async function getPassRow(
       authenticationToken: sharedSchema.walletPass.authenticationToken,
       ticketStyle: sharedSchema.walletPass.ticketStyle,
       poster: sharedSchema.walletPass.poster,
+      eventId: sharedSchema.walletPass.eventId,
     })
     .from(sharedSchema.walletPass)
     .where(
@@ -439,7 +441,7 @@ async function assembleModelFiles(
     'pass.json': Buffer.from(JSON.stringify(passJsonContent)),
   };
 
-  const passSpecificIconKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/icon.png`;
+  const passSpecificIconKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/icon.png`;
   logger.info('Attempting to fetch pass-specific icon.png', {
     path: passSpecificIconKey,
   });
@@ -503,7 +505,7 @@ async function assembleModelFiles(
   const highResResults = await Promise.all(
     highResSpecs.map(async (spec) => {
       const filename = `icon${spec.suffix}.png`;
-      const passSpecificKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/${filename}`;
+  const passSpecificKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/${filename}`;
       const globalFallbackKey = `brand-assets/${filename}`;
 
       logger.info(`Attempting to fetch pass-specific ${filename}`, {
@@ -559,8 +561,8 @@ async function assembleModelFiles(
     }
   }
 
-  const logoKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/logo.png`;
-  const logo2xKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/logo@2x.png`;
+  const logoKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/logo.png`;
+  const logo2xKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/logo@2x.png`;
   logger.info('Attempting to fetch mandatory logo.png', { path: logoKey });
   try {
     const logoBuffer = await fetchVerifiedPngAsset(
@@ -606,7 +608,7 @@ async function assembleModelFiles(
   }
 
   if (passRow.poster && certBundle.isEnhanced) {
-    const background2xKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/background@2x.png`;
+  const background2xKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/background@2x.png`;
     logger.info('Attempting to fetch background@2x.png for poster', {
       path: background2xKey,
     });
@@ -917,8 +919,8 @@ export async function buildPass(
     // --- End Icon Handling ---
 
     // --- Logo Handling ---
-    const logoKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/logo.png`;
-    const logo2xKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/logo@2x.png`;
+  const logoKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/logo.png`;
+  const logo2xKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/logo@2x.png`;
     logger.info('Attempting to fetch mandatory logo.png', { path: logoKey });
     try {
       const logoBuffer = await fetchVerifiedPngAsset(
@@ -970,7 +972,7 @@ export async function buildPass(
         serialNumber,
         passTypeIdentifier,
       });
-      const background2xKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/background@2x.png`;
+  const background2xKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/background@2x.png`;
       logger.info('Attempting to fetch background@2x.png for poster', {
         path: background2xKey,
       });
