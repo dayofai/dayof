@@ -9,10 +9,9 @@ async function proxyHandler({ request }: { request: Request }) {
   }
 
   const url = new URL(request.url);
-  // Strip /auth from the path to forward clean URLs
-  // Frontend: /auth/get-session → Auth service: /get-session
-  const pathWithoutPrefix = url.pathname.replace('/auth', '');
-  const target = new URL(pathWithoutPrefix + url.search, AUTH_PROXY_BASE);
+  // Forward full path under /api/auth unchanged to the auth service
+  // e.g. /api/auth/get-session -> https://auth.../api/auth/get-session
+  const target = new URL(url.pathname + url.search, AUTH_PROXY_BASE);
 
   const method = request.method;
   const isBodyless = method === 'GET' || method === 'HEAD';
@@ -28,12 +27,10 @@ async function proxyHandler({ request }: { request: Request }) {
     body,
     redirect: 'manual',
   });
-
   return res;
 }
 
-// Use createFileRoute() without explicit path - TanStack Router infers from file location
-export const Route = createFileRoute('/auth/$')({
+export const Route = createFileRoute()({
   server: {
     handlers: {
       GET: proxyHandler,

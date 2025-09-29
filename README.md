@@ -112,13 +112,21 @@ bun vercel add KEY value
 
 ### Running Applications
 
-You can run all applications simultaneously or individually. Dev ports:
+You can run all applications simultaneously or individually.
 
-- events: [http://localhost:3000](http://localhost:3000)
-- auth: [http://localhost:3001](http://localhost:3001)
-- honoken: [http://localhost:3002](http://localhost:3002)
-- backstage: [http://localhost:3003](http://localhost:3003)
-- frontrow: [http://localhost:3004](http://localhost:3004)
+#### Development Ports
+
+| App           | Port   | URL                                            | Framework      | Notes                  |
+| ------------- | ------ | ---------------------------------------------- | -------------- | ---------------------- |
+| **events**    | `3000` | [http://localhost:3000](http://localhost:3000) | Hono           | Inngest handler + API  |
+| **auth**      | `3001` | [http://localhost:3001](http://localhost:3001) | Hono           | Better Auth service    |
+| **honoken**   | `3002` | [http://localhost:3002](http://localhost:3002) | Hono           | Apple Wallet PassKit   |
+| **backstage** | `3003` | [http://localhost:3003](http://localhost:3003) | TanStack Start | Admin dashboard        |
+| **frontrow**  | `3004` | [http://localhost:3004](http://localhost:3004) | TanStack Start | Customer web app       |
+| **crew**      | `3005` | [http://localhost:3005](http://localhost:3005) | Expo (web)     | Mobile app (web build) |
+| **handbook**  | `3011` | [http://localhost:3011](http://localhost:3011) | Fumadocs       | Internal docs          |
+
+**Note**: Crew is primarily a React Native app that can also run on web. The port 3005 applies only to the web development server (`expo start --web`).
 
 ```bash
 # Run all web apps and services in development mode
@@ -324,6 +332,7 @@ All CLI utilities implement security best practices:
 ### Database migrations via GitHub Actions
 
 - **PR validation (safe):**
+
   - Workflow: `DB validate (PR)` runs on pull requests targeting `develop`.
   - Creates a short‑lived Neon branch (TTL), runs Drizzle migrations against it, and reports status in the PR checks.
   - Cleanup: `DB cleanup (PR)` removes the ephemeral branch when the PR is closed.
@@ -341,6 +350,7 @@ All CLI utilities implement security best practices:
 ### Secrets layout (GitHub)
 
 - **Repository secrets** (used by PR validation/cleanup):
+
   - `NEON_API_KEY`
   - `NEON_PROJECT_ID`
 
