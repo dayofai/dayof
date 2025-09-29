@@ -1,30 +1,32 @@
+import { randomBytes, randomUUID } from 'node:crypto';
 import { schema as sharedSchema } from 'database/schema';
 import { and, eq } from 'drizzle-orm';
-import { randomUUID, randomBytes } from 'node:crypto';
-import { PassDataEventTicketSchema } from '../schemas/passContentSchemas';
-import { VercelBlobAssetStorage } from '../storage/vercel-blob-storage';
-import { getDbClient } from '../db';
-import type { Env } from '../types';
-import type { Logger } from '../utils/logger';
-import { upsertPassContentWithEtag } from '../repo/wallet';
-import type { CreatePassInput } from '../schemas/createPassSchema';
-
 // Inngest integration for pass creation notification
 import { Inngest } from 'inngest';
+import { getDbClient } from '../db';
+import { upsertPassContentWithEtag } from '../repo/wallet';
+import type { CreatePassInput } from '../schemas/createPassSchema';
+import { PassDataEventTicketSchema } from '../schemas/passContentSchemas';
+import { VercelBlobAssetStorage } from '../storage/vercel-blob-storage';
+import type { Env } from '../types';
+import type { Logger } from '../utils/logger';
 
 // Module-level Inngest event key constant
 const INNGEST_EVENT_KEY = process.env.INNGEST_EVENT_KEY;
 
 // Instantiate module-level inngest client
 const inngest = new Inngest({
-  id: "dayof",
+  id: 'dayof',
   eventKey: INNGEST_EVENT_KEY,
 });
 
 export class CreatePassDirectError extends Error {
   statusCode: number;
   friendlyMessage?: string;
-  constructor(msg: string, opts?: { statusCode?: number; friendlyMessage?: string }) {
+  constructor(
+    msg: string,
+    opts?: { statusCode?: number; friendlyMessage?: string }
+  ) {
     super(msg);
     this.statusCode = opts?.statusCode ?? 400;
     this.friendlyMessage = opts?.friendlyMessage;
@@ -247,8 +249,7 @@ export async function createPassDirect(
       input.backgroundColor ||
       (input.poster ? 'rgb(0,0,0)' : 'rgb(255,255,255)'),
     labelColor:
-      input.labelColor ||
-      (input.poster ? 'rgb(255,255,255)' : 'rgb(0,0,0)'),
+      input.labelColor || (input.poster ? 'rgb(255,255,255)' : 'rgb(0,0,0)'),
     maxDistance: input.maxDistance,
     relevantDate: input.relevantDate,
     locations: input.locations,
@@ -274,14 +275,7 @@ export async function createPassDirect(
   );
 
   // Emit Inngest event for pass update (to trigger downstream workflow)
-  if (!INNGEST_EVENT_KEY) {
-    logger.warn('INNGEST_EVENT_KEY missing, not emitting pass/update.requested', {
-      passTypeIdentifier,
-      serialNumber,
-      context: 'createPass',
-      error: 'INNGEST_EVENT_KEY is not set',
-    });
-  } else {
+  if (INNGEST_EVENT_KEY) {
     try {
       await inngest.send({
         name: 'pass/update.requested',
@@ -299,15 +293,21 @@ export async function createPassDirect(
         context: 'createPass',
       });
     }
+  } else {
+    logger.warn(
+      'INNGEST_EVENT_KEY missing, not emitting pass/update.requested',
+      {
+        passTypeIdentifier,
+        serialNumber,
+        context: 'createPass',
+        error: 'INNGEST_EVENT_KEY is not set',
+      }
+    );
   }
 
   // Check required assets in blob storage (optional in dev)
   // If HONOKEN_IMAGES_READ_WRITE_TOKEN is not set, skip checks and return a warning
-  if (!env.HONOKEN_IMAGES_READ_WRITE_TOKEN) {
-    warnings.push(
-      'Asset checks skipped: HONOKEN_IMAGES_READ_WRITE_TOKEN not set in environment.'
-    );
-  } else {
+  if (env.HONOKEN_IMAGES_READ_WRITE_TOKEN) {
     const blob = new VercelBlobAssetStorage(env, logger);
     const assetPrefix = `${passTypeIdentifier}/${serialNumber}/`;
 
@@ -332,6 +332,10 @@ export async function createPassDirect(
         }
       }
     }
+  } else {
+    warnings.push(
+      'Asset checks skipped: HONOKEN_IMAGES_READ_WRITE_TOKEN not set in environment.'
+    );
   }
 
   // Compose download path (for frontend download usage)
