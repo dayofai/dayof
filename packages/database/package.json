@@ -3,18 +3,35 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "dependencies": {
     "ws": "^8.18.0"
   },
   "exports": {
-    ".": "./index.ts",
-    "./schema": "./schema/index.ts",
-    "./db": "./db/index.ts",
-    "./zod": "./runtime/zod.ts",
-    "./effect": "./runtime/effect.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "default": "./dist/schema/index.js"
+    },
+    "./db": {
+      "types": "./dist/db/index.d.ts",
+      "default": "./dist/db/index.js"
+    },
+    "./zod": {
+      "types": "./dist/runtime/zod.d.ts",
+      "default": "./dist/runtime/zod.js"
+    },
+    "./effect": {
+      "types": "./dist/runtime/effect.d.ts",
+      "default": "./dist/runtime/effect.js"
+    }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
