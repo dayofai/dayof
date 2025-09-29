@@ -631,7 +631,6 @@ export async function pushToManyFetch(
   }
 
   const jwt = await getProviderToken(teamId, keyId, p8Pem);
-  // Force production host for Wallet passes (sandbox does not deliver active pass updates)
   const host = APNS_PROD;
 
   // Process all devices in parallel
