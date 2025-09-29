@@ -1,0 +1,3 @@
+name: List active hooks
+method: GET
+url: '{{honoken_api_base_uri}}/api/hook/list'

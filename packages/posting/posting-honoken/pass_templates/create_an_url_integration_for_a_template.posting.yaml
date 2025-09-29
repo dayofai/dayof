@@ -1,0 +1,6 @@
+name: Create an URL Integration for a Template
+method: POST
+url: '{{honoken_api_base_uri}}/api/integration/url/{{honoken_template_identifier}}'
+body:
+  content: "{\n    \"name\": \"My integration\"\n}"
+  type: json

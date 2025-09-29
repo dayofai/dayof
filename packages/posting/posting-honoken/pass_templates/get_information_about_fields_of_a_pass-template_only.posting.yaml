@@ -1,0 +1,6 @@
+name: Get information about fields of a pass-template only
+method: GET
+url: '{{honoken_api_base_uri}}/api/pass-template/{{honoken_template_identifier}}?zapierStyle=true'
+params:
+- name: zapierStyle
+  value: 'true'

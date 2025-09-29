@@ -1,0 +1,8 @@
+name: Get statistics about incremental changes of pass usage
+method: GET
+url: '{{honoken_api_base_uri}}api/pass/statistics/{{honoken_template_identifier}}?timeFrame=week&day=today'
+params:
+- name: timeFrame
+  value: week
+- name: day
+  value: today

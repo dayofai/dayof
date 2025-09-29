@@ -1,0 +1,6 @@
+name: Publish changes of a template
+method: POST
+url: '{{honoken_api_base_uri}}/api/v2/pass-template/{{honoken_template_identifier}}/publish'
+body:
+  content: "{\n    \"publicationDate\": \"2025-10-30 15:00\"\n}"
+  type: json

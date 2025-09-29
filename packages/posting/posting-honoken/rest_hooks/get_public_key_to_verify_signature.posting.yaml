@@ -1,0 +1,3 @@
+name: Get public key to verify signature
+method: GET
+url: '{{honoken_api_base_uri}}/api/hook/publickey'

@@ -1,0 +1,9 @@
+name: Mark a pass voided
+method: POST
+url: '{{honoken_api_base_uri}}/api/pass/{{honoken_pass_identifier}}?zapierStyle=true'
+params:
+- name: zapierStyle
+  value: 'true'
+body:
+  content: "{\n\t\"voided\": true\n}"
+  type: json

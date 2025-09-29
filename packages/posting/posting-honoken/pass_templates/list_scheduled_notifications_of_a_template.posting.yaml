@@ -1,0 +1,6 @@
+name: List scheduled notifications of a template
+method: GET
+url: '{{honoken_api_base_uri}}/api/pass-template/{{honoken_template_identifier}}/notification'
+body:
+  content: ''
+  type: json

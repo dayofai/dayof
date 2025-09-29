@@ -1,0 +1,6 @@
+name: Send a Push Notification to a Pass
+method: POST
+url: '{{honoken_api_base_uri}}/api/pass/{{honoken_pass_identifier}}/sendpushnotification'
+body:
+  content: "{\n\t\"pushNotificationText\": \"Hi you, how are you?\"\n}"
+  type: json

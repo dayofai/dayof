@@ -1,0 +1,6 @@
+name: Enable download of a pass
+method: POST
+url: '{{honoken_api_base_uri}}/api/pass/{{honoken_pass_identifier}}/enabledownload'
+body:
+  content: "{\n\t\"enableDownloadUntil\": \"2025-05-20 10:09\"\n}"
+  type: json

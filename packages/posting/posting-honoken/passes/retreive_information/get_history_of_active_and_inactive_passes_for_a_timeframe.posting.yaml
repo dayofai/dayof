@@ -1,0 +1,3 @@
+name: Get history of active and inactive passes for a timeframe
+method: GET
+url: '{{honoken_api_base_uri}}/api/pass/statistics/{{honoken_template_identifier}}/activehistory'

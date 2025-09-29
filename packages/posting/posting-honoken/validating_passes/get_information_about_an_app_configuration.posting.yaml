@@ -1,0 +1,3 @@
+name: Get information about an App Configuration
+method: GET
+url: '{{honoken_api_base_uri}}/api/appconfiguration/{{honoken_appconfiguration_identifier}}'

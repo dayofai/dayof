@@ -1,0 +1,7 @@
+name: Send a Push Notification to multiple passes
+method: POST
+url: '{{honoken_api_base_uri}}/api/pass/{{honoken_pass_identifier}}/sendpushnotifications'
+body:
+  content: "{\n\t\"listOfPasses\": [\"b1d972dc-eccf-4f87-ab21-25939d9213d8\", \"23443567-eccf-4f87-ab21-2435465789\"\
+    ],\n\t\"pushNotificationText\": \"Hi {Firstname}, how are you?\"\n}"
+  type: json

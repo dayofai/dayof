@@ -1,0 +1,3 @@
+name: Search a pass based on its content
+method: GET
+url: '{{honoken_api_base_uri}}/api/pass/search/{{honoken_template_identifier}}/searchString'

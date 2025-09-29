@@ -1,0 +1,7 @@
+name: Schedule a Push Notification
+method: POST
+url: '{{honoken_api_base_uri}}/api/pass-template/{{honoken_template_identifier}}/notification'
+body:
+  content: "{\n    \"pushNotificationText\": \"This will notify you!\",\n    \"publicationDate\"\
+    : \"2025-11-14 15:20\"\n}"
+  type: json

@@ -1,0 +1,3 @@
+name: Get information about a specific pass
+method: GET
+url: '{{honoken_api_base_uri}}/api/pass/{{honoken_pass_identifier}}'
