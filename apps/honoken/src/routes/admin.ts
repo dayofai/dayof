@@ -407,7 +407,7 @@ adminApp.patch('/admin/update-pass/:passTypeIdentifier/:serialNumber', async (c)
     const db = getDbClient(c.env, logger);
     const passRow = await db.query.walletPass.findFirst({
       where: { passTypeIdentifier, serialNumber },
-      columns: { id: true },
+      columns: { id: true, eventId: true },
     });
     if (!passRow) {
       throw new HTTPException(404, { message: 'Pass not found.' });
@@ -548,7 +548,7 @@ adminApp.get('/admin/pass-raw/:passTypeIdentifier/:serialNumber', async (c) => {
   const db = getDbClient(c.env, logger);
   const passRow = await db.query.walletPass.findFirst({
     where: { passTypeIdentifier, serialNumber },
-    columns: { id: true },
+      columns: { id: true, eventId: true },
   });
   if (!passRow) throw new HTTPException(404, { message: 'Pass not found.' });
   const content = await db.query.walletPassContent.findFirst({

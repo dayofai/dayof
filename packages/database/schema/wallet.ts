@@ -79,6 +79,8 @@ export const walletPass = pgTable(
     id: t.text('id').primaryKey().default(sql`nanoid()`),
     passTypeIdentifier: t.text('pass_type_identifier').notNull(),
     serialNumber: t.text('serial_number').notNull(),
+    // Required linkage to upstream event (new – replaces use of serial for asset scoping)
+    eventId: t.text('event_id').notNull(),
     authenticationToken: t.text('authentication_token').notNull(),
     ticketStyle: walletTicketStyleEnum('ticket_style'),
     poster: t.boolean('poster').notNull().default(false),
@@ -89,6 +91,7 @@ export const walletPass = pgTable(
   (t) => [
     index('idx_wallet_pass_updated_at').on(t.updatedAt),
     index('idx_wallet_pass_auth_token').on(t.authenticationToken),
+    index('idx_wallet_pass_event_id').on(t.eventId),
     uniqueIndex('uq_wallet_pass_type_serial').on(
       t.passTypeIdentifier,
       t.serialNumber

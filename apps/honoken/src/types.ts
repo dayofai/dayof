@@ -53,6 +53,7 @@ export interface Env {
 export interface DatabasePassRow {
   serialNumber: string;
   passTypeIdentifier: string;
+  eventId: string;
   authenticationToken: string;
   ticketStyle: 'coupon' | 'event' | 'storeCard' | 'generic' | null;
   poster: boolean;

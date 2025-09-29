@@ -15,6 +15,13 @@
       "when": 1757629155138,
       "tag": "0001_oval_pepper_potts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1757629156000,
+      "tag": "0002_add_event_id_wallet_pass",
+      "breakpoints": true
     }
   ]
 }

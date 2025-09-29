@@ -87,6 +87,7 @@ export async function createPass(
     DEFAULT_PASS_TYPE_IDENTIFIER
   );
   const certRef = trimStringOrDefault(input.certRef, DEFAULT_CERT_REF);
+  const eventId = input.eventId.trim();
 
   // Check certificate exists
   const cert = await db.query.walletCert.findFirst({
@@ -167,6 +168,7 @@ export async function createPass(
     .values({
       passTypeIdentifier,
       serialNumber,
+      eventId,
       authenticationToken,
       ticketStyle: 'event',
       poster: !!input.poster,
@@ -323,7 +325,7 @@ export async function createPass(
     );
   } else {
     const blob = new VercelBlobAssetStorage(env, logger);
-    const assetPrefix = `${passTypeIdentifier}/${serialNumber}/`;
+  const assetPrefix = `${passTypeIdentifier}/events/${eventId}/`;
 
     // Required: icon.png (29x29), logo.png (160x50+), background@2x.png for poster
     const assetsToCheck = [
