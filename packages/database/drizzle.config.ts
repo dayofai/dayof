@@ -54,8 +54,8 @@ if (!url) {
 }
 
 export default {
-  schema: './schema/index.ts',
-  out: './migrations',
+  schema: './packages/database/schema/index.ts',
+  out: './packages/database/migrations',
   dialect: 'postgresql',
   dbCredentials: {
     url,
