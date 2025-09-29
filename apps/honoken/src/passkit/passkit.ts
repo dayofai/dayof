@@ -19,6 +19,7 @@ import type { ZodIssue } from 'zod/v4';
 import { z } from 'zod/v4';
 import { getDbClient } from '../db';
 import { PassDataEventTicketSchema } from '../schemas';
+import { projectCanonicalToPassData, CANONICAL_PASS_SCHEMA_VERSION } from '../domain/canonicalPass';
 import { VercelBlobAssetStorage } from '../storage/vercel-blob-storage';
 import type { Env } from '../types';
 import type { Logger } from '../utils/logger';
@@ -147,6 +148,7 @@ type PassRow = {
   id: string;
   passTypeIdentifier: string;
   serialNumber: string;
+  eventId: string;
   authenticationToken: string;
   ticketStyle: unknown;
   poster: boolean;
@@ -180,6 +182,7 @@ async function getPassRow(
       authenticationToken: sharedSchema.walletPass.authenticationToken,
       ticketStyle: sharedSchema.walletPass.ticketStyle,
       poster: sharedSchema.walletPass.poster,
+      eventId: sharedSchema.walletPass.eventId,
     })
     .from(sharedSchema.walletPass)
     .where(
@@ -247,6 +250,19 @@ async function getValidatedPassData(
     .then((r) => r[0]);
   const rawPassDataFromDb: unknown = contentRow?.data ?? {};
   try {
+    // Detect canonical shape
+    if (
+      rawPassDataFromDb &&
+      typeof rawPassDataFromDb === 'object' &&
+      '_schemaVersion' in rawPassDataFromDb &&
+      (rawPassDataFromDb as { _schemaVersion?: unknown })._schemaVersion ===
+        CANONICAL_PASS_SCHEMA_VERSION
+    ) {
+      const projected = projectCanonicalToPassData(
+        rawPassDataFromDb as any
+      );
+      return projected; // already validated by projector
+    }
     return PassDataEventTicketSchema.parse(rawPassDataFromDb);
   } catch (validationError: unknown) {
     if (validationError instanceof z.ZodError) {
@@ -414,14 +430,14 @@ async function assembleModelFiles(
     'pass.json': Buffer.from(JSON.stringify(passJsonContent)),
   };
 
-  const passSpecificIconKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/icon.png`;
+  const eventSpecificIconKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/icon.png`;
   logger.info('Attempting to fetch pass-specific icon.png', {
-    path: passSpecificIconKey,
+    path: eventSpecificIconKey,
   });
   try {
     const iconBuffer = await fetchVerifiedPngAsset(
       storage,
-      passSpecificIconKey,
+      eventSpecificIconKey,
       29,
       29,
       logger
@@ -431,7 +447,7 @@ async function assembleModelFiles(
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
     logger.warn(
-      `Failed to fetch/verify pass-specific icon.png (${passSpecificIconKey}): ${err.message}. Trying fallback.`
+      `Failed to fetch/verify pass-specific icon.png (${eventSpecificIconKey}): ${err.message}. Trying fallback.`
     );
   }
 
@@ -478,16 +494,16 @@ async function assembleModelFiles(
   const highResResults = await Promise.all(
     highResSpecs.map(async (spec) => {
       const filename = `icon${spec.suffix}.png`;
-      const passSpecificKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/${filename}`;
+  const eventSpecificKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/${filename}`;
       const globalFallbackKey = `brand-assets/${filename}`;
 
       logger.info(`Attempting to fetch pass-specific ${filename}`, {
-        path: passSpecificKey,
+        path: eventSpecificKey,
       });
       try {
         const imageBuffer = await fetchVerifiedPngAsset(
           storage,
-          passSpecificKey,
+          eventSpecificKey,
           spec.width,
           spec.height,
           logger
@@ -499,7 +515,7 @@ async function assembleModelFiles(
       } catch (error: unknown) {
         const err = error instanceof Error ? error : new Error(String(error));
         logger.warn(
-          `Failed to fetch/verify pass-specific ${filename} (${passSpecificKey}): ${err.message}. Trying fallback.`
+          `Failed to fetch/verify pass-specific ${filename} (${eventSpecificKey}): ${err.message}. Trying fallback.`
         );
       }
 
@@ -534,8 +550,8 @@ async function assembleModelFiles(
     }
   }
 
-  const logoKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/logo.png`;
-  const logo2xKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/logo@2x.png`;
+  const logoKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/logo.png`;
+  const logo2xKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/logo@2x.png`;
   logger.info('Attempting to fetch mandatory logo.png', { path: logoKey });
   try {
     const logoBuffer = await fetchVerifiedPngAsset(
@@ -581,7 +597,7 @@ async function assembleModelFiles(
   }
 
   if (passRow.poster && certBundle.isEnhanced) {
-    const background2xKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/background@2x.png`;
+  const background2xKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/background@2x.png`;
     logger.info('Attempting to fetch background@2x.png for poster', {
       path: background2xKey,
     });
@@ -769,14 +785,14 @@ export async function buildPass(
 
     // 8) Collect all required images to add to the model files
     // --- Icon Handling ---
-    const passSpecificIconKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/icon.png`;
+    const eventSpecificIconKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/icon.png`;
     logger.info('Attempting to fetch pass-specific icon.png', {
-      path: passSpecificIconKey,
+      path: eventSpecificIconKey,
     });
     try {
       const iconBuffer = await fetchVerifiedPngAsset(
         storage,
-        passSpecificIconKey,
+        eventSpecificIconKey,
         29,
         29,
         logger
@@ -785,7 +801,7 @@ export async function buildPass(
       logger.info('Added pass-specific icon.png using fetchVerifiedPngAsset');
     } catch (error: unknown) {
       logger.warn(
-        `Failed to fetch/verify pass-specific icon.png (${passSpecificIconKey}): ${(error instanceof Error ? error : new Error(String(error))).message}. Trying fallback.`
+        `Failed to fetch/verify pass-specific icon.png (${eventSpecificIconKey}): ${(error instanceof Error ? error : new Error(String(error))).message}. Trying fallback.`
       );
       // Error here means we couldn't get this specific icon, so we fall through to global fallback logic
     }
@@ -834,16 +850,16 @@ export async function buildPass(
     const highResResults = await Promise.all(
       highResSpecs.map(async (spec) => {
         const filename = `icon${spec.suffix}.png`;
-        const passSpecificKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/${filename}`;
+        const eventSpecificKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/${filename}`;
         const globalFallbackKey = `brand-assets/${filename}`;
 
         logger.info(`Attempting to fetch pass-specific ${filename}`, {
-          path: passSpecificKey,
+          path: eventSpecificKey,
         });
         try {
           const imageBuffer = await fetchVerifiedPngAsset(
             storage,
-            passSpecificKey,
+            eventSpecificKey,
             spec.width,
             spec.height,
             logger
@@ -855,7 +871,7 @@ export async function buildPass(
         } catch (error: unknown) {
           const err = error instanceof Error ? error : new Error(String(error));
           logger.warn(
-            `Failed to fetch/verify pass-specific ${filename} (${passSpecificKey}): ${err.message}. Trying fallback.`
+            `Failed to fetch/verify pass-specific ${filename} (${eventSpecificKey}): ${err.message}. Trying fallback.`
           );
         }
 
@@ -892,8 +908,8 @@ export async function buildPass(
     // --- End Icon Handling ---
 
     // --- Logo Handling ---
-    const logoKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/logo.png`;
-    const logo2xKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/logo@2x.png`;
+  const logoKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/logo.png`;
+  const logo2xKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/logo@2x.png`;
     logger.info('Attempting to fetch mandatory logo.png', { path: logoKey });
     try {
       const logoBuffer = await fetchVerifiedPngAsset(
@@ -945,7 +961,7 @@ export async function buildPass(
         serialNumber,
         passTypeIdentifier,
       });
-      const background2xKey = `${passRow.passTypeIdentifier}/${passRow.serialNumber}/background@2x.png`;
+  const background2xKey = `${passRow.passTypeIdentifier}/events/${passRow.eventId}/background@2x.png`;
       logger.info('Attempting to fetch background@2x.png for poster', {
         path: background2xKey,
       });

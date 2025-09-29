@@ -2,6 +2,8 @@ import type { Context, Next } from 'hono';
 import { verifyToken } from '../storage'; // Adjusted import path
 import type { Env } from '../types'; // Adjusted import path
 import { createLogger } from '../utils/logger'; // Added
+import { getDbClient } from '../db';
+import { schema as sharedSchema } from 'database/schema';
 
 /**
  * Hono middleware for Apple Pass authentication.
@@ -59,34 +61,105 @@ export async function applePassAuthForListMiddleware(
     return c.json({ message: 'Bad Request: Missing required parameters' }, 400);
   }
 
-  if (!auth?.startsWith('ApplePass ')) {
-    return c.json({ message: 'Unauthorized' }, 401);
-  }
-  const token = auth.substring(10).trim();
-  if (!token) {
-    return c.json({ message: 'Unauthorized' }, 401);
-  }
+  const { verifyListAccessToken, verifyListAccessByDeviceSecret } = await import(
+    '../storage'
+  );
 
-  try {
-    // Verify via storage layer to avoid duplicating DB logic
-    const { verifyListAccessToken } = await import('../storage');
-    const isAuthorized = await verifyListAccessToken(
+  // Strategy order:
+  // 1. If Authorization header present & valid scheme, validate it (token can be authToken OR the deviceLibraryIdentifier itself)
+  // 2. Else (no header) try device secret fallback (active registration for device+passType)
+  // 3. If header present but fails, attempt fallback before final 401
+
+  let authorized = false;
+  let failureReason: string | null = null;
+  let tokenHash: string | undefined;
+
+  const attemptDeviceFallback = async () => {
+    const ok = await verifyListAccessByDeviceSecret(
       c.env,
       passTypeIdentifier,
       deviceLibraryIdentifier,
-      token,
       logger
     );
-    if (!isAuthorized) {
-      return c.json({ message: 'Unauthorized' }, 401);
+    if (ok) {
+      authorized = true;
+      return true;
     }
-  } catch (error) {
-    logger.error(
-      'List auth middleware error',
-      error instanceof Error ? error : new Error(String(error))
-    );
+    return false;
+  };
+
+  if (auth?.startsWith('ApplePass ')) {
+    const token = auth.substring(10).trim();
+    if (!token) {
+      failureReason = 'empty_token';
+    } else {
+      // If token equals deviceLibraryIdentifier, treat as device secret
+      if (token === deviceLibraryIdentifier) {
+        authorized = await attemptDeviceFallback();
+        if (!authorized) failureReason = 'device_secret_no_registration';
+      } else {
+        try {
+          const isAuthorized = await verifyListAccessToken(
+            c.env,
+            passTypeIdentifier,
+            deviceLibraryIdentifier,
+            token,
+            logger
+          );
+          if (isAuthorized) {
+            authorized = true;
+          } else {
+            // Try fallback with device secret if token mismatch
+            const fallbackOk = await attemptDeviceFallback();
+            if (!fallbackOk) {
+              failureReason = 'no_matching_registration_or_token';
+            }
+          }
+        } catch (error) {
+          failureReason = 'storage_error';
+          logger.error(
+            'List auth middleware error',
+            error instanceof Error ? error : new Error(String(error))
+          );
+        }
+      }
+      // Compute hash for logging if not authorized
+      if (!authorized) {
+        try {
+          const data = await crypto.subtle.digest(
+            'SHA-256',
+            new TextEncoder().encode(token)
+          );
+          tokenHash = Array.from(new Uint8Array(data))
+            .slice(0, 6)
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('');
+        } catch {
+          tokenHash = 'hash_err';
+        }
+      }
+    }
+  } else {
+    // No (or bad) Authorization header: fallback to device secret approach
+    const fallback = await attemptDeviceFallback();
+    if (!fallback) {
+      failureReason = 'missing_or_bad_scheme';
+    }
+  }
+
+  if (!authorized) {
+    logger.info('list_auth_unauthorized', {
+      reason: failureReason,
+      hasAuth: !!auth,
+      deviceLibraryIdentifier,
+      passTypeIdentifier,
+      tokenHash,
+      path: c.req.path,
+    });
     return c.json({ message: 'Unauthorized' }, 401);
   }
+
+  c.header('X-List-Auth', 'ok');
 
   await next();
 }
