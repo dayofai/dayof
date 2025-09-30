@@ -1,4 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
+
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+
 import {
   createRootRouteWithContext,
   HeadContent,
@@ -6,11 +9,11 @@ import {
   Scripts,
   useRouterState,
 } from '@tanstack/react-router';
-import { Devtools } from '@/components/devtools';
+import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
+import Footer from '@/components/layout/Footer';
+import Header from '@/components/layout/Header';
 import Loader from '@/components/loader';
 import { Toaster } from '@/components/ui/sonner';
-import Header from '../components/header';
-import appCss from '../index.css?url';
 
 export interface RouterAppContext {
   queryClient: QueryClient;
@@ -30,12 +33,6 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         title: 'My App',
       },
     ],
-    links: [
-      {
-        rel: 'stylesheet',
-        href: appCss,
-      },
-    ],
   }),
 
   component: RootDocument,
@@ -51,12 +48,14 @@ function RootDocument() {
         <HeadContent />
       </head>
       <body>
-        <div className="grid h-svh grid-rows-[auto_1fr]">
+        <div className="grid grid-rows-[auto_1fr]">
           <Header />
           {isFetching ? <Loader /> : <Outlet />}
+          <Footer />
         </div>
         <Toaster richColors />
-        <Devtools />
+        <TanStackRouterDevtools position="bottom-left" />
+        <ReactQueryDevtools buttonPosition="bottom-right" position="bottom" />
         <Scripts />
       </body>
     </html>
