@@ -10,7 +10,8 @@
   "dependencies": {
     "hono": "^4.9.7",
     "@hono/node-server": "^1.14.4",
-    "inngest-kit": "workspace:*"
+    "inngest-kit": "workspace:*",
+    "honoken": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

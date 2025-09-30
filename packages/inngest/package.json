@@ -39,13 +39,13 @@
   "dependencies": {
     "inngest": "^3.43.1",
     "hono": "^4.9.9",
-    "honoken": "workspace:*",
     "database": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
     "inngest": "^3.43.1",
     "tsdown": "^0.15.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "honoken": "workspace:*"
   }
 }
