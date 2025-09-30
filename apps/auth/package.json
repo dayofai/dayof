@@ -23,7 +23,8 @@
   "turbo": {
     "tasks": {
       "build": {
-        "outputs": []
+        "outputs": [],
+        "dependsOn": []
       }
     }
   }
