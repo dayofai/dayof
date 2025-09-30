@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "turbo build --filter=database --filter=inngest-kit && mkdir -p .output && touch .output/.keep",
+    "build": "turbo build --filter=database && mkdir -p .output && touch .output/.keep",
     "dev": "bun src/dev.ts"
   },
   "engines": {
