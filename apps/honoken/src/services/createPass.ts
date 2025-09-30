@@ -1,27 +1,15 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { schema as sharedSchema } from 'database/schema';
 import { and, eq } from 'drizzle-orm';
-<<<<<<<< HEAD:apps/honoken/src/services/createPassDirect.ts
-========
-import { randomUUID, randomBytes } from 'node:crypto';
-import { PassDataEventTicketSchema } from '../schemas/passContentSchemas';
-import {
-  CANONICAL_PASS_SCHEMA_VERSION,
-  projectCanonicalToPassData,
-  normalizeWebServiceURL,
-  type CanonicalPassV1,
-} from '../domain/canonicalPass';
-import { VercelBlobAssetStorage } from '../storage/vercel-blob-storage';
-import { getDbClient } from '../db';
-import type { Env } from '../types';
-import type { Logger } from '../utils/logger';
-import { upsertPassContentWithEtag } from '../repo/wallet';
-import type { CreatePassInput } from '../schemas/createPassSchema';
-
->>>>>>>> web-service-url:apps/honoken/src/services/createPass.ts
 // Inngest integration for pass creation notification
 import { Inngest } from 'inngest';
 import { getDbClient } from '../db';
+import {
+  CANONICAL_PASS_SCHEMA_VERSION,
+  type CanonicalPassV1,
+  normalizeWebServiceURL,
+  projectCanonicalToPassData,
+} from '../domain/canonicalPass';
 import { upsertPassContentWithEtag } from '../repo/wallet';
 import type { CreatePassInput } from '../schemas/createPassSchema';
 import { PassDataEventTicketSchema } from '../schemas/passContentSchemas';
@@ -38,11 +26,7 @@ const inngest = new Inngest({
   eventKey: INNGEST_EVENT_KEY,
 });
 
-<<<<<<<< HEAD:apps/honoken/src/services/createPassDirect.ts
-export class CreatePassDirectError extends Error {
-========
 export class CreatePassError extends Error {
->>>>>>>> web-service-url:apps/honoken/src/services/createPass.ts
   statusCode: number;
   friendlyMessage?: string;
   constructor(
@@ -55,11 +39,7 @@ export class CreatePassError extends Error {
   }
 }
 
-<<<<<<<< HEAD:apps/honoken/src/services/createPassDirect.ts
-export type CreatePassDirectResult = {
-========
 export type CreatePassResult = {
->>>>>>>> web-service-url:apps/honoken/src/services/createPass.ts
   passTypeIdentifier: string;
   serialNumber: string;
   authenticationToken: string;
@@ -93,21 +73,12 @@ function generateBarcodeValue(): string {
 const DEFAULT_PASS_TYPE_IDENTIFIER = 'pass.cards.dayof.tickets';
 const DEFAULT_CERT_REF = 'dayof-tickets';
 
-// Direct pass creation (legacy approach without canonical pattern)
 // Returns { result, warnings[] }
-<<<<<<<< HEAD:apps/honoken/src/services/createPassDirect.ts
-export async function createPassDirect(
-  env: Env,
-  logger: Logger,
-  input: CreatePassInput
-): Promise<CreatePassDirectResult> {
-========
 export async function createPass(
   env: Env,
   logger: Logger,
   input: CreatePassInput
 ): Promise<CreatePassResult> {
->>>>>>>> web-service-url:apps/honoken/src/services/createPass.ts
   const db = getDbClient(env, logger);
 
   const warnings: string[] = [];
@@ -126,11 +97,7 @@ export async function createPass(
     columns: { certRef: true },
   });
   if (!cert) {
-<<<<<<<< HEAD:apps/honoken/src/services/createPassDirect.ts
-    throw new CreatePassDirectError(
-========
     throw new CreatePassError(
->>>>>>>> web-service-url:apps/honoken/src/services/createPass.ts
       `No certificate found with certRef '${certRef}'`,
       {
         statusCode: 400,
@@ -159,11 +126,7 @@ export async function createPass(
     });
   }
   if (!passTypeRow) {
-<<<<<<<< HEAD:apps/honoken/src/services/createPassDirect.ts
-    throw new CreatePassDirectError(
-========
     throw new CreatePassError(
->>>>>>>> web-service-url:apps/honoken/src/services/createPass.ts
       `Failed to create pass type ${passTypeIdentifier}`,
       { statusCode: 500 }
     );
@@ -191,11 +154,7 @@ export async function createPass(
     .then((rows) => rows[0]);
 
   if (existingPass) {
-<<<<<<<< HEAD:apps/honoken/src/services/createPassDirect.ts
-    throw new CreatePassDirectError(
-========
     throw new CreatePassError(
->>>>>>>> web-service-url:apps/honoken/src/services/createPass.ts
       `A pass already exists for ${passTypeIdentifier} / ${serialNumber}`,
       {
         friendlyMessage:
@@ -224,11 +183,7 @@ export async function createPass(
     .then((rows) => rows[0]);
 
   if (!newPass?.id) {
-<<<<<<<< HEAD:apps/honoken/src/services/createPassDirect.ts
-    throw new CreatePassDirectError('Failed to insert pass row', {
-========
     throw new CreatePassError('Failed to insert pass row', {
->>>>>>>> web-service-url:apps/honoken/src/services/createPass.ts
       statusCode: 500,
     });
   }
@@ -286,32 +241,6 @@ export async function createPass(
     eventTicket.secondaryFields = secondaryFields;
   }
 
-<<<<<<<< HEAD:apps/honoken/src/services/createPassDirect.ts
-  const passContent = {
-    description:
-      input.description?.trim() || `Event Ticket (${serialNumber.slice(-6)})`,
-    organizationName: input.organizationName?.trim() || 'DayOf',
-    logoText: input.logoText?.trim() || 'DayOf',
-    eventTicket,
-    groupingIdentifier: input.groupingIdentifier,
-    posterVersion: input.poster ? 1 : undefined,
-    foregroundColor:
-      input.foregroundColor ||
-      (input.poster ? 'rgb(255,255,255)' : 'rgb(0,0,0)'),
-    backgroundColor:
-      input.backgroundColor ||
-      (input.poster ? 'rgb(0,0,0)' : 'rgb(255,255,255)'),
-    labelColor:
-      input.labelColor || (input.poster ? 'rgb(255,255,255)' : 'rgb(0,0,0)'),
-    maxDistance: input.maxDistance,
-    relevantDate: input.relevantDate,
-    locations: input.locations,
-    semanticTags: input.semanticTags,
-    barcode: {
-      format: 'PKBarcodeFormatQR' as const,
-      message: input.barcodeMessage?.trim() || generateBarcodeValue(),
-      messageEncoding: 'iso-8859-1',
-========
   // Build canonical representation first
   const canonical: CanonicalPassV1 = {
     _schemaVersion: CANONICAL_PASS_SCHEMA_VERSION,
@@ -320,14 +249,15 @@ export async function createPass(
       startsAt: input.eventDateISO,
       venue: { name: input.venueName?.trim() || undefined },
       seat: { seat: input.seat, section: input.section },
->>>>>>>> web-service-url:apps/honoken/src/services/createPass.ts
     },
     style: {
       logoText: input.logoText?.trim() || 'DayOf',
       foregroundColor:
-        input.foregroundColor || (input.poster ? 'rgb(255,255,255)' : 'rgb(0,0,0)'),
+        input.foregroundColor ||
+        (input.poster ? 'rgb(255,255,255)' : 'rgb(0,0,0)'),
       backgroundColor:
-        input.backgroundColor || (input.poster ? 'rgb(0,0,0)' : 'rgb(255,255,255)'),
+        input.backgroundColor ||
+        (input.poster ? 'rgb(0,0,0)' : 'rgb(255,255,255)'),
       labelColor:
         input.labelColor || (input.poster ? 'rgb(255,255,255)' : 'rgb(0,0,0)'),
       posterVersion: input.poster ? 1 : undefined,
@@ -364,18 +294,7 @@ export async function createPass(
   );
 
   // Emit Inngest event for pass update (to trigger downstream workflow)
-<<<<<<<< HEAD:apps/honoken/src/services/createPassDirect.ts
   if (INNGEST_EVENT_KEY) {
-========
-  if (!INNGEST_EVENT_KEY) {
-    logger.warn('INNGEST_EVENT_KEY missing, not emitting pass/update.requested', {
-      passTypeIdentifier,
-      serialNumber,
-      context: 'createPass',
-      error: 'INNGEST_EVENT_KEY is not set',
-    });
-  } else {
->>>>>>>> web-service-url:apps/honoken/src/services/createPass.ts
     try {
       await inngest.send({
         name: 'pass/update.requested',
@@ -409,7 +328,7 @@ export async function createPass(
   // If HONOKEN_IMAGES_READ_WRITE_TOKEN is not set, skip checks and return a warning
   if (env.HONOKEN_IMAGES_READ_WRITE_TOKEN) {
     const blob = new VercelBlobAssetStorage(env, logger);
-  const assetPrefix = `${passTypeIdentifier}/events/${eventId}/`;
+    const assetPrefix = `${passTypeIdentifier}/events/${eventId}/`;
 
     // Required: icon.png (29x29), logo.png (160x50+), background@2x.png for poster
     const assetsToCheck = [
