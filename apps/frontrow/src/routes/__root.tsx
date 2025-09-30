@@ -7,10 +7,10 @@ import {
   useRouterState,
 } from '@tanstack/react-router';
 import { Devtools } from '@/components/devtools';
+import Footer from '@/components/layout/Footer';
+import Header from '@/components/layout/Header';
 import Loader from '@/components/loader';
 import { Toaster } from '@/components/ui/sonner';
-import Header from '../components/header';
-import appCss from '../index.css?url';
 
 export interface RouterAppContext {
   queryClient: QueryClient;
@@ -30,12 +30,6 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         title: 'My App',
       },
     ],
-    links: [
-      {
-        rel: 'stylesheet',
-        href: appCss,
-      },
-    ],
   }),
 
   component: RootDocument,
@@ -51,9 +45,10 @@ function RootDocument() {
         <HeadContent />
       </head>
       <body>
-        <div className="grid h-svh grid-rows-[auto_1fr]">
+        <div className="grid grid-rows-[auto_1fr]">
           <Header />
           {isFetching ? <Loader /> : <Outlet />}
+          <Footer />
         </div>
         <Toaster richColors />
         <Devtools />
