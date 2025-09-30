@@ -5,10 +5,21 @@ import './index.css';
 import type { RouterAppContext } from './routes/__root';
 import { routeTree } from './routeTree.gen';
 
-// Updated: Force deployment with TanStack Start fixes
+// Create QueryClient with sensible defaults
+const createQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 60 * 1000, // 60 seconds
+      },
+    },
+  });
 
-export const getRouter = (ctx?: RouterAppContext) => {
-  const queryClient = ctx?.queryClient ?? new QueryClient();
+// Client-side singleton for dev HMR (prevents router recreation on hot reload)
+let clientRouterSingleton: ReturnType<typeof createRouterInstance> | undefined;
+
+function createRouterInstance(ctx?: RouterAppContext) {
+  const queryClient = ctx?.queryClient ?? createQueryClient();
   const router = createTanStackRouter({
     routeTree,
     scrollRestoration: true,
@@ -16,11 +27,24 @@ export const getRouter = (ctx?: RouterAppContext) => {
     context: ctx ?? { queryClient },
     defaultPendingComponent: () => <Loader />,
     defaultNotFoundComponent: () => <div>Not Found</div>,
-    Wrap: ({ children }) => (
+    Wrap: ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     ),
   });
   return router;
+}
+
+export const getRouter = (ctx?: RouterAppContext) => {
+  // On server (SSR): Always create fresh router with fresh QueryClient per request
+  // On client in dev: Reuse singleton to prevent HMR issues
+  // On client in prod: Create new router
+  if (typeof window !== 'undefined' && import.meta.env?.DEV) {
+    if (!clientRouterSingleton) {
+      clientRouterSingleton = createRouterInstance(ctx);
+    }
+    return clientRouterSingleton;
+  }
+  return createRouterInstance(ctx);
 };
 
 declare module '@tanstack/react-router' {
