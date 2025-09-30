@@ -166,6 +166,77 @@ Refer to the [Inngest & Events Service](#inngest--events-service) section in the
 
 ---
 
+## Architecture Notes
+
+### TanStack Start & SSR Entry Points
+
+Our TanStack Start applications (`frontrow` and `backstage`) use **Nitro V2** for deployment to Vercel. This requires a different server entry pattern than vanilla TanStack Start.
+
+#### Server Handler: `createRequestHandler` vs `createStartHandler`
+
+**Standard TanStack Start** (Node.js, Bun, standalone):
+
+```tsx
+// entry-server.tsx (vanilla pattern)
+import {
+  createStartHandler,
+  defaultStreamHandler,
+} from "@tanstack/react-start/server";
+import { createRouter } from "./router";
+
+export default createStartHandler({
+  createRouter, // Pass the function reference
+})(defaultStreamHandler);
+```
+
+**Nitro V2 Adapter** (Vercel, Netlify, Cloudflare):
+
+```tsx
+// entry-server.tsx (our pattern)
+import { createRequestHandler } from "@tanstack/react-start/server";
+import { getRouter } from "./router";
+
+export default createRequestHandler(() => {
+  const router = getRouter(); // Call it yourself
+  return { router };
+});
+```
+
+**Why the difference?**
+
+- Nitro is a universal server framework that provides platform adapters
+- `createRequestHandler` integrates with Nitro's request/response handling
+- Nitro handles streaming, headers, and platform-specific optimizations
+- This pattern is required when using `@tanstack/nitro-v2-vite-plugin`
+
+#### Router Context & HMR
+
+Our `router.tsx` implements a hybrid pattern that handles both SSR isolation and client-side HMR:
+
+```tsx
+export const getRouter = (ctx?: RouterAppContext) => {
+  // Server (SSR): Always creates fresh router with fresh QueryClient per request
+  // Client (dev): Reuses singleton to prevent HMR issues
+  // Client (prod): Creates new router
+  if (typeof window !== "undefined" && import.meta.env?.DEV) {
+    if (!clientRouterSingleton) {
+      clientRouterSingleton = createRouterInstance(ctx);
+    }
+    return clientRouterSingleton;
+  }
+  return createRouterInstance(ctx);
+};
+```
+
+This ensures:
+
+- ✅ Fresh QueryClient per SSR request (no data leaks between users)
+- ✅ Stable router instance during dev HMR (no router recreation on hot reload)
+- ✅ Flexible context injection for testing
+- ✅ QueryClient configuration (60s staleTime)
+
+---
+
 ## Database Management
 
 The database schema is centrally managed in the `packages/database` workspace using Drizzle ORM.
