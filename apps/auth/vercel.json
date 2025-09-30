@@ -1,5 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["iad1"],
-  "buildCommand": "cd ../.. && turbo run build --filter=auth"
+  "regions": ["iad1"]
 }
