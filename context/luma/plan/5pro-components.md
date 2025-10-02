@@ -7,7 +7,7 @@ Absolutely—here’s a pragmatic, “good‑first‑cut” breakdown of React c
 
 ## 1) High‑level page composition
 
-```
+```none
 <EventPage>
   <EventHero>
     <FeaturedInPill />        // “Featured in …”
