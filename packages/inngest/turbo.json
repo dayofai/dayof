@@ -3,8 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "outputs": [],
-      "dependsOn": ["database#build", "inngest-kit#build"]
+      "dependsOn": ["database#build"]
     }
   }
 }
