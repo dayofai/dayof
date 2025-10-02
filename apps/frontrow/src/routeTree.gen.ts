@@ -9,12 +9,25 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TestGradientShadergradientRouteImport } from './routes/test-gradient-shadergradient'
+import { Route as TestGradientRouteImport } from './routes/test-gradient'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EventEventNameRouteImport } from './routes/event.$eventName'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
+const TestGradientShadergradientRoute =
+  TestGradientShadergradientRouteImport.update({
+    id: '/test-gradient-shadergradient',
+    path: '/test-gradient-shadergradient',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const TestGradientRoute = TestGradientRouteImport.update({
+  id: '/test-gradient',
+  path: '/test-gradient',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -45,6 +58,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/test-gradient': typeof TestGradientRoute
+  '/test-gradient-shadergradient': typeof TestGradientShadergradientRoute
   '/event/$eventName': typeof EventEventNameRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -52,6 +67,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/test-gradient': typeof TestGradientRoute
+  '/test-gradient-shadergradient': typeof TestGradientShadergradientRoute
   '/event/$eventName': typeof EventEventNameRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -60,19 +77,37 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/test-gradient': typeof TestGradientRoute
+  '/test-gradient-shadergradient': typeof TestGradientShadergradientRoute
   '/event/$eventName': typeof EventEventNameRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/login' | '/event/$eventName' | '/api/auth/$'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/test-gradient'
+    | '/test-gradient-shadergradient'
+    | '/event/$eventName'
+    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/login' | '/event/$eventName' | '/api/auth/$'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/login'
+    | '/test-gradient'
+    | '/test-gradient-shadergradient'
+    | '/event/$eventName'
+    | '/api/auth/$'
   id:
     | '__root__'
     | '/'
     | '/dashboard'
     | '/login'
+    | '/test-gradient'
+    | '/test-gradient-shadergradient'
     | '/event/$eventName'
     | '/api/auth/$'
   fileRoutesById: FileRoutesById
@@ -81,12 +116,28 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
+  TestGradientRoute: typeof TestGradientRoute
+  TestGradientShadergradientRoute: typeof TestGradientShadergradientRoute
   EventEventNameRoute: typeof EventEventNameRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/test-gradient-shadergradient': {
+      id: '/test-gradient-shadergradient'
+      path: '/test-gradient-shadergradient'
+      fullPath: '/test-gradient-shadergradient'
+      preLoaderRoute: typeof TestGradientShadergradientRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/test-gradient': {
+      id: '/test-gradient'
+      path: '/test-gradient'
+      fullPath: '/test-gradient'
+      preLoaderRoute: typeof TestGradientRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -129,6 +180,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
+  TestGradientRoute: TestGradientRoute,
+  TestGradientShadergradientRoute: TestGradientShadergradientRoute,
   EventEventNameRoute: EventEventNameRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }

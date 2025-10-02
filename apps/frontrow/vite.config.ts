@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import { devtools as tanstackDevtools } from '@tanstack/devtools-vite';
@@ -7,13 +8,23 @@ import viteReact from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import tsConfigPaths from 'vite-tsconfig-paths';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 export default defineConfig({
   esbuild: { sourcemap: false },
   build: { sourcemap: false },
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@': path.resolve(__dirname, './src'),
+      // Force single Three.js instance to prevent duplicate imports
+      three: path.resolve(__dirname, './node_modules/three'),
     },
+    // Additional safety for peer deps
+    dedupe: ['three', '@react-three/fiber'],
+  },
+  optimizeDeps: {
+    // Help Vite's prebundler keep a single copy
+    include: ['three'],
   },
   plugins: [
     tanstackDevtools(),
