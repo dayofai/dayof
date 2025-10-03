@@ -1,4 +1,4 @@
-Absolutely—here’s a pragmatic, “good‑first‑cut” breakdown of React components and the functional inputs (props/data contracts) that would cover what you showed in the **Get Tickets** screenshot and a typical Luma event page (Title + Hosted By, Event Date, Location, About, Hosted by card, People going, etc.). The names are suggestions—feel free to adapt to your design system.
+# Components
 
 > Notes grounded in Luma’s DOM
 > The Luma event page exposes sections such as a “Hosted By” card, attendees/“Going” strip, title/featured pill, date/time rows, and location rows; you can see evidence of these in the page structure (e.g., `.hosts`, `.title`, `.calendar-card`, `.info-rows`, `.guests-button`, `.featured-pill`).
@@ -19,7 +19,7 @@ Absolutely—here’s a pragmatic, “good‑first‑cut” breakdown of React c
   <EventMeta>
     <EventDateTime />
     <EventLocation />
-    <AddToCalendarButtons />
+    <AddToCalendarButtons />       // optional; render only if calendar data available
   </EventMeta>
 
   <TicketsPanel>              // Drawer / card / modal (“Get Tickets”)
@@ -62,6 +62,7 @@ Below, each component lists **what it needs** (props/data). Enums and types are 
 
 - `calendarOrSeries: { name: string; url: string; avatarUrl?: string }`
 - Optional “Subscribe” button handler.
+- Optional overall; if absent, surface “Presented with …” text inside AboutCard content.
 
 ### EventTitle
 
@@ -69,7 +70,7 @@ Below, each component lists **what it needs** (props/data). Enums and types are 
 
 ### EventMeta (wrapper)
 
-- `children` (one or more rows such as date/time, location)
+- `children` (one or more rows such as date/time, location, add-to-calendar if present)
 
 #### EventDateTime
 
@@ -111,6 +112,7 @@ Below, each component lists **what it needs** (props/data). Enums and types are 
   - Enforces min/max per ticket and per order; blocks selecting outside purchase window; respects status (e.g., sold out/waitlist).
   - Optional coupons/promo code field (hidden until needed).
   - Optional fee breakdown (service fees, tax) before checkout.
+  - The “cart” here is ephemeral selection state for this panel (not a multi-step storefront cart); it supports CTA gating, fee/tax preview, and live inventory/window validation before redirecting to checkout.
 
 #### TicketList
 
@@ -136,6 +138,7 @@ Below, each component lists **what it needs** (props/data). Enums and types are 
   - `isAddon?: boolean` (requires base ticket)
   - `bundle?: { includes: string[] }` (e.g., “includes lunch + book”)
   - `pricing?: { price: Money; strikePrice?: Money; feeMode?: 'included' | 'plus_fees'; taxMode?: 'included' | 'plus_tax' }`
+  - UI: optionally surface helper microcopy derived from `limits`/`inventory` (e.g., “Max 2 per person”, “Limited availability”) when caps are tight.
 
 #### QuantityStepper
 
@@ -268,6 +271,7 @@ type Host = {
 };
 
 type CartLine = { ticketId: ID; name: string; unitPrice: Money; qty: number };
+// UI-only selection state used to compute totals and validate before redirecting to checkout; not a persisted storefront cart.
 type Cart = {
   lines: CartLine[];
   subtotal: Money;
@@ -300,6 +304,7 @@ type Cart = {
 - **Eligibility**
 
   - `requiresCode` / `eligibleUserIdsOrRoles` should gate the stepper until verified.
+  - Note: Token/wallet-gated eligibility is out of scope for us; while Luma sometimes shows a wallet-verification notice, we do not implement on-chain gating (intentional non-goal).
 
 - **CTA enablement**
 
@@ -341,6 +346,7 @@ type Cart = {
 - `useTickets(eventId)` → returns `tickets`, hydration/refresh
 - `useCart()` → `{ cart, add(ticketId), remove(ticketId), setQty(ticketId, n) }`
 - `useCheckout()` → handles server validation, reserves inventory, redirects to payment
+- Cart semantics: no persistent “shopping cart”—just ephemeral selection state that becomes checkout line items. We keep a minimal `Cart` to compute totals, gate the CTA, and perform `onChange` validations (inventory, windows).
 
 ---
 
@@ -356,7 +362,7 @@ type Cart = {
 
 ## 8) Minimal file layout (example)
 
-```
+```none
 /components/event/
   EventPage.tsx
   EventHero.tsx

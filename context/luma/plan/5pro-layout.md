@@ -1,10 +1,4 @@
-Yes—let’s turn Luma’s DOM/CSS into a clean, Tailwind v4‑ready layout skeleton that matches your plan (glass nav, two‑column sticky, cover glow, mobile sticky CTA, shadcn/ReUI‑friendly).
-
-Below is a minimal **React/TSX skeleton** you can drop into `apps/frontrow/src/features/event/index.tsx` (or a scratch file) to prove the structure. I’ve annotated where it aligns to phases in your plan and mirrored Luma’s layout decisions with Tailwind utilities.
-
----
-
-## Event page layout skeleton (Tailwind v4 + shadcn/ReUI‑friendly)
+# Event page layout skeleton (Tailwind v4 + shadcn/ReUI‑friendly)
 
 ```tsx
 // apps/frontrow/src/features/event/EventPageSkeleton.tsx
