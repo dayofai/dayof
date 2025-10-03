@@ -96,16 +96,10 @@ export default function EventPageSkeleton() {
               </div>
             </div>
 
-            {/* Map / categories / admin links go here (cards) */}
+            {/* Map / other sidebar cards go here */}
             <div className="space-y-3">
               <div className="bg-card/80 backdrop-blur-[16px] ring-1 ring-border rounded-xl p-4">
                 Map / Location
-              </div>
-              <div className="bg-card/80 backdrop-blur-[16px] ring-1 ring-border rounded-xl p-4">
-                Categories
-              </div>
-              <div className="bg-card/80 backdrop-blur-[16px] ring-1 ring-border rounded-xl p-4">
-                Contact / Report
               </div>
             </div>
           </aside>
@@ -142,6 +136,37 @@ export default function EventPageSkeleton() {
                   />
                 </svg>
               </a>
+
+              {/* PresentedByBadge — Plan §5pro-components: PresentedByBadge */}
+              <div className="inline-flex items-center gap-2 text-sm">
+                <div
+                  className="h-5 w-5 rounded bg-muted ring-1 ring-border"
+                  aria-hidden
+                />
+                <span className="text-muted-foreground">Presented by</span>
+                <a
+                  href="/series"
+                  className="underline-offset-2 hover:underline"
+                >
+                  Calendar / Series Name
+                </a>
+              </div>
+
+              {/* HeroActions — share / subscribe (placeholder) */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  className="h-8 px-3 rounded border border-border hover:bg-muted"
+                >
+                  Share
+                </button>
+                <button
+                  type="button"
+                  className="h-8 px-3 rounded bg-primary text-primary-foreground"
+                >
+                  Subscribe
+                </button>
+              </div>
             </header>
 
             {/* Meta info rows (date/time, location) — Plan §3.2 */}
@@ -190,22 +215,107 @@ export default function EventPageSkeleton() {
                   </div>
                 </div>
               </div>
+
+              {/* AddToCalendarButtons — Plan §5pro-components */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  className="h-8 px-3 rounded border border-border hover:bg-muted"
+                >
+                  Add to Google
+                </button>
+                <button
+                  type="button"
+                  className="h-8 px-3 rounded border border-border hover:bg-muted"
+                >
+                  Add to Apple
+                </button>
+                <button
+                  type="button"
+                  className="h-8 px-3 rounded border border-border hover:bg-muted"
+                >
+                  Download .ics
+                </button>
+              </div>
             </section>
 
-            {/* Registration / CTA card — Plan §3.3 */}
+            {/* TicketsPanel — Plan §5pro-components: TicketList, TicketCard, QuantityStepper, CartFooter */}
             <section className="bg-card/80 backdrop-blur-[16px] ring-1 ring-border rounded-xl p-4">
-              <div className="flex items-baseline justify-between">
-                <div className="text-2xl font-semibold">$50</div>
-                <div className="text-sm text-muted-foreground">
-                  123 / 200 attending
+              <h2 className="text-xl font-semibold">Tickets</h2>
+              <div className="mt-3 space-y-2">
+                {/* Featured TicketCard (expanded) */}
+                <div className="rounded-lg ring-1 ring-border p-3 bg-primary/5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-medium">
+                        VIP All Day Plus Book & Food!
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Best value · Includes lunch + book
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-medium">$55.00</div>
+                      <div className="text-xs text-muted-foreground">
+                        plus fees
+                      </div>
+                    </div>
+                  </div>
+                  {/* QuantityStepper */}
+                  <div className="mt-3 inline-flex items-center gap-2">
+                    <button
+                      className="h-8 w-8 rounded border border-border"
+                      aria-label="Decrease quantity"
+                    >
+                      −
+                    </button>
+                    <span className="min-w-6 text-center">1</span>
+                    <button
+                      className="h-8 w-8 rounded border border-border"
+                      aria-label="Increase quantity"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Collapsed TicketCard rows */}
+                <div className="rounded-lg ring-1 ring-border p-3 flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">General Admission</div>
+                    <div className="text-xs text-muted-foreground">
+                      Available until Oct 11
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="font-medium">$25.00</div>
+                      <div className="text-xs text-muted-foreground">
+                        plus fees
+                      </div>
+                    </div>
+                    <button
+                      className="h-8 w-8 rounded border border-border"
+                      aria-label="Add one"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
               </div>
-              <button
-                type="button"
-                className="mt-4 w-full h-11 rounded bg-primary text-primary-foreground transition hover:-translate-y-0.5 hover:shadow-md"
-              >
-                Buy Tickets
-              </button>
+
+              {/* CartFooter */}
+              <div className="mt-4 flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">
+                  2 tickets · Subtotal $80.00
+                </div>
+                <button
+                  type="button"
+                  className="h-11 px-5 rounded bg-primary text-primary-foreground disabled:opacity-50"
+                >
+                  Get Ticket
+                </button>
+              </div>
             </section>
 
             {/* Content sections — About / Lineup / Venue / Host / Attendees */}
@@ -225,6 +335,58 @@ export default function EventPageSkeleton() {
                 </div>
                 <button className="h-8 px-3 rounded border border-border hover:bg-muted">
                   Follow
+                </button>
+              </div>
+            </section>
+
+            {/* AttendeesCard — Plan §5pro-components */}
+            <section className="bg-card/80 backdrop-blur-[16px] ring-1 ring-border rounded-xl p-6">
+              <h2 className="text-xl font-semibold mb-2">People going</h2>
+              <div className="flex items-center gap-4">
+                <div className="flex -space-x-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-10 w-10 rounded-full ring-2 ring-background overflow-hidden bg-muted"
+                    />
+                  ))}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  57 people attending
+                </div>
+              </div>
+            </section>
+
+            {/* CategoryChips — Plan §5pro-components */}
+            <section className="bg-card/80 backdrop-blur-[16px] ring-1 ring-border rounded-xl p-6">
+              <h2 className="text-xl font-semibold mb-2">Categories</h2>
+              <div className="flex flex-wrap gap-2">
+                {["film", "documentary", "networking"].map((c) => (
+                  <a
+                    key={c}
+                    href={`/category/${c}`}
+                    className="px-3 py-1 rounded-full border border-border text-sm hover:bg-muted"
+                  >
+                    {c}
+                  </a>
+                ))}
+              </div>
+            </section>
+
+            {/* FooterActions — Plan §5pro-components */}
+            <section className="bg-card/80 backdrop-blur-[16px] ring-1 ring-border rounded-xl p-6">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  className="h-10 px-4 rounded border border-border hover:bg-muted"
+                >
+                  Contact host
+                </button>
+                <button
+                  type="button"
+                  className="h-10 px-4 rounded border border-border hover:bg-muted"
+                >
+                  Report event
                 </button>
               </div>
             </section>
