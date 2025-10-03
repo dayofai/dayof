@@ -134,11 +134,12 @@ Below, each component lists **what it needs** (props/data). Enums and types are 
   - `inventory?: { total?: number; remaining?: number; oversell?: boolean }`
   - `featured?: boolean` (fancy background/badge)
   - `badges?: Array<'new' | 'limited' | 'best_value' | 'sold_out' | 'members_only'>`
-  - `requiresCode?: boolean` / `eligibleUserIdsOrRoles?: string[]`
-  - `isAddon?: boolean` (requires base ticket)
-  - `bundle?: { includes: string[] }` (e.g., “includes lunch + book”)
+  - `requiresCode?: boolean` / `eligibleUserIdsOrRoles?: string[]` // need to account for visibility in this as well, possible to be locked and visisble or locked and invisible
+  - `isAddon?: boolean` (requires base ticket) // if an addon then design changes
+  - `bundle?: { includes: string[] }` (e.g., “includes lunch + book”) // not needed not but useful in the future
   - `pricing?: { price: Money; strikePrice?: Money; feeMode?: 'included' | 'plus_fees'; taxMode?: 'included' | 'plus_tax' }`
   - UI: optionally surface helper microcopy derived from `limits`/`inventory` (e.g., “Max 2 per person”, “Limited availability”) when caps are tight.
+    // we likely aso need a way to specify that only one type of ticket can be purchased per order e.g. 1 type of ticket and up to max qty per order
 
 #### QuantityStepper
 
