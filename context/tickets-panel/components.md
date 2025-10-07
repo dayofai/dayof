@@ -237,14 +237,12 @@ export function getTicketsCollection(eventId: string) {
 ### Why This Pattern?
 
 1. **TicketsPanel = Smart container**
-
    - Takes: `eventId`, `event` config, callbacks
    - Queries: `tickets`, `cart`, `ticketUIStates` via `useLiveQuery`
    - Passes queried data down as props
    - Can be dropped into any page
 
 2. **Child components = Dumb presenters**
-
    - Take: Data as props
    - Don't query anything
    - Just render
@@ -327,7 +325,7 @@ const ticketUIStates = React.useMemo(
 );
 
 // Import the pure derivation logic from a shared module
-// import { computeTicketUI } from "@/features/event/lib/computeTicketUI";
+// import { computeTicketUI } from "@/features/ticket-panel/lib/computeTicketUI";
 
 // For reference, the implementation (extract to separate file for testing):
 function computeTicketUI(
@@ -502,10 +500,10 @@ const orderValidation = {
     (cartSummary?.totalQty ?? 0) > EVENT_MAX_TICKETS_PER_ORDER
       ? `Maximum ${EVENT_MAX_TICKETS_PER_ORDER} tickets per order`
       : (overLimitAgg?.offendingCount ?? 0) > 0
-      ? "Some tickets exceed their limit"
-      : (belowMinAgg?.offendingCount ?? 0) > 0
-      ? "Some tickets don't meet minimum quantity"
-      : null,
+        ? "Some tickets exceed their limit"
+        : (belowMinAgg?.offendingCount ?? 0) > 0
+          ? "Some tickets don't meet minimum quantity"
+          : null,
 };
 ```
 
@@ -1492,64 +1490,70 @@ interface CartFooterProps {
 **1. Error state** (highest priority when cart has items):
 
 ```tsx
-{cartState.hasItems && error ? (
-  <div className="space-y-3">
-    <div className="text-sm text-destructive">
-      We're having trouble calculating totals. Try again in a bit.
+{
+  cartState.hasItems && error ? (
+    <div className="space-y-3">
+      <div className="text-sm text-destructive">
+        We're having trouble calculating totals. Try again in a bit.
+      </div>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="w-full h-11 rounded-lg bg-secondary text-secondary-foreground font-medium hover:bg-secondary/90 transition-colors"
+        >
+          Retry
+        </button>
+      )}
     </div>
-    {onRetry && (
-      <button
-        type="button"
-        onClick={onRetry}
-        className="w-full h-11 rounded-lg bg-secondary text-secondary-foreground font-medium hover:bg-secondary/90 transition-colors"
-      >
-        Retry
-      </button>
-    )}
-  </div>
-) : null}
+  ) : null;
+}
 ```
 
 **2. Ready to checkout** (cart has items + pricing available):
 
 ```tsx
-{cartState.hasItems && pricing ? (
-  <div className="space-y-3">
-    {/* Pricing breakdown with aria-live */}
-    <div
-      className="space-y-1.5 text-sm"
-      aria-live="polite"
-      aria-atomic="true"
-    >
-      {/* ... pricing rows ... */}
-    </div>
+{
+  cartState.hasItems && pricing ? (
+    <div className="space-y-3">
+      {/* Pricing breakdown with aria-live */}
+      <div
+        className="space-y-1.5 text-sm"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {/* ... pricing rows ... */}
+      </div>
 
-    <button
-      type="button"
-      onClick={onCheckout}
-      disabled={isPricingLoading || !cartState.hasItems}
-      className="w-full h-11 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-    >
-      {isPricingLoading
-        ? "Calculating..."
-        : ctaLabel || `Get ${pluralizeTickets(cartState.totalQty)}`}
-    </button>
-  </div>
-) : null}
+      <button
+        type="button"
+        onClick={onCheckout}
+        disabled={isPricingLoading || !cartState.hasItems}
+        className="w-full h-11 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+      >
+        {isPricingLoading
+          ? "Calculating..."
+          : ctaLabel || `Get ${pluralizeTickets(cartState.totalQty)}`}
+      </button>
+    </div>
+  ) : null;
+}
 ```
 
 **3. Loading pricing** (cart has items but no pricing data yet):
 
 ```tsx
-{cartState.hasItems && isPricingLoading ? (
-  <button
-    type="button"
-    disabled
-    className="w-full h-11 rounded-lg bg-primary text-primary-foreground font-medium"
-  >
-    Calculating...
-  </button>
-) : null}
+{
+  cartState.hasItems && isPricingLoading ? (
+    <button
+      type="button"
+      disabled
+      className="w-full h-11 rounded-lg bg-primary text-primary-foreground font-medium"
+    >
+      Calculating...
+    </button>
+  ) : null;
+}
 ```
 
 **4. Empty cart**:
@@ -2217,7 +2221,7 @@ export type Event = z.output<typeof eventSchema>;
 
 The `computeTicketUI` function is a pure derivation that should be extracted to a separate module for unit testing.
 
-**Module:** `apps/frontrow/src/features/event/lib/computeTicketUI.ts`
+**Module:** `apps/frontrow/src/features/ticket-panel/lib/computeTicketUI.ts`
 
 ```typescript
 import { formatDate } from "@/lib/utils/format";
@@ -2248,12 +2252,12 @@ export function computeTicketUI(
 **Import in TicketsPanelClient:**
 
 ```typescript
-import { computeTicketUI } from "@/features/event/lib/computeTicketUI";
+import { computeTicketUI } from "@/features/ticket-panel/lib/computeTicketUI";
 ```
 
 ### Test Coverage
 
-**File:** `apps/frontrow/src/features/event/lib/computeTicketUI.test.ts`
+**File:** `apps/frontrow/src/features/ticket-panel/lib/computeTicketUI.test.ts`
 
 ```typescript
 import { describe, it, expect } from "vitest";

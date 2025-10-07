@@ -10,3 +10,5 @@ function EventComponent() {
 
   return <EventPage eventName={eventName} />;
 }
+
+

@@ -74,6 +74,7 @@ Notes:
 What you will create (15 files):
 
 **Core implementation (13 files):**
+
 - apps/frontrow/src/lib/schemas/tickets.ts
 - apps/frontrow/src/lib/schemas/cart.ts
 - apps/frontrow/src/lib/schemas/event.ts
@@ -81,17 +82,18 @@ What you will create (15 files):
 - apps/frontrow/src/lib/collections/cart.ts
 - apps/frontrow/src/lib/utils/format.ts
 - apps/frontrow/src/lib/mock-data.ts
-- apps/frontrow/src/features/event/components/TicketsPanel.tsx
-- apps/frontrow/src/features/event/components/TicketList.tsx
-- apps/frontrow/src/features/event/components/TicketCard.tsx
-- apps/frontrow/src/features/event/components/QuantityStepper.tsx
-- apps/frontrow/src/features/event/components/CartFooter.tsx
-- apps/frontrow/src/features/event/components/TicketPrice.tsx
+- apps/frontrow/src/features/ticket-panel/components/TicketsPanel.tsx
+- apps/frontrow/src/features/ticket-panel/components/TicketList.tsx
+- apps/frontrow/src/features/ticket-panel/components/TicketCard.tsx
+- apps/frontrow/src/features/ticket-panel/components/QuantityStepper.tsx
+- apps/frontrow/src/features/ticket-panel/components/CartFooter.tsx
+- apps/frontrow/src/features/ticket-panel/components/TicketPrice.tsx
 - apps/frontrow/src/routes/ticket-playground.tsx
 
 **Optional (recommended for MVP):**
-- apps/frontrow/src/features/event/lib/computeTicketUI.ts
-- apps/frontrow/src/features/event/lib/computeTicketUI.test.ts
+
+- apps/frontrow/src/features/ticket-panel/lib/computeTicketUI.ts
+- apps/frontrow/src/features/ticket-panel/lib/computeTicketUI.test.ts
 
 Detailed specs for each live in [components.md](context/luma/brief/components.md).
 
@@ -121,25 +123,29 @@ What you don’t touch:
 This project follows a strict vendor isolation pattern to **protect against upstream dependency churn**:
 
 **Layer 1: `src/vendor/`** (Read-only)
+
 - Contains vendor primitives from **ReUI** (Base UI variants, preferred) and shadcn (fallback)
 - ReUI provides headless, accessible components built on Radix primitives
 - Never imported directly by feature components
 - Pinned to specific versions
 
 **Layer 2: `src/ui/`** (Adapter layer)
+
 - Wraps vendor primitives (prefers ReUI Base UI variants) with stable API
 - Defines brand-specific variants (brand, primary, secondary, etc.)
 - Enforces accessibility defaults
 - **Only layer that imports from `src/vendor/`**
 
 **Layer 3a: `src/routes/`** (TanStack Start Routes)
+
 - Route files that map to URLs (e.g., `routes/$orgHandle/$eventHandle.tsx`)
 - Define route configuration including `ssr: false` for client-rendered routes
 - Import and render feature components from `src/features/`
 - Must follow TanStack Start file-based routing conventions
 
 **Layer 3b: `src/features/`** (Domain UI Components)
-- Event page components, ticketing logic (e.g., `features/event/components/TicketsPanel.tsx`)
+
+- Event page components, ticketing logic (e.g., `features/ticket-panel/components/TicketsPanel.tsx`)
 - Imports **only** from `@/ui/*` and `@/lib/*`
 - Protected from vendor breaking changes
 - Organized by feature domain, not by route structure
@@ -220,6 +226,7 @@ apps/frontrow/
 ```
 
 **Key Rules:**
+
 - ✅ Routes import from `@/features/*` and `@/lib/*`
 - ✅ Features import from `@/ui/*` and `@/lib/*`
 - ❌ Features **never** import from `@/vendor/*` (enforced by lint)
@@ -241,6 +248,7 @@ Full query implementations and types live in [components.md](context/luma/brief/
 - **Adapters**: Import from `@/ui/*` only (never directly from vendor)
 
 **Key rules**:
+
 - Import Button/Card from `@/ui/*` adapters only
 - Icon-only buttons must have `aria-label`
 - Adapters wrap ReUI Base UI variants with brand-specific styling
@@ -295,18 +303,16 @@ bun add -E \
 ## 4. Getting started (single source of truth)
 
 1. Playground route
-
    - Use the exact snippet from [layout.md](context/luma/brief/layout.md) ("Your playground route"). Keep ssr: false here.
 
 2. Create directories
 
    ```text
    apps/frontrow/src/lib/{schemas,utils,collections}
-   apps/frontrow/src/features/event/components
+   apps/frontrow/src/features/ticket-panel/components
    ```
 
 3. Implementation order
-
    - Schemas: lib/schemas/{tickets,cart,event}.ts — copy from [components.md](context/luma/brief/components.md) Section 10 (uses `import * as z from 'zod'`)
    - Formatting utilities: lib/utils/format.ts — copy from [components.md](context/luma/brief/components.md) Section 9
    - Mock data + pricing: lib/mock-data.ts — copy fixtures and calculateCartTotal from [components.md](context/luma/brief/components.md) (use `USD` constant from `@dinero.js/currencies`)
@@ -316,7 +322,6 @@ bun add -E \
    - Advanced: ticketUIStates query (two-step derivation with useMemo) and debounced pricing — see "State Management" in [components.md](context/luma/brief/components.md)
 
 4. Testing / Validate in /ticket-playground:
-
    - Add: "Add" → stepper with trash (qty=1); + changes trash to minus (qty=2)
    - Remove: qty=2 → minus to 1; qty=1 → trash removes item → back to Add
    - Limits: max/min per order; helper text reflects limits
@@ -342,7 +347,6 @@ Run through these checks to validate all critical behaviors:
 > **Tip**: The mock data includes tickets specifically designed for these tests (Group Package for minPerOrder, Last Chance for low inventory).
 
 5. Common gotchas (single list)
-
    - Route must be client-only (ssr: false) in the playground for useLiveQuery/localStorage
    - Cart collection needs typeof window guard (SSR-safe stub on server, localStorage in browser)
    - Use leftJoin (not join) when combining tickets and cart
