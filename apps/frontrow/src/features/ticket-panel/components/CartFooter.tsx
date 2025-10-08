@@ -1,4 +1,5 @@
 import { type Dinero, isZero } from 'dinero.js';
+import { SummaryRow } from '@/components/ui/summary-row';
 import { formatMoney, pluralizeTickets } from '@/lib/utils/format';
 
 interface CartFooterProps {
@@ -63,38 +64,39 @@ export function CartFooter(props: CartFooterProps) {
           aria-live="polite"
           className="space-y-1.5 text-sm"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">
-              Subtotal ({cartState?.totalQty}{' '}
-              {pluralizeTickets(cartState?.totalQty ?? 0)})
-            </span>
-            <span className="font-medium tabular-nums">
-              {formatMoney(pricing.subtotal, currency)}
-            </span>
-          </div>
-          {isZero(pricing.fees) ? null : (
-            <div className="flex items-center justify-between text-muted-foreground text-xs">
-              <span>Service fees</span>
-              <span className="tabular-nums">
-                +{formatMoney(pricing.fees, currency)}
+          <SummaryRow
+            label={
+              <span className="text-muted-foreground">
+                Subtotal ({cartState?.totalQty}{' '}
+                {pluralizeTickets(cartState?.totalQty ?? 0)})
               </span>
-            </div>
+            }
+            value={formatMoney(pricing.subtotal, currency)}
+          />
+          {isZero(pricing.fees) ? null : (
+            <SummaryRow
+              className="text-xs"
+              label={
+                <span className="text-muted-foreground">Service fees</span>
+              }
+              muted
+              value={`+${formatMoney(pricing.fees, currency)}`}
+            />
           )}
           {isZero(pricing.tax) ? null : (
-            <div className="flex items-center justify-between text-muted-foreground text-xs">
-              <span>Tax</span>
-              <span className="tabular-nums">
-                +{formatMoney(pricing.tax, currency)}
-              </span>
-            </div>
+            <SummaryRow
+              className="text-xs"
+              label={<span className="text-muted-foreground">Tax</span>}
+              muted
+              value={`+${formatMoney(pricing.tax, currency)}`}
+            />
           )}
           <div className="my-2 border-border border-t" />
-          <div className="flex items-center justify-between font-semibold">
-            <span>Total</span>
-            <span className="text-lg tabular-nums">
-              {formatMoney(pricing.total, currency)}
-            </span>
-          </div>
+          <SummaryRow
+            label={<span>Total</span>}
+            size="lg"
+            value={formatMoney(pricing.total, currency)}
+          />
         </div>
         <button
           className="h-11 w-full rounded-lg bg-primary font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
@@ -141,7 +143,7 @@ export function CartFooter(props: CartFooterProps) {
   };
 
   return (
-    <div className="border-border border-t bg-background/50 p-4">
+    <div className="w-full border-border border-t bg-background/50 p-4">
       {renderError()}
       {renderPricing()}
       {renderLoading()}
