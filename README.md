@@ -28,18 +28,17 @@ The `apps` directory contains the individual, deployable applications of the pla
 | `crew`      | React Native mobile application for event staff.                  | Expo           |
 | `events`    | Central service for handling and serving Inngest background jobs. | Hono           |
 | `frontrow`  | Customer-facing web application.                                  | TanStack Start |
-| `handbook`  | Internal documentation site.                                      | Fumadocs       |
 | `honoken`   | Apple Wallet PassKit web service for digital tickets.             | Hono           |
 
 ### Packages
 
 The `packages` directory contains shared libraries and configurations used across the applications.
 
-| Package       | Description                                                                |
-| ------------- | -------------------------------------------------------------------------- |
-| `cli-utils`   | CLI utilities for managing Neon databases and Vercel deployments.          |
-| `database`    | Shared Drizzle schema, client, and types for the Neon PostgreSQL database. |
-| `inngest-kit` | Shared Inngest client, functions, and event definitions.                   |
+| Package        | Description                                                                |
+| -------------- | -------------------------------------------------------------------------- |
+| `cli-monorepo` | CLI utilities for managing Neon databases and Vercel deployments.          |
+| `database`     | Shared Drizzle schema, client, and types for the Neon PostgreSQL database. |
+| `inngest-kit`  | Shared Inngest client, functions, and event definitions.                   |
 
 ---
 
@@ -124,7 +123,6 @@ You can run all applications simultaneously or individually.
 | **backstage** | `3003` | [http://localhost:3003](http://localhost:3003) | TanStack Start | Admin dashboard        |
 | **frontrow**  | `3004` | [http://localhost:3004](http://localhost:3004) | TanStack Start | Customer web app       |
 | **crew**      | `3005` | [http://localhost:3005](http://localhost:3005) | Expo (web)     | Mobile app (web build) |
-| **handbook**  | `3011` | [http://localhost:3011](http://localhost:3011) | Fumadocs       | Internal docs          |
 
 **Note**: Crew is primarily a React Native app that can also run on web. The port 3005 applies only to the web development server (`expo start --web`).
 
@@ -139,7 +137,6 @@ bun run dev:backstage
 # bun run dev:events
 # bun run dev:backstage
 # bun run dev:frontrow
-# bun run dev:handbook
 # bun run dev:crew
 # bun run dev:honoken
 ```
@@ -298,7 +295,7 @@ When you delete a branch:
 
 ## CLI Utilities
 
-The `packages/cli-utils` package provides DevOps automation:
+The `packages/cli-monorepo` package provides DevOps automation:
 
 ### Quick Commands
 

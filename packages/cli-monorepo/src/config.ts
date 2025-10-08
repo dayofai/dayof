@@ -34,8 +34,8 @@ export function readVercelConfig(): VercelProjectsConfig {
 
   // Try multiple candidates in order of preference
   const candidates = [
-    resolve(packageRoot, 'vercel-projects.json'), // packages/cli-utils/vercel-projects.json
-    resolve(cwd, 'packages', 'cli-utils', 'vercel-projects.json'), // cwd/packages/cli-utils/vercel-projects.json
+    resolve(packageRoot, 'vercel-projects.json'), // packages/cli-monorepo/vercel-projects.json
+    resolve(cwd, 'packages', 'cli-monorepo', 'vercel-projects.json'), // cwd/packages/cli-monorepo/vercel-projects.json
     resolve(cwd, 'vercel-projects.json'), // cwd/vercel-projects.json
     resolve(cwd, 'scripts', 'vercel-projects.json'), // legacy: cwd/scripts/vercel-projects.json
   ];

@@ -36,7 +36,7 @@
       }
     },
     {
-      "includes": ["packages/cli-utils/src/**/*.ts"],
+      "includes": ["packages/cli-monorepo/src/**/*.ts"],
       "linter": {
         "rules": {
           "suspicious": {

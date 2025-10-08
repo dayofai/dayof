@@ -1,21 +1,21 @@
-# @dayof/cli-utils — Parity & Hardening Plan
+# @dayof/cli-monorepo — Parity & Hardening Plan
 
 Purpose: Bring the new CLIs to full behavior parity with legacy scripts, remove security risks, and keep scripts simple.
 
 Sources of truth (legacy reference in this repo):
 
-- [packages/cli-utils/old-scripts/neon.ts](packages/cli-utils/old-scripts/neon.ts)
-- [packages/cli-utils/old-scripts/neon-branch.ts](packages/cli-utils/old-scripts/neon-branch.ts)
-- [packages/cli-utils/old-scripts/vercel.ts](packages/cli-utils/old-scripts/vercel.ts)
-- [packages/cli-utils/old-scripts/vercel-env-pull.ts](packages/cli-utils/old-scripts/vercel-env-pull.ts)
+- [packages/cli-monorepo/old-scripts/neon.ts](packages/cli-monorepo/old-scripts/neon.ts)
+- [packages/cli-monorepo/old-scripts/neon-branch.ts](packages/cli-monorepo/old-scripts/neon-branch.ts)
+- [packages/cli-monorepo/old-scripts/vercel.ts](packages/cli-monorepo/old-scripts/vercel.ts)
+- [packages/cli-monorepo/old-scripts/vercel-env-pull.ts](packages/cli-monorepo/old-scripts/vercel-env-pull.ts)
 
 Targets to update:
 
-- [packages/cli-utils/src/cli/neon.ts](packages/cli-utils/src/cli/neon.ts)
-- [packages/cli-utils/src/cli/vercel.ts](packages/cli-utils/src/cli/vercel.ts)
-- [packages/cli-utils/src/config.ts](packages/cli-utils/src/config.ts)
-- [packages/cli-utils/src/env.ts](packages/cli-utils/src/env.ts)
-- [packages/cli-utils/src/shell.ts](packages/cli-utils/src/shell.ts)
+- [packages/cli-monorepo/src/cli/neon.ts](packages/cli-monorepo/src/cli/neon.ts)
+- [packages/cli-monorepo/src/cli/vercel.ts](packages/cli-monorepo/src/cli/vercel.ts)
+- [packages/cli-monorepo/src/config.ts](packages/cli-monorepo/src/config.ts)
+- [packages/cli-monorepo/src/env.ts](packages/cli-monorepo/src/env.ts)
+- [packages/cli-monorepo/src/shell.ts](packages/cli-monorepo/src/shell.ts)
 
 Non-goals:
 
@@ -41,19 +41,19 @@ High-level tasks (checklist):
 
 Details by area
 
-Neon CLI — required changes in [packages/cli-utils/src/cli/neon.ts](packages/cli-utils/src/cli/neon.ts)
+Neon CLI — required changes in [packages/cli-monorepo/src/cli/neon.ts](packages/cli-monorepo/src/cli/neon.ts)
 
 1. Parent branch discovery
    - Implement getBranches() => GET /projects/:projectId/branches returning { branches: [...] }
    - Choose parent via default flag, else 'main', else first (see legacy:
-     [packages/cli-utils/old-scripts/neon.ts](packages/cli-utils/old-scripts/neon.ts))
+     [packages/cli-monorepo/old-scripts/neon.ts](packages/cli-monorepo/old-scripts/neon.ts))
 2. Branch creation payload
    - POST body: { branch: { name, parent_id, expires_at? } }
    - Attempt with expires_at ISO; on 4xx, retry without expires_at (legacy fallback).
 3. Endpoint prepare
    - Find or create read_write endpoint for new branch
    - Wait until endpoint is 'active' or 'idle' with visible progress (2s poll, 120s timeout).
-   - Reference legacy: [packages/cli-utils/old-scripts/neon.ts](packages/cli-utils/old-scripts/neon.ts)
+   - Reference legacy: [packages/cli-monorepo/old-scripts/neon.ts](packages/cli-monorepo/old-scripts/neon.ts)
 4. Connection URI
    - Extract password from existing DATABASE_URL (root .env.local or process.env)
    - Build: postgresql://neondb_owner:${password}@${endpoint.host}/neondb?sslmode=require
@@ -75,7 +75,7 @@ Neon CLI — required changes in [packages/cli-utils/src/cli/neon.ts](packages/c
    - Accept both 'branch:create'|'branch:new' and bare 'create' aliases
    - Accept both 'branch:delete' and bare 'delete' aliases
 
-Vercel CLI — required changes in [packages/cli-utils/src/cli/vercel.ts](packages/cli-utils/src/cli/vercel.ts)
+Vercel CLI — required changes in [packages/cli-monorepo/src/cli/vercel.ts](packages/cli-monorepo/src/cli/vercel.ts)
 
 1. Link projects before pull
    - Implement linkProject(appDir, projectName) with vercel link --yes --project <name> and scope
@@ -95,10 +95,10 @@ Vercel CLI — required changes in [packages/cli-utils/src/cli/vercel.ts](packag
 
 Shared utilities — current status
 
-- [packages/cli-utils/src/env.ts](packages/cli-utils/src/env.ts): OK; centralizes load/read/upsert/remove/write
-- [packages/cli-utils/src/config.ts](packages/cli-utils/src/config.ts): add fallback to scripts/vercel-projects.json (already implemented)
-- [packages/cli-utils/src/shell.ts](packages/cli-utils/src/shell.ts): OK; safe argv arrays + stdin helpers
-- [packages/cli-utils/src/errors.ts](packages/cli-utils/src/errors.ts): OK; standard error handling
+- [packages/cli-monorepo/src/env.ts](packages/cli-monorepo/src/env.ts): OK; centralizes load/read/upsert/remove/write
+- [packages/cli-monorepo/src/config.ts](packages/cli-monorepo/src/config.ts): add fallback to scripts/vercel-projects.json (already implemented)
+- [packages/cli-monorepo/src/shell.ts](packages/cli-monorepo/src/shell.ts): OK; safe argv arrays + stdin helpers
+- [packages/cli-monorepo/src/errors.ts](packages/cli-monorepo/src/errors.ts): OK; standard error handling
 
 Security guardrails
 
@@ -109,14 +109,14 @@ Security guardrails
 CLI surfaces and root scripts
 
 - Root scripts currently call bare 'create'/'delete' aliases
-- Ensure [packages/cli-utils/src/cli/neon.ts](packages/cli-utils/src/cli/neon.ts) accepts those aliases
+- Ensure [packages/cli-monorepo/src/cli/neon.ts](packages/cli-monorepo/src/cli/neon.ts) accepts those aliases
 - Keep root package.json script targets stable
 
 Import path hygiene (Bun TS execution)
 
 - In src, prefer extensionless local imports (../env) or .ts consistently
 - Avoid .js extensions in re-exports within src (TS runtime under Bun resolves TS)
-- Keep [packages/cli-utils/src/index.ts](packages/cli-utils/src/index.ts) consistent with ESM expectations
+- Keep [packages/cli-monorepo/src/index.ts](packages/cli-monorepo/src/index.ts) consistent with ESM expectations
 
 Acceptance criteria
 
@@ -168,6 +168,7 @@ Open questions
 Changelog
 
 - Neon CLI parity implemented:
+
   - Parent branch discovery (default → main → first)
   - Create payload with expires_at fallback
   - RW endpoint create/reuse + readiness polling
@@ -176,15 +177,18 @@ Changelog
   - Delete flow: endpoints → branch deletion, TEMP cleanup, DATABASE_URL backfill, last-branch file cleanup
 
 - Vercel CLI parity implemented:
+
   - Non-interactive per-app linking before env pulls
   - Pull source app first, preview --git-branch support
   - DATABASE_URL backfill to apps, root, and packages/database
   - Safe env add via stdin (no shell concat)
 
 - Security hardening:
+
   - Shell calls use argv arrays or stdin across new CLIs
 
 - Import hygiene:
+
   - Standardized ESM import paths in src (index exports now extensionless)
 
 - Docs:

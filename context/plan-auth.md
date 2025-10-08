@@ -386,8 +386,7 @@ export default async function handler(req: Request) {
 > **What needs to be done to accomplish this?**
 > Add `apps/auth` (Hono + Better Auth + Drizzle Neon adapter), update your clients to use a **baseURL** (with `/auth`), add **/api/auth** proxy functions to each web app for Dev/Preview, set the env vars per project, and migrate the Better Auth tables.
 
-> **Can I deploy to Vercel or does it need to run on Bun?**
-> **Vercel Node runtime is perfect**; Bun is not required. You’re already on Hono + Neon which works great on Node.
+> **Can I deploy to Vercel or does it need to run on Bun?** > **Vercel Node runtime is perfect**; Bun is not required. You’re already on Hono + Neon which works great on Node.
 
 > **Can it just be `/auth` and not `/api/auth`?**
 > Yes. Set `BETTER_AUTH_URL` to include `/auth` and mount the handler at `/auth/*`. Clients use the same baseURL. ([Better Auth][1])
@@ -509,6 +508,7 @@ export const config = { runtime: "nodejs20.x" };
 ### Auth service env (Vercel)
 
 - **Prod**
+
   - `DATABASE_URL=<neon>`
   - `BETTER_AUTH_URL=https://auth.dayof.ai/auth`
   - `AUTH_COOKIE_DOMAIN=dayof.ai` ← **this is the key change**
@@ -1033,6 +1033,7 @@ index 6b8a0cc..b3d1101 100644
 
 1. Commit & push the patch.
 2. Create a **Vercel project** for `apps/auth`. Set env:
+
    - **Prod**:
      `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL=https://auth.dayof.ai/auth`,
      `AUTH_COOKIE_DOMAIN=dayof.ai`,
@@ -1043,6 +1044,7 @@ index 6b8a0cc..b3d1101 100644
      `ALLOWED_ORIGINS=<your preview web origins>,http://localhost:3001,http://localhost:5173`
 
 3. In **Frontrow** & **Backstage** projects:
+
    - **Prod**: `VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth` (leave `AUTH_PROXY_BASE` unset)
    - **Preview/Dev**: `VITE_AUTH_BASE_URL=/api/auth`, `AUTH_PROXY_BASE=https://<your-auth-preview-or-staging>/auth`
 
@@ -1118,15 +1120,11 @@ Below is a precise rundown against your repo.
 
 - Entire Hono app served under the **`/api`** prefix for that service (`/api/v1/...`, `/api/admin/...`), via `apps/honoken/api/index.ts` with the Hono Vercel adapter and `vercel.json` rewrites.
 
-**Handbook**
-
-- Has `routes/api/search.ts`, but your repo-level `.vercelignore` excludes `apps/handbook/` from the monorepo deploys you care about, so it won’t conflict.
-
 **ORPC (your app APIs)**
 
 - Web apps talk to your own backend via **`/rpc`** (see `apps/*/src/utils/orpc.ts`). That’s entirely separate from `/api`.
 
-**Conclusion:**
+\*_Conclusion:_
 
 - `/api` is **already reserved** for app SSR functions (frontrow) and service-level APIs (honoken, events).
 - Keeping the standalone auth service on **`/auth` at `auth.dayof.ai`** **avoids crowding `/api`** on that service and keeps your mental model tidy:
@@ -1139,6 +1137,7 @@ Below is a precise rundown against your repo.
 ## Practical guidance (do this and you won’t have problems)
 
 - **Always set `baseURL` explicitly** on:
+
   - Auth server (`BETTER_AUTH_URL=https://auth.dayof.ai/auth`)
   - Web clients (`VITE_AUTH_BASE_URL` = `https://auth.dayof.ai/auth` in prod, `/api/auth` via proxy in dev/preview)
   - Expo client (`EXPO_PUBLIC_AUTH_BASE_URL=https://auth.dayof.ai/auth`)
@@ -1213,6 +1212,7 @@ That said, here’s the **delta checklist** so you can sanity‑scan what actual
 ### 2) Web apps (frontrow, backstage)
 
 - **Client `baseURL`:** point to `/auth` in prod, **proxy** in dev/preview:
+
   - **Prod:** `VITE_AUTH_BASE_URL=https://auth.dayof.ai/auth`
   - **Dev/Preview:** `VITE_AUTH_BASE_URL=/api/auth`
 

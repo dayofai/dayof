@@ -6,7 +6,7 @@ DayOf is a Bun + Turborepo monorepo. Deployable apps live in `apps/` (frontrow w
 
 ## Build, Test, and Development Commands
 
-Run `bun install` once, then `bun dev` to launch all web services except `crew` and `handbook`. Use targeted scripts like `bun run dev:backstage`, `bun run dev:frontrow`, or `bun run dev:events` when debugging a single app. `bun run build` compiles every workspace, while `bun run check` (oxlint) and `bun run check-types` guard lint and type health. Background workers require a second terminal: `bun run dev:events` plus `bun run dev:inngest:events`. Database workflows rely on `bun run db:generate`, `db:push`, and `db:studio`.
+Run `bun install` once, then `bun dev` to launch all web services except `crew`. Use targeted scripts like `bun run dev:backstage`, `bun run dev:frontrow`, or `bun run dev:events` when debugging a single app. `bun run build` compiles every workspace, while `bun run check` (oxlint) and `bun run check-types` guard lint and type health. Background workers require a second terminal: `bun run dev:events` plus `bun run dev:inngest:events`. Database workflows rely on `bun run db:generate`, `db:push`, and `db:studio`.
 
 ## Coding Style & Naming Conventions
 
@@ -22,7 +22,7 @@ Follow the existing history: short, imperative subjects (e.g. “Fix cache heade
 
 ## Environment & Security Notes
 
-Onboarding scripts live in `packages/cli-utils`; new machines should run `bun onboard` to fetch env files and verify CLIs. Store sensitive keys in `.env` files kept out of version control and use `bun env:pull` for Vercel sync. For feature branches, prefer ephemeral Neon branches via `bun db:branch:new` and clean them up with `bun db:branch:delete` during PR closure.
+Onboarding scripts live in `packages/cli-monorepo`; new machines should run `bun onboard` to fetch env files and verify CLIs. Store sensitive keys in `.env` files kept out of version control and use `bun env:pull` for Vercel sync. For feature branches, prefer ephemeral Neon branches via `bun db:branch:new` and clean them up with `bun db:branch:delete` during PR closure.
 
 ## CRITICAL: Use ripgrep, not grep
 

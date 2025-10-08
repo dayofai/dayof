@@ -1,0 +1,22 @@
+{
+  "dest_root": "context/docs",
+  "cache_dir": ".cache/docs-sync",
+  "clean": true,
+  "projects": [
+    {
+      "name": "posting",
+      "docs_url": "https://github.com/darrenburns/posting/tree/main/docs"
+    },
+    {
+      "name": "ts-router",
+      "docs_url": "https://github.com/TanStack/router/tree/main/docs/start/framework",
+      "exclude": [
+        "solid"
+      ]
+    },
+    {
+      "name": "react-three-fiber",
+      "docs_url": "https://github.com/pmndrs/react-three-fiber/tree/master/docs"
+    }
+  ]
+}
