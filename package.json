@@ -27,7 +27,9 @@
     "onboard": "bun packages/cli-monorepo/src/cli/onboard.ts",
     "env:pull": "bun packages/cli-monorepo/src/cli/vercel.ts pull",
     "db:branch:new": "bun packages/cli-monorepo/src/cli/neon.ts create",
-    "db:branch:delete": "bun packages/cli-monorepo/src/cli/neon.ts delete"
+    "db:branch:delete": "bun packages/cli-monorepo/src/cli/neon.ts delete",
+    "docs:sync": "uv run packages/cli-docs/docs_sync.py packages/cli-docs/docs-sync.json",
+    "docs:sync:ui": "uv run packages/cli-docs/docs_sync.py --ui packages/cli-docs/docs-sync.json"
   },
   "dependencies": {
     "@effect/schema": "^0.75.5",
