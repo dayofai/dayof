@@ -8,7 +8,21 @@ export const mockTickets: Ticket[] = [
     name: 'VIP All Day Plus Book & Food!',
     description:
       'Enjoy the full day of events including all three movies and lunch...',
-    pricing: { ticket: { amount: 5500, currency: 'USD' } },
+    pricing: {
+      ticket: { amount: 5500, currency: 'USD' },
+      fees: {
+        amount: { amount: 550, currency: 'USD' },
+        included: false,
+        showBreakdown: true,
+        label: 'Service Fee',
+      },
+      tax: {
+        amount: { amount: 440, currency: 'USD' },
+        included: false,
+        showBreakdown: true,
+        label: 'Tax',
+      },
+    },
     status: 'on_sale',
     visibility: 'public',
     availabilityLabel: 'Available until Oct 11 at 12:00 PM PDT',
@@ -22,7 +36,21 @@ export const mockTickets: Ticket[] = [
   {
     id: 'film-1',
     name: 'Show Her the Money',
-    pricing: { ticket: { amount: 2500, currency: 'USD' } },
+    pricing: {
+      ticket: { amount: 2500, currency: 'USD' },
+      fees: {
+        amount: { amount: 250, currency: 'USD' },
+        included: false,
+        showBreakdown: true,
+        label: 'Service Fee',
+      },
+      tax: {
+        amount: { amount: 200, currency: 'USD' },
+        included: false,
+        showBreakdown: true,
+        label: 'Tax',
+      },
+    },
     status: 'on_sale',
     visibility: 'public',
     availabilityLabel: 'Available until Oct 11 at 10:30 AM PDT',
@@ -32,7 +60,21 @@ export const mockTickets: Ticket[] = [
   {
     id: 'film-2',
     name: 'Lilly',
-    pricing: { ticket: { amount: 2500, currency: 'USD' } },
+    pricing: {
+      ticket: { amount: 2500, currency: 'USD' },
+      fees: {
+        amount: { amount: 250, currency: 'USD' },
+        included: false,
+        showBreakdown: true,
+        label: 'Service Fee',
+      },
+      tax: {
+        amount: { amount: 200, currency: 'USD' },
+        included: false,
+        showBreakdown: true,
+        label: 'Tax',
+      },
+    },
     status: 'on_sale',
     visibility: 'public',
     availabilityLabel: 'Available until Oct 11 at 1:30 PM PDT',
@@ -41,7 +83,21 @@ export const mockTickets: Ticket[] = [
   {
     id: 'film-3',
     name: 'Still Working 9–5',
-    pricing: { ticket: { amount: 2500, currency: 'USD' } },
+    pricing: {
+      ticket: { amount: 2500, currency: 'USD' },
+      fees: {
+        amount: { amount: 250, currency: 'USD' },
+        included: false,
+        showBreakdown: true,
+        label: 'Service Fee',
+      },
+      tax: {
+        amount: { amount: 200, currency: 'USD' },
+        included: false,
+        showBreakdown: true,
+        label: 'Tax',
+      },
+    },
     status: 'on_sale',
     visibility: 'public',
     availabilityLabel: 'Available until Oct 11 at 4:30 PM PDT',
@@ -52,7 +108,21 @@ export const mockTickets: Ticket[] = [
     name: 'Group Package (4+ people)',
     description:
       'Special rate for groups of 4 or more. Includes reserved seating.',
-    pricing: { ticket: { amount: 2000, currency: 'USD' } },
+    pricing: {
+      ticket: { amount: 2000, currency: 'USD' },
+      fees: {
+        amount: { amount: 200, currency: 'USD' },
+        included: true,
+        showBreakdown: true,
+        label: 'Service Fee',
+      },
+      tax: {
+        amount: { amount: 160, currency: 'USD' },
+        included: true,
+        showBreakdown: true,
+        label: 'Tax',
+      },
+    },
     status: 'on_sale',
     visibility: 'public',
     limits: { minPerOrder: 4, maxPerOrder: 20 },
@@ -63,7 +133,21 @@ export const mockTickets: Ticket[] = [
     id: 'last-chance',
     name: 'Last Chance Tickets',
     description: 'Final remaining tickets for this event!',
-    pricing: { ticket: { amount: 3000, currency: 'USD' } },
+    pricing: {
+      ticket: { amount: 3000, currency: 'USD' },
+      fees: {
+        amount: { amount: 300, currency: 'USD' },
+        included: false,
+        showBreakdown: true,
+        label: 'Service Fee',
+      },
+      tax: {
+        amount: { amount: 240, currency: 'USD' },
+        included: false,
+        showBreakdown: true,
+        label: 'Tax',
+      },
+    },
     status: 'on_sale',
     visibility: 'public',
     limits: { maxPerOrder: 4 },

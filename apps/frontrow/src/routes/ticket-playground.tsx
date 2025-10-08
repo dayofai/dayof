@@ -12,7 +12,7 @@ function Playground() {
       <div className="mx-auto max-w-2xl">
         <TicketsPanel
           event={{
-            mixedTicketTypesAllowed: false,
+            mixedTicketTypesAllowed: true,
             currency: 'USD',
             timeZone: 'America/Los_Angeles',
           }}

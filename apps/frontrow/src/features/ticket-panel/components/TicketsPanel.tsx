@@ -6,11 +6,11 @@ import * as React from 'react';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { computeTicketUI } from '@/features/ticket-panel/lib/computeTicketUI';
 import { cartCollection } from '@/lib/collections/cart';
 import { ticketsCollection } from '@/lib/collections/tickets';
@@ -46,16 +46,16 @@ function TicketsPanelSkeleton() {
   return (
     <Card className="bg-card/80 shadow-lg ring-1 ring-border backdrop-blur-[16px]">
       <CardHeader className="border-border border-b">
-        <CardTitle className="h-6 w-32 animate-pulse rounded bg-muted" />
-        <CardDescription className="mt-2 h-4 w-48 animate-pulse rounded bg-muted" />
+        <Skeleton className="h-6 w-32" />
+        <Skeleton className="mt-2 h-4 w-48" />
       </CardHeader>
       <CardContent className="space-y-3">
         {[1, 2, 3].map((i) => (
-          <div className="h-24 animate-pulse rounded-lg bg-muted" key={i} />
+          <Skeleton className="h-24 rounded-lg" key={i} />
         ))}
       </CardContent>
       <CardFooter className="border-border border-t bg-background/50">
-        <div className="h-11 w-full animate-pulse rounded-lg bg-muted" />
+        <Skeleton className="h-11 w-full rounded-lg" />
       </CardFooter>
     </Card>
   );
@@ -154,7 +154,7 @@ function TicketsPanelClient({
   };
 
   return (
-    <Card className="bg-card/80 shadow-lg ring-1 ring-border backdrop-blur-[16px]">
+    <Card className="rounded-sm bg-card/80 shadow-lg ring-1 ring-border backdrop-blur-[16px]">
       {ui?.showHeader !== false && (
         <CardHeader className="min-h-lh border-border border-b py-2">
           <CardTitle>Get Tickets</CardTitle>

@@ -1,5 +1,6 @@
 import * as currencies from '@dinero.js/currencies';
 import { type Currency, dinero } from 'dinero.js';
+import { InfoPopover } from '@/components/ui/info-popover';
 import { formatMoney } from '@/lib/utils/format';
 
 interface TicketPriceProps {
@@ -41,6 +42,20 @@ export function TicketPrice({ pricing }: TicketPriceProps) {
   const feesInfo = pricing.fees;
   const taxInfo = pricing.tax;
 
+  // Pre-format breakdown amounts if available
+  const feesAmount = feesInfo
+    ? dinero({
+        amount: feesInfo.amount.amount,
+        currency: resolveCurrency(feesInfo.amount.currency),
+      })
+    : null;
+  const taxAmount = taxInfo
+    ? dinero({
+        amount: taxInfo.amount.amount,
+        currency: resolveCurrency(taxInfo.amount.currency),
+      })
+    : null;
+
   return (
     <div>
       {strike && pricing.strikePrice && (
@@ -50,37 +65,31 @@ export function TicketPrice({ pricing }: TicketPriceProps) {
       )}
       <div className="font-semibold text-lg">
         {formatMoney(unit, pricing.ticket.currency)}
-      </div>
-      <div className="text-muted-foreground text-xs">
-        {!(feesInfo?.included || taxInfo?.included) && 'plus fees'}
-        {feesInfo?.included && feesInfo.showBreakdown && (
-          <div>
-            (Includes{' '}
-            {formatMoney(
-              dinero({
-                amount: feesInfo.amount.amount,
-                currency: resolveCurrency(feesInfo.amount.currency),
-              }),
-              feesInfo.amount.currency
-            )}{' '}
-            in fees)
-          </div>
-        )}
-        {taxInfo?.included && taxInfo.showBreakdown && (
-          <div>
-            (Includes{' '}
-            {formatMoney(
-              dinero({
-                amount: taxInfo.amount.amount,
-                currency: resolveCurrency(taxInfo.amount.currency),
-              }),
-              taxInfo.amount.currency
-            )}{' '}
-            tax)
-          </div>
+        {(feesInfo?.showBreakdown || taxInfo?.showBreakdown) && (
+          <InfoPopover buttonClassName="ml-2">
+            {feesInfo?.showBreakdown && feesAmount ? (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">
+                  {feesInfo?.label ?? 'Fees'}
+                </span>
+                <span className="font-medium">
+                  {formatMoney(feesAmount, feesInfo.amount.currency)}
+                </span>
+              </div>
+            ) : null}
+            {taxInfo?.showBreakdown && taxAmount ? (
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">
+                  {taxInfo?.label ?? 'Tax'}
+                </span>
+                <span className="font-medium">
+                  {formatMoney(taxAmount, taxInfo.amount.currency)}
+                </span>
+              </div>
+            ) : null}
+          </InfoPopover>
         )}
       </div>
     </div>
   );
 }
-
