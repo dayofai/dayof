@@ -30,7 +30,7 @@ function TicketControls({
   onDecrement: (ticketId: string) => void;
 }) {
   return (
-    <div className="flex w-full flex-col items-end gap-1">
+    <div className="flex flex-col items-end gap-1">
       <div className="flex min-h-8 items-center justify-end">
         {uiState.isPurchasable ? (
           <QuantityStepper
@@ -87,7 +87,8 @@ export function TicketCard({
     >
       <div className="flex items-start justify-between gap-4">
         {/* Left column: title, price, description, meta */}
-        <div className="min-w-0">
+        <div className="w-full min-w-0">
+          <div className='flex items-center justify-between gap-2'>
           <h3 className="font-semibold text-base">
             {ticket.name}
             {uiState.helperText && (
@@ -96,6 +97,14 @@ export function TicketCard({
               </Badge>
             )}
           </h3>
+          <TicketControls
+            helperId={helperId}
+            onDecrement={onDecrement}
+            onIncrement={onIncrement}
+            ticketId={ticket.id}
+            uiState={uiState}
+          />
+          </div>
           <TicketPrice pricing={ticket.pricing} />
           {ticket.description && (
             <p className="mt-1 line-clamp-2 text-muted-foreground text-sm">
@@ -137,17 +146,6 @@ export function TicketCard({
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
-
-        {/* Right column: controls */}
-        <div className="w-[152px] flex-shrink-0">
-          <TicketControls
-            helperId={helperId}
-            onDecrement={onDecrement}
-            onIncrement={onIncrement}
-            ticketId={ticket.id}
-            uiState={uiState}
-          />
         </div>
       </div>
     </Card>
