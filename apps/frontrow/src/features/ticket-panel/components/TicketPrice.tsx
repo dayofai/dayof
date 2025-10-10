@@ -2,7 +2,7 @@ import * as currencies from '@dinero.js/currencies';
 import { type Currency, dinero } from 'dinero.js';
 import { InfoPopover } from '@/components/ui/info-popover';
 import { formatMoney } from '@/lib/utils/format';
-
+import { Badge } from '@/components/ui/badge';
 interface TicketPriceProps {
   pricing: {
     ticket: { amount: number; currency: string };
@@ -56,40 +56,55 @@ export function TicketPrice({ pricing }: TicketPriceProps) {
       })
     : null;
 
+  const savingsAmount =
+    strike && pricing.strikePrice
+      ? dinero({
+          amount: pricing.strikePrice.amount - pricing.ticket.amount,
+          currency: resolveCurrency(pricing.strikePrice.currency),
+        })
+      : null;
+
   return (
-    <div>
-      {strike && pricing.strikePrice && (
-        <div className="text-muted-foreground text-sm line-through">
-          {formatMoney(strike, pricing.strikePrice.currency)}
-        </div>
-      )}
-      <div className="font-semibold text-lg">
-        {formatMoney(unit, pricing.ticket.currency)}
-        {(feesInfo?.showBreakdown || taxInfo?.showBreakdown) && (
-          <InfoPopover buttonClassName="ml-2">
-            {feesInfo?.showBreakdown && feesAmount ? (
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">
-                  {feesInfo?.label ?? 'Fees'}
-                </span>
-                <span className="font-medium">
-                  {formatMoney(feesAmount, feesInfo.amount.currency)}
-                </span>
-              </div>
-            ) : null}
-            {taxInfo?.showBreakdown && taxAmount ? (
-              <div className="mt-1 flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">
-                  {taxInfo?.label ?? 'Tax'}
-                </span>
-                <span className="font-medium">
-                  {formatMoney(taxAmount, taxInfo.amount.currency)}
-                </span>
-              </div>
-            ) : null}
-          </InfoPopover>
-        )}
+    <div className="flex items-center">
+      <div className="flex items-baseline gap-2">
+        <span className="font-semibold text-lg">
+          {formatMoney(unit, pricing.ticket.currency)}
+        </span>
       </div>
+
+      {savingsAmount && (
+        <Badge variant="secondary" className='text-xs ml-1' data-testid="savings-badge">
+          Save {formatMoney(savingsAmount, pricing.strikePrice!.currency)}
+        </Badge>
+      )}
+      
+      {(feesInfo?.showBreakdown || taxInfo?.showBreakdown) && (
+        <InfoPopover buttonClassName="ml-2" data-testid="info-popover">
+          {feesInfo?.showBreakdown && feesAmount ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">
+                {feesInfo?.label ?? 'Fees'}
+              </span>
+              <span className="font-medium">
+                {formatMoney(feesAmount, feesInfo.amount.currency)}
+              </span>
+            </div>
+          ) : null}
+          {taxInfo?.showBreakdown && taxAmount ? (
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">
+                {taxInfo?.label ?? 'Tax'}
+              </span>
+              <span className="font-medium">
+                {formatMoney(taxAmount, taxInfo.amount.currency)}
+              </span>
+            </div>
+          ) : null}
+        </InfoPopover>
+        
+      )}
+
+
     </div>
   );
 }

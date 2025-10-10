@@ -5,7 +5,7 @@ import type { Ticket } from '@/lib/schemas/tickets';
 export const mockTickets: Ticket[] = [
   {
     id: 'vip',
-    name: 'VIP All Day Plus Book & Food!',
+    name: 'On Sale (Featured)',
     description:
       'Enjoy the full day of events including all three movies and lunch...',
     pricing: {
@@ -35,7 +35,7 @@ export const mockTickets: Ticket[] = [
   },
   {
     id: 'film-1',
-    name: 'Show Her the Money',
+    name: 'On Sale (Standard)',
     pricing: {
       ticket: { amount: 2500, currency: 'USD' },
       fees: {
@@ -59,7 +59,7 @@ export const mockTickets: Ticket[] = [
   },
   {
     id: 'film-2',
-    name: 'Lilly',
+    name: 'Limited Availability (<=20 left)',
     pricing: {
       ticket: { amount: 2500, currency: 'USD' },
       fees: {
@@ -79,10 +79,11 @@ export const mockTickets: Ticket[] = [
     visibility: 'public',
     availabilityLabel: 'Available until Oct 11 at 1:30 PM PDT',
     soldLimit: 1000,
+    soldCount: 980,
   },
   {
     id: 'film-3',
-    name: 'Still Working 9–5',
+    name: 'Scheduled - On sale later',
     pricing: {
       ticket: { amount: 2500, currency: 'USD' },
       fees: {
@@ -98,14 +99,17 @@ export const mockTickets: Ticket[] = [
         label: 'Tax',
       },
     },
-    status: 'on_sale',
+    status: 'scheduled',
     visibility: 'public',
-    availabilityLabel: 'Available until Oct 11 at 4:30 PM PDT',
+    salesWindow: {
+      startsAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    },
+    availabilityLabel: 'On sale soon',
     soldLimit: 1000,
   },
   {
     id: 'group-package',
-    name: 'Group Package (4+ people)',
+    name: 'Min 4 Required (Group Package)',
     description:
       'Special rate for groups of 4 or more. Includes reserved seating.',
     pricing: {
@@ -131,10 +135,11 @@ export const mockTickets: Ticket[] = [
   },
   {
     id: 'last-chance',
-    name: 'Last Chance Tickets',
+    name: 'Low Stock (<=3 left)',
     description: 'Final remaining tickets for this event!',
     pricing: {
-      ticket: { amount: 3000, currency: 'USD' },
+      ticket: { amount: 2000, currency: 'USD' },
+      strikePrice: { amount: 3000, currency: 'USD' },
       fees: {
         amount: { amount: 300, currency: 'USD' },
         included: false,
@@ -154,6 +159,115 @@ export const mockTickets: Ticket[] = [
     soldLimit: 100,
     soldCount: 97,
     sortOrder: 3,
+  },
+  {
+    id: 'sold-out-status',
+    name: 'Sold Out (Status)',
+    pricing: {
+      ticket: { amount: 2500, currency: 'USD' },
+    },
+    status: 'sold_out',
+    visibility: 'public',
+    soldLimit: 100,
+    soldCount: 100,
+    sortOrder: 4,
+  },
+  {
+    id: 'sold-out-capacity',
+    name: 'Sold Out (Capacity reached)',
+    pricing: {
+      ticket: { amount: 2500, currency: 'USD' },
+    },
+    status: 'on_sale',
+    visibility: 'public',
+    soldLimit: 10,
+    soldCount: 10,
+    sortOrder: 5,
+  },
+  {
+    id: 'ended-window',
+    name: 'Ended - Sale ended',
+    pricing: {
+      ticket: { amount: 2500, currency: 'USD' },
+    },
+    status: 'ended',
+    visibility: 'public',
+    salesWindow: {
+      endsAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    },
+    soldLimit: 1000,
+    sortOrder: 6,
+  },
+  {
+    id: 'invite-only',
+    name: 'Invite Only - Requires code',
+    pricing: {
+      ticket: { amount: 2500, currency: 'USD' },
+    },
+    status: 'invite_only',
+    visibility: 'public',
+    soldLimit: 100,
+    sortOrder: 7,
+  },
+  {
+    id: 'paused',
+    name: 'Paused - Temporarily unavailable',
+    pricing: {
+      ticket: { amount: 2500, currency: 'USD' },
+    },
+    status: 'paused',
+    visibility: 'public',
+    soldLimit: 100,
+    sortOrder: 8,
+  },
+  {
+    id: 'external',
+    name: 'External - Available externally',
+    pricing: {
+      ticket: { amount: 2500, currency: 'USD' },
+    },
+    status: 'external',
+    visibility: 'public',
+    soldLimit: 100,
+    sortOrder: 9,
+  },
+  {
+    id: 'max-per-order-2',
+    name: 'Max 2 per order',
+    pricing: {
+      ticket: { amount: 2200, currency: 'USD' },
+    },
+    status: 'on_sale',
+    visibility: 'public',
+    limits: { maxPerOrder: 2 },
+    soldLimit: 100,
+    sortOrder: 10,
+  },
+  {
+    id: 'max-per-person-4',
+    name: 'Max 4 per person',
+    pricing: {
+      ticket: { amount: 2200, currency: 'USD' },
+    },
+    status: 'on_sale',
+    visibility: 'public',
+    limits: { maxPerPerson: 4 },
+    soldLimit: 100,
+    sortOrder: 11,
+  },
+  {
+    id: 'oversell-buffer',
+    name: 'Oversell enabled (buffer 10)',
+    pricing: {
+      ticket: { amount: 2400, currency: 'USD' },
+    },
+    status: 'on_sale',
+    visibility: 'public',
+    soldLimit: 100,
+    soldCount: 100,
+    allowOversell: true,
+    oversellBuffer: 10,
+    sortOrder: 12,
   },
 ];
 

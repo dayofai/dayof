@@ -16,6 +16,7 @@ interface CartFooterProps {
   onRetry?: () => void;
   ctaLabel?: string;
   onCheckout: () => void;
+  checkoutDisabled?: boolean;
 }
 
 export function CartFooter(props: CartFooterProps) {
@@ -30,6 +31,7 @@ export function CartFooter(props: CartFooterProps) {
     onCheckout,
   } = props;
   const hasItems = !!cartState?.hasItems;
+  const isCheckoutDisabled = props.checkoutDisabled === true;
 
   const renderError = () => {
     if (!(hasItems && error)) {
@@ -100,7 +102,7 @@ export function CartFooter(props: CartFooterProps) {
         </div>
         <button
           className="h-11 w-full rounded-lg bg-primary font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-          disabled={isPricingLoading || !hasItems}
+          disabled={isPricingLoading || !hasItems || isCheckoutDisabled}
           onClick={onCheckout}
           type="button"
         >
