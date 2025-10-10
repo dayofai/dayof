@@ -82,7 +82,6 @@ function TicketsPanelClient({
   const { data: cartItems } = useLiveQuery((q) =>
     q.from({ cart: cartCollection })
   );
-
   // Compute cart state from cartItems array
   const cartState = React.useMemo(() => {
     if (!cartItems) {
@@ -125,6 +124,16 @@ function TicketsPanelClient({
     enabled: cartState?.hasItems ?? false,
     placeholderData: keepPreviousData,
   });
+
+  const checkoutDisabled = React.useMemo(() => {
+    if (!rows) {
+      return false;
+    }
+    return rows.some(({ ticket, qty }) => {
+      const min = ticket.limits?.minPerOrder;
+      return typeof min === 'number' && qty > 0 && qty < min;
+    });
+  }, [rows]);
 
   const handleIncrement = (ticketId: string) => {
     const existing = cartCollection.get(ticketId);
@@ -169,10 +178,10 @@ function TicketsPanelClient({
           uiStates={memo.ui}
         />
       </CardContent>
-
       <CardFooter className="border-border border-t bg-background/50 p-0">
         <CartFooter
           cartState={cartState}
+          checkoutDisabled={checkoutDisabled}
           ctaLabel={ui?.ctaLabel}
           currency={event.currency}
           error={error}

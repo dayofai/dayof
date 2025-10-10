@@ -17,7 +17,7 @@ export function TicketList({
 }: TicketListProps) {
   
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="ticket-list">
       {tickets.map((ticket) => {
         const uiState = uiStates.find((s) => s.ticketId === ticket.id);
         if (!uiState) {

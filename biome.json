@@ -54,8 +54,11 @@
       ],
       "linter": {
         "rules": {
+          "performance": {
+            "useTopLevelRegex": "off",
+          },
           "suspicious": {
-            "noExplicitAny": "off"
+            "noExplicitAny": "off",
           }
         }
       }
