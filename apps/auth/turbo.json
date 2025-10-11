@@ -1,9 +1,12 @@
 {
-  "$schema": "https://turbo.build/schema.json",
-  "extends": ["//"],
-  "tasks": {
-    "build": {
-      "outputs": [],
+	"$schema": "https://turbo.build/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"build": {
+			"outputs": [],
+			"dependsOn": ["database#build", "inngest-kit#build"]
+		},
+	  "dev": {
       "dependsOn": ["database#build", "inngest-kit#build"]
     }
   }
