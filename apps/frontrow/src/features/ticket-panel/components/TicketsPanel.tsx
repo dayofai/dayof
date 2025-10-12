@@ -163,21 +163,26 @@ function TicketsPanelClient({
   };
 
   return (
-    <Card className="rounded-sm bg-card/80 shadow-lg ring-1 ring-border backdrop-blur-[16px]">
+    <Card className="rounded-xl bg-white/32 shadow-[0_1px_4px_rgba(0,0,0,0.1)] border border-white/16 backdrop-blur-[16px] overflow-hidden">
       {ui?.showHeader !== false && (
-        <CardHeader className="min-h-lh border-border border-b py-2">
-          <CardTitle>Get Tickets</CardTitle>
-        </CardHeader>
+        <div className="-mx-4 -mt-3 mb-3 px-4 pt-2 pb-3 bg-[var(--theme-accent-light)] border-b border-[var(--theme-accent-border)] rounded-t-[10px]">
+          <h2 className="text-sm font-medium text-[var(--theme-accent-muted)]">
+            Get Tickets
+          </h2>
+          <p className="text-base text-[var(--theme-accent)] mt-1">
+            Welcome! Please choose your desired ticket type:
+          </p>
+        </div>
       )}
 
-      <CardContent className="px-3 py-4">
+      <div className="px-4 pt-0 pb-3">
         <TicketList
           onDecrement={handleDecrement}
           onIncrement={handleIncrement}
           tickets={memo.tickets}
           uiStates={memo.ui}
         />
-      </CardContent>
+      </div>
       <CardFooter className="border-border border-t bg-background/50 p-0">
         <CartFooter
           cartState={cartState}

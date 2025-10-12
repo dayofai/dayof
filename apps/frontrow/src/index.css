@@ -84,6 +84,25 @@ body {
   --sidebar-accent-foreground: 0 0% 100%;
   --sidebar-border: 0 0% 16%;
   --sidebar-ring: 48 96% 53%;
+
+  /* === THEME SYSTEM (Programmatic per-event) === */
+  /* These are SLOTS - values are injected at runtime via inline styles */
+  /* Theme accent color (from event.brandColor in DB) */
+  --theme-accent: oklch(0.45 0.12 35);           /* Placeholder - will be overridden */
+  
+  /* Derived variants (calculated via CSS relative colors) */
+  --theme-accent-light: oklch(from var(--theme-accent) l c h / 0.04);   /* 4% opacity backgrounds */
+  --theme-accent-border: oklch(from var(--theme-accent) l c h / 0.08);  /* 8% opacity borders */
+  --theme-accent-muted: oklch(from var(--theme-accent) l c h / 0.64);   /* 64% opacity text */
+  --theme-accent-subtle: oklch(from var(--theme-accent) l c h / 0.48);  /* 48% opacity */
+  
+  /* CTA color (brighter, more saturated) */
+  --theme-cta: oklch(from var(--theme-accent) calc(l * 1.15) calc(c * 1.3) h);
+}
+
+.dark {
+  /* Dark mode keeps same accent but different alpha handling */
+  --theme-accent-light: oklch(from var(--theme-accent) l c h / 0.08);
 }
 
 @theme inline {
