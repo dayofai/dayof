@@ -3,158 +3,278 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/** Dark Mode Variant (ReUI requirement) **/
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans:
-    "Inter", "Geist", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
-    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-}
-
-html,
-body {
-  @apply bg-black text-white;
+	--font-sans:
+		"Inter", "Geist", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+		"Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
 :root {
-  --radius: 0.75rem;
-  --background: 0 0% 0%;
-  --foreground: 0 0% 100%;
-  --card: 0 0% 7%;
-  --card-foreground: 0 0% 100%;
-  --popover: 0 0% 7%;
-  --popover-foreground: 0 0% 100%;
-  --primary: 48 96% 53%;
-  --primary-foreground: 0 0% 7%;
-  --secondary: 0 0% 14%;
-  --secondary-foreground: 0 0% 100%;
-  --muted: 0 0% 20%;
-  --muted-foreground: 0 0% 80%;
-  --accent: 0 0% 14%;
-  --accent-foreground: 0 0% 100%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 0 0% 16%;
-  --input: 0 0% 16%;
-  --ring: 48 96% 53%;
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: 0 0% 0%;
-  --sidebar-foreground: 0 0% 90%;
-  --sidebar-primary: 48 96% 53%;
-  --sidebar-primary-foreground: 0 0% 7%;
-  --sidebar-accent: 0 0% 14%;
-  --sidebar-accent-foreground: 0 0% 100%;
-  --sidebar-border: 0 0% 16%;
-  --sidebar-ring: 48 96% 53%;
+	--radius: 0.75rem;
+	/* Light mode colors */
+	--background: 0 0% 100%;
+	--foreground: 0 0% 0%;
+	--card: 0 0% 98%;
+	--card-foreground: 0 0% 0%;
+	--popover: 0 0% 100%;
+	--popover-foreground: 0 0% 0%;
+	--primary: 48 96% 53%;
+	--primary-foreground: 0 0% 0%;
+	--secondary: 0 0% 96%;
+	--secondary-foreground: 0 0% 0%;
+	--muted: 0 0% 96%;
+	--muted-foreground: 0 0% 40%;
+	--accent: 0 0% 96%;
+	--accent-foreground: 0 0% 0%;
+	--destructive: 0 84% 60%;
+	--destructive-foreground: 0 0% 100%;
+	--border: 0 0% 90%;
+	--input: 0 0% 90%;
+	--ring: 48 96% 53%;
+	--chart-1: oklch(0.646 0.222 41.116);
+	--chart-2: oklch(0.6 0.118 184.704);
+	--chart-3: oklch(0.398 0.07 227.392);
+	--chart-4: oklch(0.828 0.189 84.429);
+	--chart-5: oklch(0.769 0.188 70.08);
+	--sidebar: 0 0% 98%;
+	--sidebar-foreground: 0 0% 10%;
+	--sidebar-primary: 48 96% 53%;
+	--sidebar-primary-foreground: 0 0% 0%;
+	--sidebar-accent: 0 0% 96%;
+	--sidebar-accent-foreground: 0 0% 0%;
+	--sidebar-border: 0 0% 90%;
+	--sidebar-ring: 48 96% 53%;
+
+	/* === LUMA-STYLE THEMING SYSTEM === */
+	/* 11-step gray scale (neutral palette) */
+	--gray-5: oklch(0.985 0 0);
+	--gray-10: oklch(0.97 0 0);
+	--gray-20: oklch(0.922 0 0);
+	--gray-30: oklch(0.87 0 0);
+	--gray-40: oklch(0.8 0 0);
+	--gray-50: oklch(0.7 0 0);
+	--gray-60: oklch(0.56 0 0);
+	--gray-70: oklch(0.4 0 0);
+	--gray-80: oklch(0.3 0 0);
+	--gray-90: oklch(0.19 0 0);
+	--gray-100: oklch(0.15 0 0);
+
+	/* 11-step brand scale (defaults to grays for neutral dev theme) */
+	/* These are overridden per event via .event-{id} scoped CSS */
+	--brand-5: var(--gray-5);
+	--brand-10: var(--gray-10);
+	--brand-20: var(--gray-20);
+	--brand-30: var(--gray-30);
+	--brand-40: var(--gray-40);
+	--brand-50: var(--gray-50);
+	--brand-60: var(--gray-60);
+	--brand-70: var(--gray-70);
+	--brand-80: var(--gray-80);
+	--brand-90: var(--gray-90);
+	--brand-100: var(--gray-100);
+
+	/* RGB opacity ladders (Luma pattern) */
+	--black-base-rgb: 19, 21, 23;
+	--white-base-rgb: 255, 255, 255;
+	--brand-base-rgb: 115, 115, 115; /* Mid-gray for neutral default */
+
+	/* Black opacity ladder (0-80%) */
+	--black-opacity-0: rgba(var(--black-base-rgb), 0);
+	--black-opacity-2: rgba(var(--black-base-rgb), 0.02);
+	--black-opacity-4: rgba(var(--black-base-rgb), 0.04);
+	--black-opacity-8: rgba(var(--black-base-rgb), 0.08);
+	--black-opacity-16: rgba(var(--black-base-rgb), 0.16);
+	--black-opacity-24: rgba(var(--black-base-rgb), 0.24);
+	--black-opacity-32: rgba(var(--black-base-rgb), 0.32);
+	--black-opacity-48: rgba(var(--black-base-rgb), 0.48);
+	--black-opacity-64: rgba(var(--black-base-rgb), 0.64);
+	--black-opacity-80: rgba(var(--black-base-rgb), 0.8);
+
+	/* White opacity ladder */
+	--white-opacity-0: rgba(var(--white-base-rgb), 0);
+	--white-opacity-2: rgba(var(--white-base-rgb), 0.02);
+	--white-opacity-4: rgba(var(--white-base-rgb), 0.04);
+	--white-opacity-8: rgba(var(--white-base-rgb), 0.08);
+	--white-opacity-16: rgba(var(--white-base-rgb), 0.16);
+	--white-opacity-24: rgba(var(--white-base-rgb), 0.24);
+	--white-opacity-32: rgba(var(--white-base-rgb), 0.32);
+	--white-opacity-48: rgba(var(--white-base-rgb), 0.48);
+	--white-opacity-64: rgba(var(--white-base-rgb), 0.64);
+	--white-opacity-80: rgba(var(--white-base-rgb), 0.8);
+
+	/* Brand opacity ladder (overridden per event) */
+	--brand-opacity-4: rgba(var(--brand-base-rgb), 0.04);
+	--brand-opacity-8: rgba(var(--brand-base-rgb), 0.08);
+	--brand-opacity-16: rgba(var(--brand-base-rgb), 0.16);
+	--brand-opacity-24: rgba(var(--brand-base-rgb), 0.24);
+	--brand-opacity-32: rgba(var(--brand-base-rgb), 0.32);
+	--brand-opacity-48: rgba(var(--brand-base-rgb), 0.48);
+	--brand-opacity-64: rgba(var(--brand-base-rgb), 0.64);
+	--brand-opacity-80: rgba(var(--brand-base-rgb), 0.8);
+
+	/* === LEGACY THEME TOKENS (backward compatibility) === */
+	/* These slots are overridden at runtime via inline styles */
+	/* Never edit the values here - they're just placeholders */
+	--theme-accent: oklch(0.45 0.12 35); /* Placeholder: warm brown */
+
+	/* Derived variants (calculated via CSS relative colors) */
+	--theme-accent-04: oklch(from var(--theme-accent) l c h / 0.04); /* Backgrounds */
+	--theme-accent-08: oklch(from var(--theme-accent) l c h / 0.08); /* Borders */
+	--theme-accent-32: oklch(from var(--theme-accent) l c h / 0.32); /* Subtle elements */
+	--theme-accent-48: oklch(from var(--theme-accent) l c h / 0.48); /* Muted text */
+	--theme-accent-64: oklch(from var(--theme-accent) l c h / 0.64); /* Secondary text */
+	--theme-accent-80: oklch(from var(--theme-accent) l c h / 0.8); /* Primary text variant */
+
+	/* CTA color (brighter, more saturated) */
+	--theme-cta: oklch(from var(--theme-accent) calc(l * 1.15) calc(c * 1.3) h);
+	--theme-cta-hover: oklch(from var(--theme-cta) calc(l * 0.95) c h);
+
+	/* === LUMA EXACT COLORS (from luma-default-style.md) === */
+	/* Base colors - exact OKLCH conversions from builder.io extraction */
+	--luma-bg-light: oklch(0.965 0.005 240); /* rgb(243, 245, 247) */
+	--luma-white: oklch(1 0 0); /* rgb(255, 255, 255) */
+	--dayof-dark: oklch(0.09 0.015 240); /* rgb(13, 21, 28) */
+	--dayof-medium: oklch(0.32 0.01 240); /* rgb(66, 73, 79) */
+	--dayof-muted: oklch(0.49 0.015 240); /* rgb(105, 115, 125) */
+	--dayof-gray-subtle: oklch(0.2 0.01 240); /* rgb(42, 46, 51) */
 }
 
 .dark {
-  --background: 0 0% 0%;
-  --foreground: 0 0% 100%;
-  --card: 0 0% 7%;
-  --card-foreground: 0 0% 100%;
-  --popover: 0 0% 7%;
-  --popover-foreground: 0 0% 100%;
-  --primary: 48 96% 53%;
-  --primary-foreground: 0 0% 7%;
-  --secondary: 0 0% 14%;
-  --secondary-foreground: 0 0% 100%;
-  --muted: 0 0% 20%;
-  --muted-foreground: 0 0% 80%;
-  --accent: 0 0% 14%;
-  --accent-foreground: 0 0% 100%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 0 0% 16%;
-  --input: 0 0% 16%;
-  --ring: 48 96% 53%;
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: 0 0% 0%;
-  --sidebar-foreground: 0 0% 90%;
-  --sidebar-primary: 48 96% 53%;
-  --sidebar-primary-foreground: 0 0% 7%;
-  --sidebar-accent: 0 0% 14%;
-  --sidebar-accent-foreground: 0 0% 100%;
-  --sidebar-border: 0 0% 16%;
-  --sidebar-ring: 48 96% 53%;
+	--background: 0 0% 0%;
+	--foreground: 0 0% 100%;
+	--card: 0 0% 7%;
+	--card-foreground: 0 0% 100%;
+	--popover: 0 0% 7%;
+	--popover-foreground: 0 0% 100%;
+	--primary: 48 96% 53%;
+	--primary-foreground: 0 0% 7%;
+	--secondary: 0 0% 14%;
+	--secondary-foreground: 0 0% 100%;
+	--muted: 0 0% 20%;
+	--muted-foreground: 0 0% 80%;
+	--accent: 0 0% 14%;
+	--accent-foreground: 0 0% 100%;
+	--destructive: 0 84% 60%;
+	--destructive-foreground: 0 0% 100%;
+	--border: 0 0% 16%;
+	--input: 0 0% 16%;
+	--ring: 48 96% 53%;
+	--chart-1: oklch(0.488 0.243 264.376);
+	--chart-2: oklch(0.696 0.17 162.48);
+	--chart-3: oklch(0.769 0.188 70.08);
+	--chart-4: oklch(0.627 0.265 303.9);
+	--chart-5: oklch(0.645 0.246 16.439);
+	--sidebar: 0 0% 0%;
+	--sidebar-foreground: 0 0% 90%;
+	--sidebar-primary: 48 96% 53%;
+	--sidebar-primary-foreground: 0 0% 7%;
+	--sidebar-accent: 0 0% 14%;
+	--sidebar-accent-foreground: 0 0% 100%;
+	--sidebar-border: 0 0% 16%;
+	--sidebar-ring: 48 96% 53%;
 
-  /* === THEME SYSTEM (Programmatic per-event) === */
-  /* These are SLOTS - values are injected at runtime via inline styles */
-  /* Theme accent color (from event.brandColor in DB) */
-  --theme-accent: oklch(0.45 0.12 35);           /* Placeholder - will be overridden */
-  
-  /* Derived variants (calculated via CSS relative colors) */
-  --theme-accent-light: oklch(from var(--theme-accent) l c h / 0.04);   /* 4% opacity backgrounds */
-  --theme-accent-border: oklch(from var(--theme-accent) l c h / 0.08);  /* 8% opacity borders */
-  --theme-accent-muted: oklch(from var(--theme-accent) l c h / 0.64);   /* 64% opacity text */
-  --theme-accent-subtle: oklch(from var(--theme-accent) l c h / 0.48);  /* 48% opacity */
-  
-  /* CTA color (brighter, more saturated) */
-  --theme-cta: oklch(from var(--theme-accent) calc(l * 1.15) calc(c * 1.3) h);
-}
+	/* === LUMA-STYLE THEMING SYSTEM === */
+	/* These slots are overridden at runtime via inline styles */
+	/* Never edit the values here - they're just placeholders */
+	--theme-accent: oklch(0.45 0.12 35); /* Placeholder: warm brown */
 
-.dark {
-  /* Dark mode keeps same accent but different alpha handling */
-  --theme-accent-light: oklch(from var(--theme-accent) l c h / 0.08);
+	/* Derived variants (calculated via CSS relative colors) */
+	--theme-accent-04: oklch(from var(--theme-accent) l c h / 0.04); /* Backgrounds */
+	--theme-accent-08: oklch(from var(--theme-accent) l c h / 0.08); /* Borders */
+	--theme-accent-32: oklch(from var(--theme-accent) l c h / 0.32); /* Subtle elements */
+	--theme-accent-48: oklch(from var(--theme-accent) l c h / 0.48); /* Muted text */
+	--theme-accent-64: oklch(from var(--theme-accent) l c h / 0.64); /* Secondary text */
+	--theme-accent-80: oklch(from var(--theme-accent) l c h / 0.8); /* Primary text variant */
+
+	/* CTA color (brighter, more saturated) */
+	--theme-cta: oklch(from var(--theme-accent) calc(l * 1.15) calc(c * 1.3) h);
+	--theme-cta-hover: oklch(from var(--theme-cta) calc(l * 0.95) c h);
 }
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: hsl(var(--sidebar));
-  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
-  --color-sidebar-primary: hsl(var(--sidebar-primary));
-  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
-  --color-sidebar-accent: hsl(var(--sidebar-accent));
-  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
-  --color-sidebar-border: hsl(var(--sidebar-border));
-  --color-sidebar-ring: hsl(var(--sidebar-ring));
-  /* Brand primary token  */
-  --brand-accent: #FFF;
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+	--color-background: hsl(var(--background));
+	--color-foreground: hsl(var(--foreground));
+	--color-card: hsl(var(--card));
+	--color-card-foreground: hsl(var(--card-foreground));
+	--color-popover: hsl(var(--popover));
+	--color-popover-foreground: hsl(var(--popover-foreground));
+	--color-primary: hsl(var(--primary));
+	--color-primary-foreground: hsl(var(--primary-foreground));
+	--color-secondary: hsl(var(--secondary));
+	--color-secondary-foreground: hsl(var(--secondary-foreground));
+	--color-muted: hsl(var(--muted));
+	--color-muted-foreground: hsl(var(--muted-foreground));
+	--color-accent: hsl(var(--accent));
+	--color-accent-foreground: hsl(var(--accent-foreground));
+	--color-destructive: hsl(var(--destructive));
+	--color-border: hsl(var(--border));
+	--color-input: hsl(var(--input));
+	--color-ring: hsl(var(--ring));
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
+	--color-sidebar: hsl(var(--sidebar));
+	--color-sidebar-foreground: hsl(var(--sidebar-foreground));
+	--color-sidebar-primary: hsl(var(--sidebar-primary));
+	--color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+	--color-sidebar-accent: hsl(var(--sidebar-accent));
+	--color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+	--color-sidebar-border: hsl(var(--sidebar-border));
+	--color-sidebar-ring: hsl(var(--sidebar-ring));
+
+	/* === BRAND & GRAY SCALE REGISTRATION (enables Tailwind utilities) === */
+	/* Brand scale (values dynamically updated per event) */
+	--color-brand-5: var(--brand-5);
+	--color-brand-10: var(--brand-10);
+	--color-brand-20: var(--brand-20);
+	--color-brand-30: var(--brand-30);
+	--color-brand-40: var(--brand-40);
+	--color-brand-50: var(--brand-50);
+	--color-brand-60: var(--brand-60);
+	--color-brand-70: var(--brand-70);
+	--color-brand-80: var(--brand-80);
+	--color-brand-90: var(--brand-90);
+	--color-brand-100: var(--brand-100);
+
+	/* Gray scale (static neutral palette) */
+	--color-gray-5: var(--gray-5);
+	--color-gray-10: var(--gray-10);
+	--color-gray-20: var(--gray-20);
+	--color-gray-30: var(--gray-30);
+	--color-gray-40: var(--gray-40);
+	--color-gray-50: var(--gray-50);
+	--color-gray-60: var(--gray-60);
+	--color-gray-70: var(--gray-70);
+	--color-gray-80: var(--gray-80);
+	--color-gray-90: var(--gray-90);
+	--color-gray-100: var(--gray-100);
+
+	/* Brand primary token (legacy) */
+	--brand-accent: #fff;
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-    text-size-adjust: 100%;
-    -webkit-font-smoothing: antialiased;
-    color-scheme: dark;
-    font-feature-settings: "ss02", "ss03", "ss05", "ss06", "ss08";
-    box-sizing: inherit;
-  }
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		@apply bg-background text-foreground;
+		text-size-adjust: 100%;
+		-webkit-font-smoothing: antialiased;
+		color-scheme: light;
+		font-feature-settings: "ss02", "ss03", "ss05", "ss06", "ss08";
+		box-sizing: inherit;
+	}
+	.dark body {
+		color-scheme: dark;
+	}
 }

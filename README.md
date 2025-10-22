@@ -167,6 +167,16 @@ Refer to the [Inngest & Events Service](#inngest--events-service) section in the
 
 ### TanStack Start & SSR Entry Points
 
+#### Frontrow SSR-Query Integration (Tickets + Optional Pricing)
+
+- Router (`apps/frontrow/src/router.tsx`):
+  - Fresh `QueryClient` per SSR request
+  - `setupRouterSsrQueryIntegration({ router, queryClient })`
+  - Jotai default store hydrated client-side by setting `queryClientAtom`
+- Tickets: `ticketsQuery(eventId)` ensures tickets are in cache before render
+- Pricing: No cart persistence; server infers initial items when sensible and prefetches via `pricingQuery`
+- See `context/ticket-panel-state/README.md` for details and validation steps
+
 Our TanStack Start applications (`frontrow` and `backstage`) use **Nitro V2** for deployment to Vercel. This requires a different server entry pattern than vanilla TanStack Start.
 
 #### Server Handler: `createRequestHandler` vs `createStartHandler`

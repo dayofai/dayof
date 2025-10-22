@@ -35,6 +35,7 @@
     "@effect/schema": "^0.75.5",
     "@handfish/drizzle-effect": "^0.0.17",
     "@neondatabase/serverless": "^1.0.1",
+    "@tanstack/react-router-ssr-query": "^1.132.47",
     "dinero.js": "^2.0.0-alpha.14",
     "drizzle-kit": "beta",
     "drizzle-orm": "beta",
@@ -43,13 +44,14 @@
     "zod": "^4.1.5"
   },
   "devDependencies": {
-    "turbo": "^2.5.6",
     "@biomejs/biome": "2.1.2",
-    "ultracite": "5.1.1",
+    "@types/node": "^20.12.12",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.5",
     "oxlint": "^1.13.0",
-    "@types/node": "^20.12.12"
+    "shadcn": "^3.4.2",
+    "turbo": "^2.5.6",
+    "ultracite": "5.1.1"
   },
   "resolutions": {
     "effect": "^3.17.9",

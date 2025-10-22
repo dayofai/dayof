@@ -9,16 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TicketPlaygroundRouteImport } from './routes/ticket-playground'
+import { Route as ThemeDemoRouteImport } from './routes/theme-demo'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as EventEventNameRouteImport } from './routes/event.$eventName'
+import { Route as OrgHandleEventHandleRouteImport } from './routes/$orgHandle.$eventHandle'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
-const TicketPlaygroundRoute = TicketPlaygroundRouteImport.update({
-  id: '/ticket-playground',
-  path: '/ticket-playground',
+const ThemeDemoRoute = ThemeDemoRouteImport.update({
+  id: '/theme-demo',
+  path: '/theme-demo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -36,9 +36,9 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const EventEventNameRoute = EventEventNameRouteImport.update({
-  id: '/event/$eventName',
-  path: '/event/$eventName',
+const OrgHandleEventHandleRoute = OrgHandleEventHandleRouteImport.update({
+  id: '/$orgHandle/$eventHandle',
+  path: '/$orgHandle/$eventHandle',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -51,16 +51,16 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/ticket-playground': typeof TicketPlaygroundRoute
-  '/event/$eventName': typeof EventEventNameRoute
+  '/theme-demo': typeof ThemeDemoRoute
+  '/$orgHandle/$eventHandle': typeof OrgHandleEventHandleRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/ticket-playground': typeof TicketPlaygroundRoute
-  '/event/$eventName': typeof EventEventNameRoute
+  '/theme-demo': typeof ThemeDemoRoute
+  '/$orgHandle/$eventHandle': typeof OrgHandleEventHandleRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
@@ -68,8 +68,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
-  '/ticket-playground': typeof TicketPlaygroundRoute
-  '/event/$eventName': typeof EventEventNameRoute
+  '/theme-demo': typeof ThemeDemoRoute
+  '/$orgHandle/$eventHandle': typeof OrgHandleEventHandleRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
@@ -78,24 +78,24 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/login'
-    | '/ticket-playground'
-    | '/event/$eventName'
+    | '/theme-demo'
+    | '/$orgHandle/$eventHandle'
     | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/dashboard'
     | '/login'
-    | '/ticket-playground'
-    | '/event/$eventName'
+    | '/theme-demo'
+    | '/$orgHandle/$eventHandle'
     | '/api/auth/$'
   id:
     | '__root__'
     | '/'
     | '/dashboard'
     | '/login'
-    | '/ticket-playground'
-    | '/event/$eventName'
+    | '/theme-demo'
+    | '/$orgHandle/$eventHandle'
     | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
@@ -103,18 +103,18 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
-  TicketPlaygroundRoute: typeof TicketPlaygroundRoute
-  EventEventNameRoute: typeof EventEventNameRoute
+  ThemeDemoRoute: typeof ThemeDemoRoute
+  OrgHandleEventHandleRoute: typeof OrgHandleEventHandleRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/ticket-playground': {
-      id: '/ticket-playground'
-      path: '/ticket-playground'
-      fullPath: '/ticket-playground'
-      preLoaderRoute: typeof TicketPlaygroundRouteImport
+    '/theme-demo': {
+      id: '/theme-demo'
+      path: '/theme-demo'
+      fullPath: '/theme-demo'
+      preLoaderRoute: typeof ThemeDemoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -138,11 +138,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/event/$eventName': {
-      id: '/event/$eventName'
-      path: '/event/$eventName'
-      fullPath: '/event/$eventName'
-      preLoaderRoute: typeof EventEventNameRouteImport
+    '/$orgHandle/$eventHandle': {
+      id: '/$orgHandle/$eventHandle'
+      path: '/$orgHandle/$eventHandle'
+      fullPath: '/$orgHandle/$eventHandle'
+      preLoaderRoute: typeof OrgHandleEventHandleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -159,8 +159,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
-  TicketPlaygroundRoute: TicketPlaygroundRoute,
-  EventEventNameRoute: EventEventNameRoute,
+  ThemeDemoRoute: ThemeDemoRoute,
+  OrgHandleEventHandleRoute: OrgHandleEventHandleRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport

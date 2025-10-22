@@ -55,10 +55,32 @@
       "linter": {
         "rules": {
           "performance": {
-            "useTopLevelRegex": "off",
+            "useTopLevelRegex": "off"
           },
           "suspicious": {
-            "noExplicitAny": "off",
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/frontrow/src/features/**/*.ts",
+        "apps/frontrow/src/features/**/*.tsx",
+        "apps/frontrow/src/routes/**/*.ts",
+        "apps/frontrow/src/routes/**/*.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "nursery": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@/vendor/*": "Import adapters from @/components/ui/* instead of vendor primitives"
+                }
+              }
+            }
           }
         }
       }
