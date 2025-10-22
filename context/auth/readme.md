@@ -1,11 +1,11 @@
 # Auth Service (Better Auth + Hono)
 
-This repo uses a standalone Better Auth service (Hono, Vercel Node) hosted at `https://auth.dayof.ai`. Web apps use a proxy (`/api/auth/*`) only in dev/preview. Expo calls the auth service directly.
+This repo uses a standalone Better Auth service (Hono, Vercel Node) hosted at `https://auth.dayof.ai`. Auth endpoints are served at `/api/auth/*` on the auth service domain. Web apps use a proxy (`/api/auth/*`) in dev/preview environments. Expo calls the auth service directly.
 
 ## Hosts
 
 - Production web: `https://dayof.ai` (Frontrow), `https://app.dayof.ai` (Backstage)
-- Auth: `https://auth.dayof.ai`
+- Auth service: `https://auth.dayof.ai` (endpoints at `/api/auth/*`)
 
 ## Environments and cookies
 
@@ -18,7 +18,7 @@ Auth (apps/auth)
 
 - DATABASE_URL
 - BETTER_AUTH_SECRET
-- BETTER_AUTH_URL (e.g. `https://auth.dayof.ai`)
+- BETTER_AUTH_URL (e.g. `https://auth.dayof.ai` - domain only, no path)
 - AUTH_COOKIE_DOMAIN=dayof.ai (prod only)
 - ALLOWED_ORIGINS=`https://dayof.ai,https://app.dayof.ai[,http://localhost:3001,http://localhost:5173]`
 - INNGEST_EVENT_KEY (optional: required if emitting events from auth)
@@ -26,24 +26,26 @@ Auth (apps/auth)
 Frontrow / Backstage (web)
 
 - VITE_AUTH_BASE_URL: `https://auth.dayof.ai` (prod) or `/api/auth` (preview/dev)
-- AUTH_PROXY_BASE: `https://<auth-preview>` (preview/dev only)
+- AUTH_PROXY_BASE: `https://<auth-preview>.vercel.app` (preview/dev only)
 
 Crew (Expo)
 
-- EXPO_PUBLIC_AUTH_BASE_URL: `https://auth.dayof.ai/auth`
+- EXPO_PUBLIC_AUTH_BASE_URL: `https://auth.dayof.ai`
 - EXPO_PUBLIC_SERVER_URL: your app API base (unchanged)
 
 ## Runtime/Routes
 
-- Auth service (Node runtime): `/` (served from `auth.dayof.ai`)
-- Frontrow SSR remains on Edge; `/api/auth` proxy (Edge) forwards to `AUTH_PROXY_BASE`.
-- Backstage `/api/auth` proxy (Edge) forwards to `AUTH_PROXY_BASE`.
+- Auth service (Node runtime): Hono app mounted at `/` on `auth.dayof.ai`; Better Auth configured with `basePath: "/api/auth"` handles all endpoints at `/api/auth/*`
+- Frontrow SSR remains on Edge; `/api/auth` proxy (Edge) forwards to `AUTH_PROXY_BASE/api/auth/*`
+- Backstage `/api/auth` proxy (Edge) forwards to `AUTH_PROXY_BASE/api/auth/*`
 
 ## Better Auth configuration (server)
 
-- Base URL uses the domain root.
-- CORS allowlist reads `ALLOWED_ORIGINS` and enables `credentials`.
-- Cookie domain (`AUTH_COOKIE_DOMAIN=dayof.ai`) enabled only in production.
+- `baseURL` uses the domain root (e.g. `https://auth.dayof.ai`)
+- `basePath: "/api/auth"` determines where Better Auth handles routes (all endpoints at `/api/auth/*`)
+- Better Auth clients automatically append `/api/auth` when `baseURL` is set to domain root
+- CORS allowlist reads `ALLOWED_ORIGINS` and enables `credentials`
+- Cookie domain (`AUTH_COOKIE_DOMAIN=dayof.ai`) enabled only in production
 
 Plugins enabled
 
@@ -133,8 +135,10 @@ EXPO_PUBLIC_SERVER_URL=
 ## Notes
 
 - Always keep server and client baseURL paths aligned.
+- Better Auth clients automatically append `/api/auth` when `baseURL` is set to domain root only.
 - In preview/dev do not set `AUTH_COOKIE_DOMAIN`.
 - When calling the auth service cross-origin (no proxy), ensure `credentials: "include"`.
+- **Important**: Do not include paths in `BETTER_AUTH_URL` or `VITE_AUTH_BASE_URL` (in production). Better Auth uses `basePath` configuration to determine endpoint paths internally.
 
 ## Inngest Use Cases
 

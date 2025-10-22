@@ -2,7 +2,7 @@
   "$schema": "https://biomejs.dev/schemas/2.1.2/schema.json",
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!context", "!context/**"]
+    "ignore": ["context", "context/**"]
   },
   "extends": ["ultracite"],
   "linter": {
