@@ -1,66 +1,66 @@
 {
-  "name": "dayof",
-  "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
-  "scripts": {
-    "check": "oxlint",
-    "dev": "turbo dev --filter=!crew",
-    "dev:events": "turbo -F events dev",
-    "build": "turbo build --filter=!crew",
-    "check-types": "turbo check-types",
-    "dev:backstage": "turbo dev --filter=backstage",
-    "dev:frontrow": "turbo -F frontrow dev",
-    "dev:crew": "turbo -F crew dev",
-    "dev:honoken": "turbo -F honoken dev",
-    "db:push": "turbo db:push --filter=database",
-    "db:push:preview": "drizzle-kit push --config=packages/database/drizzle.preview.config.ts",
-    "db:studio": "turbo db:studio --filter=database",
-    "db:generate": "turbo db:generate --filter=database",
-    "db:migrate": "turbo db:migrate --filter=database",
-    "db:migrate:preview": "drizzle-kit migrate --config=packages/database/drizzle.preview.config.ts",
-    "dev:inngest:events": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
-    "neon": "bun packages/cli-monorepo/src/cli/neon.ts",
-    "vercel": "bun packages/cli-monorepo/src/cli/vercel.ts",
-    "onboard": "bun packages/cli-monorepo/src/cli/onboard.ts",
-    "env:pull": "bun packages/cli-monorepo/src/cli/vercel.ts pull",
-    "db:branch:new": "bun packages/cli-monorepo/src/cli/neon.ts create",
-    "db:branch:delete": "bun packages/cli-monorepo/src/cli/neon.ts delete",
-    "docs:sync": "uv run packages/cli-docs/docs_sync.py packages/cli-docs/docs-sync.json",
-    "docs:sync:ui": "uv run packages/cli-docs/docs_sync.py --ui packages/cli-docs/docs-sync.json"
-  },
-  "dependencies": {
-    "@effect/schema": "^0.75.5",
-    "@handfish/drizzle-effect": "^0.0.17",
-    "@neondatabase/serverless": "^1.0.1",
-    "@tanstack/react-router-ssr-query": "^1.132.47",
-    "dinero.js": "^2.0.0-alpha.14",
-    "drizzle-kit": "beta",
-    "drizzle-orm": "beta",
-    "drizzle-zod": "^0.8.3",
-    "effect": "^3.17.9",
-    "zod": "^4.1.5"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "2.1.2",
-    "@types/node": "^20.12.12",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.1.5",
-    "oxlint": "^1.13.0",
-    "shadcn": "^3.4.2",
-    "turbo": "^2.5.6",
-    "ultracite": "5.1.1"
-  },
-  "resolutions": {
-    "effect": "^3.17.9",
-    "@effect/schema": "^0.75.5"
-  },
-  "lint-staged": {
-    "*.{js,jsx,ts,tsx,json,jsonc,css,scss,md,mdx}": [
-      "npx ultracite format"
-    ]
-  },
-  "packageManager": "bun@1.2.15"
+	"name": "dayof",
+	"private": true,
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"scripts": {
+		"check": "oxlint",
+		"dev": "turbo dev --filter=!crew",
+		"dev:events": "turbo -F events dev",
+		"build": "turbo build --filter=!crew",
+		"check-types": "turbo check-types",
+		"dev:backstage": "turbo dev --filter=backstage",
+		"dev:frontrow": "turbo -F frontrow dev",
+		"dev:crew": "turbo -F crew dev",
+		"dev:honoken": "turbo -F honoken dev",
+		"db:push": "turbo db:push --filter=database",
+		"db:push:preview": "drizzle-kit push --config=packages/database/drizzle.preview.config.ts",
+		"db:studio": "turbo db:studio --filter=database",
+		"db:generate": "turbo db:generate --filter=database",
+		"db:migrate": "turbo db:migrate --filter=database",
+		"db:migrate:preview": "drizzle-kit migrate --config=packages/database/drizzle.preview.config.ts",
+		"dev:inngest:events": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
+		"neon": "bun packages/cli-utils/cli-repo/src/cli/neon.ts",
+		"vercel": "bun packages/cli-utils/cli-repo/src/cli/vercel.ts",
+		"onboard": "bun packages/cli-utils/cli-repo/src/cli/onboard.ts",
+		"env:pull": "bun packages/cli-utils/cli-repo/src/cli/vercel.ts pull",
+		"db:branch:new": "bun packages/cli-utils/cli-repo/src/cli/neon.ts create",
+		"db:branch:delete": "bun packages/cli-utils/cli-repo/src/cli/neon.ts delete",
+		"docs:sync": "uv run packages/cli-utils/cli-docs/docs_sync.py packages/cli-utils/cli-docs/docs-sync.json",
+		"docs:sync:ui": "uv run packages/cli-utils/cli-docs/docs_sync.py --ui packages/cli-utils/cli-docs/docs-sync.json"
+	},
+	"dependencies": {
+		"@effect/schema": "^0.75.5",
+		"@handfish/drizzle-effect": "^0.0.17",
+		"@neondatabase/serverless": "^1.0.1",
+		"@tanstack/react-router-ssr-query": "^1.132.47",
+		"dinero.js": "^2.0.0-alpha.14",
+		"drizzle-kit": "beta",
+		"drizzle-orm": "beta",
+		"drizzle-zod": "^0.8.3",
+		"effect": "^3.17.9",
+		"zod": "^4.1.5"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.1.2",
+		"@types/node": "^20.12.12",
+		"husky": "^9.1.7",
+		"lint-staged": "^16.1.5",
+		"oxlint": "^1.13.0",
+		"shadcn": "^3.4.2",
+		"turbo": "^2.5.6",
+		"ultracite": "5.1.1"
+	},
+	"resolutions": {
+		"effect": "^3.17.9",
+		"@effect/schema": "^0.75.5"
+	},
+	"lint-staged": {
+		"*.{js,jsx,ts,tsx,json,jsonc,css,scss,md,mdx}": [
+			"npx ultracite format"
+		]
+	},
+	"packageManager": "bun@1.2.15"
 }

@@ -5,7 +5,7 @@ A full-stack monorepo for "DayOf", an event management platform. Built with a mo
 ## Core Technologies
 
 - **Frameworks**: TanStack Start (React), Expo (React Native), Hono
-- **UI**: TailwindCSS, shadcn/ui, NativeWind
+- **UI**: TailwindCSS, shadcn generator/tooling, NativeWind
 - **API**: oRPC, Better Auth
 - **Database**: PostgreSQL with Drizzle ORM (Neon)
 - **Background Jobs**: Inngest
@@ -34,11 +34,12 @@ The `apps` directory contains the individual, deployable applications of the pla
 
 The `packages` directory contains shared libraries and configurations used across the applications.
 
-| Package        | Description                                                                |
-| -------------- | -------------------------------------------------------------------------- |
-| `cli-monorepo` | CLI utilities for managing Neon databases and Vercel deployments.          |
-| `database`     | Shared Drizzle schema, client, and types for the Neon PostgreSQL database. |
-| `inngest-kit`  | Shared Inngest client, functions, and event definitions.                   |
+| Package              | Description                                                                |
+| -------------------- | -------------------------------------------------------------------------- |
+| `cli-utils/cli-repo` | CLI utilities for managing Neon databases and Vercel deployments.          |
+| `cli-utils/cli-docs` | Documentation sync utilities for fetching third-party docs.                |
+| `database`           | Shared Drizzle schema, client, and types for the Neon PostgreSQL database. |
+| `inngest-kit`        | Shared Inngest client, functions, and event definitions.                   |
 
 ---
 
@@ -305,7 +306,7 @@ When you delete a branch:
 
 ## CLI Utilities
 
-The `packages/cli-monorepo` package provides DevOps automation:
+The `packages/cli-utils/cli-repo` package provides DevOps automation:
 
 ### Quick Commands
 
@@ -405,6 +406,24 @@ All CLI utilities implement security best practices:
 
 ---
 
+## Testing
+
+- Runner: Vitest.
+- Conventions: co-locate tests under `tests/unit` or `tests/smoke`; name files `*.test.ts` or `*.test.tsx`.
+- Useful scripts:
+  - Honoken: `bun test`, `bun test:unit`, `bun test:smoke`, `bun test:http`, `bun test:ui`.
+  - Frontrow: `bun test`, `bun test:watch`.
+- Recommendation: run `bun run check-types` after test updates to catch contract breaks.
+
+---
+
+## ORPC Client (Expo)
+
+- The Expo app (`apps/crew`) uses an oRPC client that calls `${EXPO_PUBLIC_SERVER_URL}/rpc` and forwards Better Auth cookies when available.
+- Type import currently references a router not present in this repo (`../../server/src/routers`). TBD: point to the actual server package or remove the type import if unused.
+
+---
+
 ## CI/CD & Deployments
 
 ### Database migrations via GitHub Actions
@@ -422,8 +441,7 @@ All CLI utilities implement security best practices:
 
 ### Required approvals for Production
 
-- The `Production` environment requires approval by the user `jonpage0` before the `Database migrations` job executes.
-- Use GitHub → Settings → Environments → `Production` to adjust approvers or add wait timers if needed.
+- The `Production` environment requires approval before the `Database migrations` job executes. This is configured in GitHub → Settings → Environments → `Production` (approvers are managed there).
 
 ### Secrets layout (GitHub)
 
@@ -439,6 +457,7 @@ All CLI utilities implement security best practices:
 ### Vercel monorepo deploys (per app)
 
 - Each app is its own Vercel project with Root Directory set to the app folder (e.g., `apps/frontrow`).
-- Each app’s `vercel.json` includes an `ignoreCommand` so only changes in that app (and shared `packages/` where applicable) trigger a build/deploy.
+- No apps currently use an `ignoreCommand`.
+- Note: Without per‑app ignore settings, unrelated changes may still trigger deploys. If this becomes noisy, add an app‑specific ignore rule (via `ignoreCommand` in that app’s `vercel.json` or Vercel’s “Ignored Build Step”) that diffs only that app’s directory (and, if desired) selected `packages/`. TBD.
 - Preview deployments occur for pushes (e.g., branches/PRs); Production deployments occur on merges to `main`.
 - Turborepo filtering and caching minimize work during both local builds and Vercel builds.

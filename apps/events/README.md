@@ -13,7 +13,7 @@ Local dev
 Environment
 
 - INNGEST_SIGNING_KEY (required in prod)
-- PORT (optional for local, default 3001)
+- PORT (optional for local, default 3000)
 
 Deploy
 

@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-DayOf is a Bun + Turborepo monorepo. Deployable apps live in `apps/` (frontrow web, backstage admin, events Inngest jobs, honoken PassKit). Shared libraries and tooling live in `packages/`, including `database` for Drizzle schema and `cli-utils` for platform scripts. Tests sit beside code or under `tests/` (e.g. `apps/honoken/tests/smoke`).
+DayOf is a Bun + Turborepo monorepo. Deployable apps live in `apps/` (frontrow web, backstage admin, events Inngest jobs, honoken PassKit). Shared libraries and tooling live in `packages/`, including `database` for Drizzle schema and `cli-utils/cli-repo` for platform scripts. Tests sit beside code or under `tests/` (e.g. `apps/honoken/tests/smoke`).
 
 ## Build, Test, and Development Commands
 
@@ -22,7 +22,7 @@ Follow the existing history: short, imperative subjects (e.g. “Fix cache heade
 
 ## Environment & Security Notes
 
-Onboarding scripts live in `packages/cli-monorepo`; new machines should run `bun onboard` to fetch env files and verify CLIs. Store sensitive keys in `.env` files kept out of version control and use `bun env:pull` for Vercel sync. For feature branches, prefer ephemeral Neon branches via `bun db:branch:new` and clean them up with `bun db:branch:delete` during PR closure.
+Onboarding scripts live in `packages/cli-utils/cli-repo`; new machines should run `bun onboard` to fetch env files and verify CLIs. Store sensitive keys in `.env` files kept out of version control and use `bun env:pull` for Vercel sync. For feature branches, prefer ephemeral Neon branches via `bun db:branch:new` and clean them up with `bun db:branch:delete` during PR closure.
 
 ## CRITICAL: Use ripgrep, not grep
 

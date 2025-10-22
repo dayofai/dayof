@@ -1,0 +1,20 @@
+{
+	"name": "@dayof/cli-repo",
+	"version": "1.0.0",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./env": "./src/env.ts",
+		"./config": "./src/config.ts",
+		"./shell": "./src/shell.ts",
+		"./errors": "./src/errors.ts"
+	},
+	"bin": {
+		"dayof-neon": "./src/cli/neon.ts",
+		"dayof-vercel": "./src/cli/vercel.ts"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"@types/node": "^20.0.0"
+	}
+}
