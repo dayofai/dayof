@@ -4,4 +4,5 @@ node_modules
 .env*.local
 context/backup/
 /context/backup/**
+context-local/
 .neon-last-branch
