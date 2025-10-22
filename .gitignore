@@ -2,7 +2,9 @@ node_modules
 .turbo
 .vercel
 .env*.local
-context/backup/
-/context/backup/**
-context-local/
+/context-local/**
 .neon-last-branch
+**/.DS_Store
+# Ignore build outputs
+/dist/
+**/dist/
