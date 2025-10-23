@@ -1,0 +1,155 @@
+
+// src/state/fixtures.ts
+import { ProductPanelPayload } from "../contract/schemas";
+
+export const fxAvailableAndSoldOut: ProductPanelPayload = {
+  context: {
+    eventId: "evt_123",
+    displayTimezone: "America/Chicago",
+    locale: "en-US",
+    effectivePrefs: {
+      displayRemainingThreshold: 10,
+      showFeesNote: true,
+      showTypeListWhenSoldOut: true,
+      hideZeroInventoryVariants: false,
+      ctaLabelOverrides: {},
+    },
+  },
+  axes: { types: "multiple", typesPerOrder: "multiple", ticketsPerType: "multiple" },
+  sections: [
+    { id: "primary", label: "Get Tickets", order: 1, labelOverride: null },
+    { id: "addons", label: "Add-ons", order: 2, labelOverride: null },
+  ],
+  items: [
+    {
+      product: {
+        id: "prod_ga",
+        type: "ticket",
+        name: "General Admission",
+        capabilities: { timeBound: true, supportsWaitlist: true, supportsBackorder: false, shipRequired: false, subscription: false },
+        variantDifferentiators: [],
+      },
+      variant: {
+        id: "var_ga_default",
+        name: "General Admission",
+        variantAttributes: {},
+        price: { mode: "fixed", amount: 3500, currency: "USD", caption: "Per ticket" },
+        visibilityWhenGated: "visible",
+      },
+      commercial: {
+        status: "available",
+        reasons: [],
+        reasonTexts: {},
+        demandCapture: "none",
+        limits: { perVariant: 6, perUser: 6, perOrder: 8 },
+        remaining: { inventory: 42, perUser: 6, perOrder: 8 },
+        maxSelectable: 6,
+        schedule: { currentWindow: { startsAt: "2025-10-23T14:00:00Z", endsAt: "2025-10-30T03:59:59Z", reasonCode: "sale_window" } },
+      },
+      gates: { logic: "all", requirements: [], visibilityWhenGated: "visible" },
+      relations: { requires: null },
+      display: { placement: "section", sectionId: "primary", badges: ["Popular"], lowInventory: false },
+      uiHints: { feesNote: "Plus fees" },
+    },
+    {
+      product: {
+        id: "prod_vip",
+        type: "ticket",
+        name: "VIP",
+        capabilities: { timeBound: true, supportsWaitlist: true, supportsBackorder: false, shipRequired: false, subscription: false },
+        variantDifferentiators: [],
+      },
+      variant: {
+        id: "var_vip_default",
+        name: "VIP",
+        variantAttributes: {},
+        price: { mode: "fixed", amount: 12000, currency: "USD", caption: "Per ticket" },
+        visibilityWhenGated: "visible",
+      },
+      commercial: {
+        status: "outOfStock",
+        reasons: ["capacity_reached"],
+        reasonTexts: { capacity_reached: "Capacity reached." },
+        demandCapture: "waitlist",
+        limits: { perVariant: 1, perUser: 1, perOrder: 1 },
+        remaining: { inventory: 0, perUser: 1, perOrder: 1 },
+        maxSelectable: 0,
+        schedule: {},
+      },
+      gates: { logic: "all", requirements: [], visibilityWhenGated: "visible" },
+      relations: { requires: null },
+      display: { placement: "section", sectionId: "primary", badges: [], lowInventory: false },
+    },
+    {
+      product: {
+        id: "prod_meal",
+        type: "addon",
+        name: "Meal Voucher",
+        capabilities: { timeBound: true, supportsWaitlist: false, supportsBackorder: false, shipRequired: false, subscription: false },
+        variantDifferentiators: [],
+      },
+      variant: {
+        id: "var_meal_default",
+        name: "Meal Voucher",
+        variantAttributes: {},
+        price: { mode: "fixed", amount: 2500, currency: "USD", caption: "Per voucher" },
+        visibilityWhenGated: "visible",
+      },
+      commercial: {
+        status: "available",
+        reasons: [],
+        reasonTexts: {},
+        demandCapture: "none",
+        limits: { perVariant: 2, perUser: 2, perOrder: 2 },
+        remaining: { inventory: 50, perUser: 2, perOrder: 2 },
+        maxSelectable: 2,
+        schedule: {},
+      },
+      gates: { logic: "all", requirements: [], visibilityWhenGated: "visible" },
+      relations: { requires: { scope: "selection", anyOf: ["prod_ga"], allOf: [] } },
+      display: { placement: "children", sectionId: "primary", badges: [], lowInventory: false },
+    },
+    {
+      product: {
+        id: "prod_locked",
+        type: "ticket",
+        name: "Members Only",
+        capabilities: { timeBound: true, supportsWaitlist: true, supportsBackorder: false, shipRequired: false, subscription: false },
+        variantDifferentiators: [],
+      },
+      variant: {
+        id: "var_locked",
+        name: "Members Only",
+        variantAttributes: {},
+        price: { mode: "fixed", amount: 10000, currency: "USD", caption: "Per ticket" },
+        visibilityWhenGated: "visible",
+      },
+      commercial: {
+        status: "notOnSale",
+        reasons: ["requires_code"],
+        reasonTexts: { requires_code: "Enter your access code to unlock." },
+        demandCapture: "none",
+        limits: { perVariant: 1, perUser: 1, perOrder: 1 },
+        remaining: { inventory: 5, perUser: 1, perOrder: 1 },
+        maxSelectable: 0,
+        schedule: {},
+      },
+      gates: { logic: "all", requirements: [{ kind: "access_code", satisfied: false }], visibilityWhenGated: "visible" },
+      relations: { requires: null },
+      display: { placement: "section", sectionId: "primary", badges: ["Members"], lowInventory: false },
+    }
+  ],
+  pricing: {
+    showPriceSummary: true,
+    summary: {
+      mode: "simple",
+      lines: [
+        { type: "subtotal", amount: { amount: 7000, currency: "USD" } },
+        { type: "fees", amount: { amount: 350, currency: "USD" } },
+        { type: "taxes", amount: { amount: 420, currency: "USD" } },
+        { type: "total", amount: { amount: 7770, currency: "USD" } },
+      ],
+      inclusions: { feesIncluded: false, taxesIncluded: false },
+    },
+  },
+};
