@@ -16,7 +16,7 @@ _Design references:_ derived from your FigJam/PDF states (Sold Out + Waitlist, P
 
 ## 0) Conventions & Non‑goals
 
-- Amounts are **integer minor units** (e.g., cents).
+- Amounts are **integer minor units** (e.g., cents). More specifically they are Dinero.js v2 objects that are persisted with the Dinero snapshot() function.
 - Enums are shown inline.
 - **Sections** are not tenant‑configurable. We ship two: “Get Tickets” (primary) and “Add‑ons”. Server can pass an optional `labelOverride` (see §1).
 - **Gates**: currently only `access_code`. Logic is `all`. No separate “scope policy”; lock/waitlist interactions follow §6.
@@ -30,16 +30,21 @@ _Design references:_ derived from your FigJam/PDF states (Sold Out + Waitlist, P
   "context": {
     "eventId": "evt_123",
     // Formatting only; all payload times are UTC
+    // display timezone for events will almost always be event timezone
     "displayTimezone": "America/Chicago",
-    "locale": "en-US",
+    "locale": "en-US", // en-US will always be the case for now
 
     // Single, server‑merged preference object (Query key e.g.: ['effectivePrefs', orgId, eventId, 'public'])
     "effectivePrefs": {
       "displayRemainingThreshold": 10, // show "Only N left" when inventory <= threshold
-      "showFeesNote": true, // card‑level hint (e.g., "Plus fees")
+      "showFeesHint": true, // card‑level hint (e.g., "Plus fees")
+      // the deeper reason for showTypeListWhenSoldOut is to cover the edge case of a gated ticket being sold out. e.g. what shows when a correct access code is entered but the gated ticket type is sold out? nothing? or the the sold out ticket type greyed out? This should probably just be the dang default for gated types. Maybe this on a per-ticket basis?
       "showTypeListWhenSoldOut": true, // show sold‑out list instead of a bare waitlist panel
-      "hideZeroInventoryVariants": false,
-      "ctaLabelOverrides": {} // optional copy overrides, e.g. { "purchase": "Register" }
+      "hideZeroInventoryVariants": false, // NOTE!!! we do not use the word inventory yet!!! hideZeroRemainingTypes is probably better. And in reality this may at some point be overrident on a type by type basis.
+      // need to look at the two above in context with each other and how that effects display
+      // for right now we show ticket types even with sold out just as greyed out and we ignore hideZeroInventoryVariants or remove it
+      // ticket types probably should have a "disable" toggle on backend, like it never existed until enabled again
+      "ctaLabelOverrides": {} // optional copy overrides, e.g. { "purchase": "Get Tickets", "Buy Cards" }
     }
   },
 
@@ -51,6 +56,8 @@ _Design references:_ derived from your FigJam/PDF states (Sold Out + Waitlist, P
   },
 
   // Sections are fixed for now (order respected). Server may pass labelOverride later.
+  // NOTE: We need to determine what the section order options are. I suggest alphabetical and manual ordering with an optional "featured first toggle". Or we just make featured at the top and alphabetical the default for right now.
+  // NOTE: child addons are always in the quantity of the ticket / card / product they belong to
   "sections": [
     {
       "id": "primary",
@@ -67,8 +74,10 @@ _Design references:_ derived from your FigJam/PDF states (Sold Out + Waitlist, P
   ],
 
   // Optional pricing footer (see §7). All math is server‑side.
+  // Pricing summary is default to true
+  // Pricing Summary footer is a optional breakdown of tickets selected in the panel. e.g. subtotal, fees, taxes, total, etc.
   "pricing": {
-    "showPriceSummary": false,
+    "showPriceSummary": true,
     "summary": null
   }
 }
@@ -80,69 +89,78 @@ _Design references:_ derived from your FigJam/PDF states (Sold Out + Waitlist, P
 
 ```jsonc
 {
+  // NOTE: All products have a fulfillment type / process. For physical that will almost always be pickup with a pickup location, but could be shipping in the future. For tickets it's multiple fulfillments of email qr code / Apple Pass, etc.
   "product": {
-    "id": "prod_ga",
-    "type": "ticket", // ticket | addon | physical | digital | subscription (future‑proof)
+    "id": "prod_ga", // nanoId
+    "type": "ticket", // ticket | addon | physical | digital
     "name": "General Admission",
     "description": "Access to all sessions.",
 
     // Used only to tailor labels/hints; not for policy.
     "capabilities": {
       "timeBound": true,
-      "supportsWaitlist": true,
-      "supportsBackorder": false,
-      "shipRequired": false,
-      "subscription": false
-    },
+      "supportsWaitlist": true, // not going to do waitlists right now, will be needed soon though, we should think more about how we want waitlists to work in the future
+      "supportsBackorder": false, // we can just leave this out right now
+      "shipRequired": false // we can leave this out as well, we can cross the physical product shipping bridge later
+    }
 
     // If you ever add real coexisting choices (e.g., seats/sections), list the keys here.
-    "variantDifferentiators": []
+    // "variantDifferentiators": []
   },
 
   "variant": {
     "id": "var_ga_default",
-    "name": "General Admission", // equals product name for 1:1 default‑variant tickets
+    // "name": "", // equals product name for 1:1 default‑variant tickets, not needed right now
     "variantAttributes": {}, // only attributes that *differentiate choices*
 
     // Inline price block (no math here).
     "price": {
-      "mode": "fixed", // fixed | free | donation
-      "amount": 3500,
-      "currency": "USD",
+      "mode": "fixed", // fixed | free
+      "amount": 3500, // should probably be a dinero object
+      "currency": "USD", // always USD for now we can assume this
       "caption": "Per ticket" // supports short hints; fees note managed via prefs (see uiHints)
     },
 
     // When gates unmet:
-    //   'visible' -> locked row + AccessCodeCTA/Drawer
+    //   'visible' -> locked row + AccessCodeCTA/Drawer / if visible we don't show price until unlocked
     //   'hidden'  -> row suppressed
     "visibilityWhenGated": "visible"
   },
 
   "commercial": {
     // Drives the major panel branch.
-    "status": "available", // available | approvalRequired | outOfStock | notOnSale | paused | windowEnded | expired
+    "status": "available", // available | soldOut | notOnSale | paused / disabled | windowEnded | expired
 
     // Reasons & optional pre‑localized texts. Panel maps these to DynamicNotice and hints.
     "reasons": [], // e.g., ["outside_window","capacity_reached","requires_code"]
     "reasonTexts": {},
 
     // Demand‑capture behavior determined upstream.
-    "demandCapture": "none", // none | waitlist | notifyMe | backorder
+    "demandCapture": "none", // none | waitlist | notifyMe
+    // waitlist is ordered and sold in blocks based on tier, etc.
+    // notify me is a concert that can't go on sale yet but the concert is announced and the event page is live
+    // do we want to support sms and email or just email? both, sms first
 
     // Limits + remaining + authoritative clamp. Panel shows hints & clamps UI but never recomputes.
     "limits": {
-      "perVariant": "infinite", // number | "infinite"
+      // limites opens up a bigger question of how we stack capacity and clamp based on org -> venue -> event -> ticket type
+      // "perVariant": "infinite", // number | "infinite"
       "perUser": 6,
-      "perOrder": 8
+      "perOrder": 8 // usually using per order limits right now and we can just peg perUser to match perOrder
+      // I think the discussions around fraud detection and mitigation is one for later
     },
     "remaining": {
-      "inventory": 42, // number | "infinite" | null (unknown)
+      "remaining": 42, // number (mayyyybe infinite) basically quantity available in backend config, may not need infinite
+      // if t-shirts with sized or something then we may very well have inventory here with per variant qtys
       "perUser": 6,
       "perOrder": 8
     },
-    "maxSelectable": 6, // final clamp for stepper/toggle
+    "maxSelectable": 6, // final clamp for stepper/toggle // always the lowest of the available e.g. if perOrder is 10 and perUser is 5 then this is 5
+    // microcopy hint when max is reached should be standard / based on which max was reached e.g. "max 6 per user"
 
     // Schedule metadata for notices/hints (no calendar math in panel).
+    // Probably a better way to handle this data structure and still support arbitrarily complex sale schedules simply
+    // we can simplify this somehow?
     "schedule": {
       "currentWindow": {
         "startsAt": "2025-10-23T14:00:00Z",
@@ -154,31 +172,38 @@ _Design references:_ derived from your FigJam/PDF states (Sold Out + Waitlist, P
   },
 
   // Gates are orthogonal to status.
+  // Access codes should have purchase limits e.g. an access code can only be used to purchase X number of Y ticket type
+  // Maybe CF turnstile on access code drawer
   "gates": {
     "logic": "all", // currently always 'all'
-    "requirements": [{ "kind": "access_code", "satisfied": true }],
-    "visibilityWhenGated": "visible"
+    "requirements": [{ "kind": "access_code", "satisfied": true }], // do we compute satisfied on server? is that check with a server function? does this update the derived atom?
+    "visibilityWhenGated": "visible" // we always hide price on gated tickets that are visible right now
   },
 
   // Optional dependency & placement (e.g., add‑ons)
+  // this also needs to account for nested display as well as the sectional display of addons
   "relations": {
     // Requires parent product(s). scope: 'selection' (in-cart) | 'ownership' (already own)
     "requires": null
     // Example:
+    // "displaysWhere": section | nested (shows only when parent selected nested underneath)
     // "requires": { "scope": "selection", "anyOf": ["prod_ga"], "allOf": [] }
   },
+
+  // NOTE: Some addon's (especially in sections) are less of addons and more of other kinds of products (parking pass)
+  // So we need to rethink this just a bit
 
   // Placement & cosmetic hints only.
   "display": {
     "placement": "section", // 'section' | 'children'
     "sectionId": "primary", // 'primary' | 'addons'
-    "badges": ["Popular"],
+    "badges": ["Popular"], // needs more thought!
     "lowInventory": true // set by server using effectivePrefs.threshold
   },
 
   // Optional niceties; don't shove policy here.
   "uiHints": {
-    "feesNote": "Plus fees" // show only if context.effectivePrefs.showFeesNote=true
+    "feesNote": "Plus fees" // show only if context.effectivePrefs.showFeesHint=true
   }
 }
 ```
@@ -206,6 +231,12 @@ _This matches the sold‑out, waitlist, and past‑event patterns from your boar
 
 ## 4) Add‑ons (Placement & Dependency)
 
+> NOTE: Addons that go in sections are really just separate products that depend on the purchase of a ticket or other product. e.g. you have to buy a ticket to also buy a parking pass.
+
+> NOTE: we may also have tickets that are dependent on the purchase of other tickets! 🎉😆
+
+> NOTE: Maybe there's a nightmare situation where a product is dependent on the user having purchased another product in thier account! 🫠
+
 - **Sectioned**: `display.placement='section'`, `display.sectionId='addons'`  
   Renders in an “Add‑ons” section; unmet parent requirement disables the row with a hint (“Requires General Admission”).
 
@@ -229,14 +260,18 @@ _Rules engine decides eligibility; the panel only disables/hints based on this +
 
 ## 5) Gates (Simple, Explicit)
 
+> NOTE: We need to adjust this to account for purchase limits related to an access code.
+> NOTE: Access codes need a valid from and valid to window.
+
 - Set of requirements; currently `{ kind: 'access_code' }` only.
 - `logic: 'all'` (every requirement must be satisfied).
 - **Presentation** when unmet:
-  - `visibilityWhenGated:'visible'` → **locked** row (AccessCodeCTA/Drawer).
-  - `visibilityWhenGated:'hidden'` → row suppressed.
+  - `visibilityWhenGated:'visible'` → **locked** row (AccessCodeCTA/Drawer), **price hidden**.
+  - `visibilityWhenGated:'hidden'` → row suppressed, shows when unlocked.
+- Interactions with purchaseLimitReached / validWindow:
 - Interactions with sold‑out:
-  - **Locked + OutOfStock** ⇒ no waitlist/backorder shown.
-  - **Unlocked + OutOfStock + demandCapture='waitlist'** ⇒ show **Join Waitlist**.
+  - **Locked + noneRemaining** + demandCaputre='none' ⇒ no waitlist/backorder shown, but we still show type when unlocked.
+  - **Unlocked + noneRemaining + demandCapture='waitlist'** ⇒ show **Join Waitlist**.
 
 ---
 
@@ -244,13 +279,39 @@ _Rules engine decides eligibility; the panel only disables/hints based on this +
 
 - `limits` + `remaining` + `maxSelectable` are **inputs**.
 - Panel clamps stepper to `maxSelectable` and uses `remaining` to show hints (“Only 3 left”, “Limit 2 per order”).
-- If `remaining.inventory === null`, inventory is unknown; omit “Only N left” hints.
+- If `remaining.inventory === null`, inventory is unknown; omit “Only N left” hints. // we'll have to look closer at some of these invariants
 
 ---
 
 ## 7) Pricing Summary Footer (Optional; Server‑Computed)
 
 Shown when `pricing.showPriceSummary=true`. The server returns a ready‑to‑render `summary`; panel performs **zero** arithmetic.
+
+> NOTE: maybe need options for adjusting the display below based on inclusive settings for fees and taxes.
+
+> NOTE: do we show fee breakdowns, etc.
+
+Ticket Price: $10 + 8%
+
+Subtotal, prices added up
+
+Fees: total fees both per ticket and order
+
+Taxes
+
+Total
+
+LineItem, LineItemFee, LineItemFeeTax
+
+OrderFee, OrderFeeTax
+
+Could be either % of absolute value, and you can have as many of as many type as you want
+
+When you configure a ticket type you should see any "global default" fees or applicable fees shown.
+If you want to override it that's an option on the fee shown.
+You can add additional per order and per ticket type fees as well.
+
+> NOTE: we need to think about fee tracking and reporting
 
 ```jsonc
 "pricing": {
@@ -270,28 +331,30 @@ Shown when `pricing.showPriceSummary=true`. The server returns a ready‑to‑re
     // If inclusive, set these and omit the separate lines (or set to zero).
     "inclusions": { "feesIncluded": false, "taxesIncluded": false },
 
-    // Optional payment plan details
-    "paymentPlan": {
-      "kind": "installments",        // installments | subscription
-      "deposit": { "amount": 2000, "currency": "USD" },
-      "installments": {
-        "count": 4,
-        "perInstallment": { "amount": 1442, "currency": "USD" },
-        "interval": "month",         // day | week | month
-        "schedule": [                // include only for mode='detailed' or if server chooses to show
-          { "dueAt": "2025-11-01T00:00:00Z", "amount": { "amount": 1442, "currency": "USD" } }
-        ]
-      }
+    // ACTUALLY PAYMENT PLAN STUFF IS IN THE CHECKOUT FLOW
+    // "paymentPlan": {
+    //   "kind": "installments",        // installments | subscription
+    //   "deposit": { "amount": 2000, "currency": "USD" },
+    //   "installments": {
+    //     "count": 4,
+    //     "perInstallment": { "amount": 1442, "currency": "USD" },
+    //     "interval": "month",         // day | week | month
+    //     "schedule": [                // include only for mode='detailed' or if server chooses to show
+    //       { "dueAt": "2025-11-01T00:00:00Z", "amount": { "amount": 1442, "currency": "USD" } }
+    //     ]
+    //   }
     }
   }
 }
 ```
 
+> NOTE: We may want to show some sort of hint or notice that you can use a payment plan to purchase with. Badge, microcopy, etc.
+
 ---
 
 ## 8) Minimal Field Glossary (Quick Reference)
 
-**`context`**: `eventId`, `displayTimezone`, `locale`, `effectivePrefs{ displayRemainingThreshold, showFeesNote, showTypeListWhenSoldOut, hideZeroInventoryVariants, ctaLabelOverrides }`
+**`context`**: `eventId`, `displayTimezone`, `locale`, `effectivePrefs{ displayRemainingThreshold, showFeesHint, showTypeListWhenSoldOut, hideZeroInventoryVariants, ctaLabelOverrides }`
 
 **`axes`** _(optional)_: `types`, `typesPerOrder`, `ticketsPerType`
 
@@ -426,7 +489,7 @@ _Consistency check against prior bullets & decisions:_
 - **Add-ons** can render **as section or children** via `display.placement` + `relations.requires`.
 - **Display context** carries `displayTimezone` + `locale`.
 - **Snapshots** are a server/storage concern (JSON blob or deduped snapshot rows); **not** part of this contract.
-- **Fees note** shows only when `effectivePrefs.showFeesNote=true`; rich price footer is **server‑computed** and optional.
+- **Fees note** shows only when `effectivePrefs.showFeesHint=true`; rich price footer is **server‑computed** and optional.
 - **Panel does not recompute business rules** (status, demand capture, clamping) — those are **inputs**, not logic.
 
 ---
@@ -569,14 +632,14 @@ Three separate concerns, not one "locked" boolean:
 
 **The Pattern (borrowed from Stripe and DDD):**
 
-- **Variants** are immutable value objects. Change behavior → create new variant ID.
 - **Prices** are immutable. Don't edit the amount; create a **new Price** and archive the old.
 - **Snapshots** captured at purchase embed the exact product/variant/price the buyer saw.
+
+> NOTE: Do we want to store snapshots in a snapshots table and reference that in the order record and dedup with a hash or etag or just fuckit it's not that big and postgres is fast embedd in order directly.
 
 **Why:**
 
 - Preserves legal/audit history (what terms/price did the buyer agree to?)
-- Enables clean rollouts (create new Variant/Price, archive old; no mutation)
 - Supports A/B testing and gradual rollouts without destroying history
 
 **Impact:** The `product_snapshot` table (or embedded JSON on order lines) becomes the source of truth for "what was sold." Rollbacks, disputes, and compliance audits have complete data. Changes are additive, not destructive.
@@ -593,7 +656,7 @@ Server merges org‑level + product‑level preferences into a single `effective
 "context": {
   "effectivePrefs": {
     "displayRemainingThreshold": 30,  // product override (org default was 10)
-    "showFeesNote": true,
+    "showFeesHint": true,
     "showTypeListWhenSoldOut": true,
     "hideZeroInventoryVariants": false,
     "ctaLabelOverrides": {}
@@ -627,13 +690,19 @@ Add‑ons are **first‑class products** with a dependency expressed via `relati
 }
 ```
 
+> NOTE: Do we have addons that come for free with a purchase (or purchase of multiple tickets)? FUTURE US PROBLEM
+
+> NOTE: "addon" is a confusing word - **any product could be an addon based on relationships**
+
 **Why:**
 
 - Avoids special‑casing add‑ons in the panel (they're just products with a parent requirement)
 - Supports future product types (physical goods, memberships) with the same pattern
 - `scope` differentiates "must be in cart" vs "must already own"
 
-**Impact:** The panel disables/hints based on `relations.requires` + current selection/ownership context. No branching on `product.type='addon'`. Rules engine decides eligibility; panel displays the result.
+**Impact:** The panel disables/hints based on `relations.requires` + current selection/ownership context. No branching on `product.type='addon'`. Rules engine decides eligibility; panel displays the result. We probably shouldn't ever have a product of "type addon" exactly.
+
+tickets, digital, physical
 
 ---
 
@@ -641,7 +710,9 @@ Add‑ons are **first‑class products** with a dependency expressed via `relati
 
 **Current constraint:**
 
-Sections (`"primary"`, `"addons"`) are server‑defined, not tenant‑configurable. Optional `labelOverride` allows one‑off renaming.
+> NOTE: TWO SECTIONS BY DEFAULT SHOULD PROBABLY BE primary and something like "dependent" with a configurable title?
+
+Sections (`"primary"`, `"dependent"`) are server‑defined, not tenant‑configurable. Optional `labelOverride` allows one‑off renaming.
 
 **Why:**
 
