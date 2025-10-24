@@ -4,7 +4,7 @@
 
 This document specifies the **Product Panel Contract v0.3**—a JSON payload contract between the server-side pricing/availability engine and the client-side purchase panel UI.
 
-**Core Principle**: The panel is **presentational only**. The server provides all authoritative state decisions (timing, availability, access, pricing, clamps). The client uses Jotai derived atoms to map these orthogonal server decisions into UI presentation states—no business logic, no schedule math, no price computation.
+**Core Principle**: The panel is **presentational only**. The server provides all authoritative state decisions (timing, availability, gating, pricing, clamps). The client uses Jotai derived atoms to map these orthogonal server decisions into UI presentation states—no business logic, no schedule math, no price computation.
 
 ---
 
@@ -16,7 +16,7 @@ The following sections (A-N) capture key decisions and edge cases discovered dur
 
 - **Avoid “inventory” in UI/contract.** Prefer “remaining” / “count”.
 - **Show sold‑out ticket types.** Default behavior is to **display sold‑out rows as disabled/greyed**, not hidden. If the entire event is sold out and nothing purchasable remains, show compact “Event Sold Out” state; otherwise list types with a sold‑out indicator.
-- **Gated but sold‑out edge case.** When access code unlocks a type that’s already sold out, still **show the type**, disabled, with sold‑out state (don’t make it disappear—avoid “did my code work?” confusion).
+- **Gated but sold‑out edge case.** When an access code enables a type that’s already sold out, still **show the type**, disabled, with sold‑out state (avoid "did my code work?" confusion).
 - **Disable/unpublish toggle.** Need a server‑side switch to fully **suppress** a product type from the panel without deleting it (unpublished/disabled).
 
 ### B) Status & state mapping
@@ -102,7 +102,7 @@ The following sections (A-N) capture key decisions and edge cases discovered dur
 
 ### L) Reason codes / notices
 
-- Maintain a **code registry** (machine) plus optional `reasonTexts` (localized). Include codes for `outside_window`, `capacity_reached`, `requires_code`, `tenant_paused_sales`, `limit_reached`, `access_code_expired`, `access_code_maxed`, etc.
+- Maintain a **code registry** (machine) plus optional `reasonTexts` (localized). Include codes for `outside_window`, `sold_out`, `requires_code`, `tenant_paused_sales`, `limit_reached`, `code_expired`, `code_maxed`, etc.
 
 ### M) Security/abuse & errors (panel-visible)
 
@@ -129,21 +129,21 @@ The following sections (A-N) capture key decisions and edge cases discovered dur
 Starting from scratch allows us to avoid the compromises of migrating legacy code. Key improvements enabled by greenfield:
 
 - **Delete** the one‑dimensional `commercial.status`.
-- **Introduce** a **state vector** with five orthogonal axes: `temporal`, `inventory`, `access`, `admin`, `demandCapture`.
+- **Introduce** a **state vector** with four orthogonal axes: `temporal`, `supply`, `gating`, `demandCapture`.
 - **Keep server as authority** for money and clamps: `price`, `fees/taxes` (in `pricing.summary`), and `commercial.maxSelectable`.
 - **Product types**: `ticket | physical | digital` (no `addon`, no `subscription`). Add a **fulfillment** object.
 - **Naming**: banish "inventory" from field names — use **`remaining.count`**; **`showFeesHint`** (not `showFeesNote`).
-- **Gates** live inside `state.access` (drop the old `gates` block).
-- **Unpublished** items never get sent (server omits them).
+- **Gates** live inside `state.gating` (drop the old `gates` block).
+- **Disabled** items never get sent (server omits them entirely).
 - **Event-level sold out flag**: optional `context.eventAllOutOfStock` to explicitly signal compact sold-out mode when prefs require it.
 
 ---
 
 ## 1) Multi-Axis State Model (Replacing Single Status)
 
-**Why axes?** Compressing multiple orthogonal dimensions (timing, inventory, access control, admin state, demand capture) into a single `status` string creates combinatorial explosion and makes business logic leak into the client.
+**Why axes?** Compressing multiple orthogonal dimensions (timing, supply, gating, demand capture) into a single `status` string creates combinatorial explosion and makes business logic leak into the client.
 
-Instead, the server provides **five independent axes**, each representing one dimension of truth. The client's Jotai derived atoms compose these axes into presentation states through pure view mapping—no schedule math, no price computation, no re-evaluation of business rules.
+Instead, the server provides **four independent axes**, each representing one dimension of truth. The client's Jotai derived atoms compose these axes into presentation states through pure view mapping—no schedule math, no price computation, no re-evaluation of business rules.
 
 **Core principle**: Your panel is purely presentational; the engine delivers authoritative, orthogonal decisions. Jotai derived atoms map those inputs → view.
 
@@ -157,28 +157,24 @@ Instead, the server provides **five independent axes**, each representing one di
     "nextWindow":    { "startsAt": "...", "endsAt": "...", "reasonCode": "next_window" } | null,
     "reasons": ["outside_window"]                          // machine codes
   },
-  "inventory": {
-    "availability": "available" | "none" | "unknown",      // precomputed
+  "supply": {
+    "status": "available" | "none" | "unknown",            // precomputed
     "remaining": { "count": 42, "perUser": 6, "perOrder": 8 },
-    "reasons": ["capacity_reached"]                        // e.g., when none
+    "reasons": ["sold_out"]                                  // e.g., when none
   },
-  "access": {
-    "gated": true,                                         // product requires gates
+  "gating": {
+    "required": true,                                      // was access.gated
     "satisfied": false,                                    // precomputed (server‑side check)
-    "visibilityWhenGated": "visible" | "hidden",
-    "requirements": [{
-      "kind": "access_code",
+    "visibilityPolicy": "visible" | "hidden",           // was visibilityWhenGated
+  "requirements": [{
+      "kind": "unlock_code",                              // machine: unlock_code, UI: "access code"
       "satisfied": false,
       "validWindow": { "startsAt": "...", "endsAt": "..." },
       "limit": { "maxUses": 20, "usesRemaining": 5 }
     }],
-    "reasons": ["requires_code","access_code_expired"]     // as applicable
+    "reasons": ["requires_code","code_expired"]          // as applicable
   },
-  "admin": {
-    "state": "active" | "paused" | "unpublished",          // if 'unpublished', omit item entirely
-    "approvalRequired": false,
-    "reasons": ["tenant_paused_sales"]
-  },
+  // listing/admin axis removed; disabled items are omitted server-side
   "demandCapture": {
     "kind": "none" | "waitlist" | "notifyMe" | "backorder" // server decision
   }
@@ -187,7 +183,7 @@ Instead, the server provides **five independent axes**, each representing one di
 
 **Notes on demand capture:**
 
-- **`waitlist`**: User signs up for notification when capacity opens (e.g., cancellations). First N in queue get access code when available.
+- **`waitlist`**: User signs up for notification when spots open (e.g., cancellations). First N in queue get an access code when available.
 - **`notifyMe`**: User requests notification when sales begin (for events announced but not yet on sale). **Preferred delivery: SMS** (higher engagement than email for target demographic).
 - **`backorder`**: User can purchase now, fulfilled when available (typically for physical products; not used for tickets currently).
 
@@ -258,23 +254,19 @@ Instead, the server provides **five independent axes**, each representing one di
           "nextWindow": null,
           "reasons": []
         },
-        "inventory": {
-          "availability": "available",
+        "supply": {
+          "status": "available",
           "remaining": { "count": 42, "perUser": 6, "perOrder": 8 },
           "reasons": []
         },
-        "access": {
-          "gated": false,
+        "gating": {
+          "required": false,
           "satisfied": true,
-          "visibilityWhenGated": "visible",
+          "visibilityPolicy": "visible",
           "requirements": [],
           "reasons": []
         },
-        "admin": {
-          "state": "active",
-          "approvalRequired": false,
-          "reasons": []
-        },
+
         "demandCapture": { "kind": "none" },
         "reasons": [],
         "reasonTexts": {}
@@ -293,7 +285,7 @@ Instead, the server provides **five independent axes**, each representing one di
         "badges": ["Popular", "PaymentPlanAvailable"],
         "featured": true,
         "rank": 0,
-        "lowInventory": false
+        "lowRemaining": false
       },
       "uiHints": { "feesNote": "Plus fees" }
     }
@@ -322,32 +314,31 @@ Instead of a single status value determining presentation, the panel composes fi
 
 ### A) Row Presentation (visibility & interaction mode)
 
-| Condition                                                                                  | Result                      |
-| ------------------------------------------------------------------------------------------ | --------------------------- |
-| `admin.state = 'unpublished'`                                                              | `suppressed` (server omits) |
-| `access.gated = true` AND `access.satisfied = false` AND `visibilityWhenGated = 'hidden'`  | `suppressed`                |
-| `access.gated = true` AND `access.satisfied = false` AND `visibilityWhenGated = 'visible'` | `locked`                    |
-| Otherwise                                                                                  | `normal`                    |
+| Condition                                                                                         | Result                      |
+| ------------------------------------------------------------------------------------------------- | --------------------------- |
+| `admin.state = 'unpublished'`                                                                     | `suppressed` (server omits) |
+| `gating.required = true` AND `gating.satisfied = false` AND `gating.visibilityPolicy = 'hidden'`  | `suppressed`                |
+| `gating.required = true` AND `gating.satisfied = false` AND `gating.visibilityPolicy = 'visible'` | `locked`                    |
+| Otherwise                                                                                         | `normal`                    |
 
 ### B) Purchasability (boolean composition)
 
 Purchasable when **ALL** of:
 
-- `admin.state = 'active'`
+- (listing/admin removed: disabled items are omitted server-side)
 - `temporal.phase = 'during'`
-- `inventory.availability = 'available'`
-- `access.gated = false` OR `access.satisfied = true`
+- `availability.status = 'available'`
+- `gating.required = false` OR `gating.satisfied = true`
 
 ### C) CTA Resolution (priority-ordered decision tree)
 
-| Conditions (checked in order)                                                                               | CTA             | Label             |
-| ----------------------------------------------------------------------------------------------------------- | --------------- | ----------------- |
-| Row presentation ≠ `normal`                                                                                 | `none`          | —                 |
-| Is purchasable AND `admin.approvalRequired = false`                                                         | `purchase`      | "Get Ticket(s)"   |
-| Is purchasable AND `admin.approvalRequired = true`                                                          | `request`       | "Request to Join" |
-| `inventory.availability = 'none'` AND `demandCapture.kind = 'waitlist'` AND gate satisfied AND admin active | `join_waitlist` | "Join Waitlist"   |
-| `temporal.phase = 'before'` AND `demandCapture.kind = 'notifyMe'` AND admin active                          | `notify_me`     | "Notify Me"       |
-| Otherwise                                                                                                   | `none`          | —                 |
+| Conditions (checked in order)                                                     | CTA             | Label           |
+| --------------------------------------------------------------------------------- | --------------- | --------------- |
+| Row presentation ≠ `normal`                                                       | `none`          | —               |
+| Is purchasable                                                                    | `purchase`      | "Get Ticket(s)" |
+| `supply.status = 'none'` AND `demandCapture.kind = 'waitlist'` AND gate satisfied | `join_waitlist` | "Join Waitlist" |
+| `temporal.phase = 'before'` AND `demandCapture.kind = 'notifyMe'`                 | `notify_me`     | "Notify Me"     |
+| Otherwise                                                                         | `none`          | —               |
 
 ### D) UI Element Visibility Matrix
 
@@ -366,27 +357,25 @@ Purchasable when **ALL** of:
 Notices are composed from axis-specific reasons mapped through `reasonTexts`:
 
 - **Temporal**: `outside_window` → "Not on sale yet", `window_ended` → "Sales ended", `expired` → "Past event"
-- **Inventory**: `capacity_reached` → "Sold Out"
-- **Access**: `requires_code` → "Enter access code", `access_code_expired` → "Code expired", `rate_limited` → "Too many attempts"
-- **Admin**: `tenant_paused_sales` → "Sales paused"
+- **Supply**: `sold_out` → "Sold Out"
+- **Gating**: `requires_code` → "Enter access code", `code_expired` → "Code expired", `rate_limited` → "Too many attempts"
 
 ### F) Edge Cases
 
-| Scenario                    | Temporal | Inventory | Access                 | Admin  | Demand   | Result                                                      |
-| --------------------------- | -------- | --------- | ---------------------- | ------ | -------- | ----------------------------------------------------------- |
-| Gated + Sold Out            | any      | none      | not satisfied, visible | active | any      | Show locked row, no waitlist CTA                            |
-| Gated + Sold Out (unlocked) | any      | none      | satisfied              | active | waitlist | Show normal row with waitlist CTA                           |
-| All items sold out          | any      | all none  | any                    | active | any      | Compact "Event Sold Out" if `showTypeListWhenSoldOut=false` |
-| Paused + Available          | during   | available | satisfied              | paused | any      | Show row with "Sales Paused" notice, no CTA                 |
+| Scenario                    | Temporal | Supply   | Gating                 | Demand   | Result                                                      |
+| --------------------------- | -------- | -------- | ---------------------- | -------- | ----------------------------------------------------------- |
+| Gated + Sold Out            | any      | none     | not satisfied, visible | any      | Show locked row, no waitlist CTA                            |
+| Gated + Sold Out (unlocked) | any      | none     | satisfied              | waitlist | Show normal row with waitlist CTA                           |
+| All items sold out          | any      | all none | any                    | any      | Compact "Event Sold Out" if `showTypeListWhenSoldOut=false` |
 
 ### G) Rendering Rules (Pure View)
 
 **Quantity Controls:**
 
 - **Clamp**: Always use `commercial.maxSelectable` (authoritative).
-- **Hints**: Use `inventory.remaining.count/perUser/perOrder` for microcopy only.
+- **Hints**: Use `availability.remaining.count/perUser/perOrder` for microcopy only.
   - Display which limit was reached: "Max 6 per user" or "Max 8 per order" based on which limit equals `maxSelectable`
-  - Low inventory hint: "Only 3 left" when `remaining.count` below `displayRemainingThreshold`
+  - Low remaining hint: "Only 3 left" when `remaining.count` below `displayRemainingThreshold`
 - Never compute or re-validate clamps client-side.
 
 **Price Visibility:**
@@ -405,7 +394,7 @@ Notices are composed from axis-specific reasons mapped through `reasonTexts`:
 
 - All notices from `state.{axis}.reasons[]` + `state.reasonTexts{}`
 - No hardcoded copy in client logic
-- Severity by axis: access/temporal=info, admin=warning, inventory=neutral
+- Severity by axis: gating/temporal=info, admin=warning, availability=neutral
 
 ---
 
@@ -529,8 +518,8 @@ const TemporalSchema = z.object({
   reasons: z.array(z.string()).default([]),
 });
 
-const InventorySchema = z.object({
-  availability: z.enum(["available", "none", "unknown"]),
+const SupplySchema = z.object({
+  status: z.enum(["available", "none", "unknown"]),
   remaining: z
     .object({
       count: z.number().int().nonnegative().nullable().optional(),
@@ -541,8 +530,8 @@ const InventorySchema = z.object({
   reasons: z.array(z.string()).default([]),
 });
 
-const AccessRequirementSchema = z.object({
-  kind: z.enum(["access_code"]),
+const GatingRequirementSchema = z.object({
+  kind: z.enum(["unlock_code"]), // machine term; UI shows "access code"
   satisfied: z.boolean(),
   validWindow: z
     .object({ startsAt: z.iso.datetime(), endsAt: z.iso.datetime() })
@@ -557,11 +546,11 @@ const AccessRequirementSchema = z.object({
     .optional(),
 });
 
-const AccessSchema = z.object({
-  gated: z.boolean().default(false),
+const GatingSchema = z.object({
+  required: z.boolean().default(false),
   satisfied: z.boolean().default(true),
-  visibilityWhenGated: z.enum(["visible", "hidden"]).default("visible"),
-  requirements: z.array(AccessRequirementSchema).default([]),
+  visibilityPolicy: z.enum(["visible", "hidden"]).default("visible"),
+  requirements: z.array(GatingRequirementSchema).default([]),
   reasons: z.array(z.string()).default([]),
 });
 
@@ -577,9 +566,8 @@ const DemandCaptureSchema = z.object({
 
 export const StateAxesSchema = z.object({
   temporal: TemporalSchema,
-  inventory: InventorySchema,
-  access: AccessSchema,
-  admin: AdminSchema,
+  supply: SupplySchema,
+  gating: GatingSchema,
   demandCapture: DemandCaptureSchema,
   reasons: z.array(z.string()).default([]),
   reasonTexts: z.record(z.string(), z.string()).default({}),
@@ -620,7 +608,7 @@ export const DisplaySchema = z.object({
   badges: z.array(z.string()).default([]),
   featured: z.boolean().default(false),
   rank: z.number().int().default(0),
-  lowInventory: z.boolean().optional(),
+  lowRemaining: z.boolean().optional(),
 });
 
 export const UiHintsSchema = z.object({
@@ -695,9 +683,8 @@ export type ProductPanelPayload = z.output<typeof ProductPanelPayloadSchema>;
 **Server (authoritative)**
 
 - `state.temporal.phase`, `currentWindow`, `nextWindow`
-- `state.inventory.availability`, `remaining.count`, `limits`
-- `state.access.gated/satisfied/visibility/requirements (+ code limits & windows)`
-- `state.admin.state`, `approvalRequired`
+- `state.supply.status`, `remaining.count`, `limits`
+- `state.gating.required/satisfied/visibility/requirements (+ code limits & windows)`
 - `state.demandCapture.kind`
 - `commercial.maxSelectable` (final clamp)
 - `pricing.summary` (all money math)
@@ -711,7 +698,7 @@ export type ProductPanelPayload = z.output<typeof ProductPanelPayloadSchema>;
   - `normal` otherwise
 
 - `isPurchasable`:
-  `admin.active && temporal.during && inventory.available && (!gated || satisfied)`
+  `admin.active && temporal.during && availability.available && (!gated || satisfied)`
 
 - `quantityUI`:
   if not `normal` → hidden; else `maxSelectable` 0 → hidden; 1 → select; >1 → stepper
@@ -723,7 +710,7 @@ export type ProductPanelPayload = z.output<typeof ProductPanelPayloadSchema>;
 
   - purchasable → `purchase` (label override allowed)
   - approvalRequired (and otherwise purchasable context) → `request`
-  - `inventory.none && demandCapture.waitlist && (!gated || satisfied)` → `join_waitlist`
+  - `availability.none && demandCapture.waitlist && (!gated || satisfied)` → `join_waitlist`
   - `temporal.before && demandCapture.notifyMe` → `notify_me`
   - otherwise `none`
 
@@ -731,7 +718,7 @@ export type ProductPanelPayload = z.output<typeof ProductPanelPayloadSchema>;
 
 - Panel rollups:
 
-  - `allOutOfStock` = every **sent** item has `inventory.availability='none'`
+  - `allOutOfStock` = every **sent** item has `supply.status='none'`
   - `anyGatedVisible` = any row locked
   - `panelMode` = `'compactWaitlistOnly'` when `allOutOfStock` and `prefs.showTypeListWhenSoldOut=false`; else `'full'`
 
@@ -762,21 +749,21 @@ import type {
 } from "../state/types";
 
 function rowPresentation(item: PanelItem): RowViewModel["presentation"] {
-  const { access, admin } = item.state;
+  const { gating, admin } = item.state;
   if (admin.state === "unpublished") return "suppressed";
-  if (access.gated && !access.satisfied) {
-    return access.visibilityWhenGated === "visible" ? "locked" : "suppressed";
+  if (gating.required && !gating.satisfied) {
+    return gating.visibilityPolicy === "visible" ? "locked" : "suppressed";
   }
   return "normal";
 }
 
 function isPurchasable(item: PanelItem): boolean {
-  const { temporal, inventory, access, admin } = item.state;
+  const { temporal, availability, gating, admin } = item.state;
   return (
     admin.state === "active" &&
     temporal.phase === "during" &&
-    inventory.availability === "available" &&
-    (!access.gated || access.satisfied)
+    availability.status === "available" &&
+    (!gating.required || gating.satisfied)
   );
 }
 
@@ -785,12 +772,12 @@ function quantityUI(
   pres: RowViewModel["presentation"]
 ): QuantityUI {
   if (pres !== "normal") return "hidden";
-  const { temporal, access, admin } = item.state;
+  const { temporal, gating, admin } = item.state;
   if (
     !(
       admin.state === "active" &&
       temporal.phase === "during" &&
-      (!access.gated || access.satisfied)
+      (!gating.required || gating.satisfied)
     )
   )
     return "hidden";
@@ -839,8 +826,7 @@ function ctaFor(
     return { kind: "none" as const, label: "", enabled: false };
 
   const buyable = isPurchasable(item);
-  const approval = item.state.admin.approvalRequired === true;
-  const { inventory, access, admin, temporal, demandCapture } = item.state;
+  const { supply, gating, temporal, demandCapture } = item.state;
 
   if (buyable) {
     const label = labelWithOverrides(
@@ -856,30 +842,15 @@ function ctaFor(
   }
 
   if (
-    approval &&
-    admin.state === "active" &&
-    temporal.phase === "during" &&
-    (!access.gated || access.satisfied)
-  ) {
-    const label = labelWithOverrides("request", payload, "Request to Join");
-    return { kind: "request" as const, label, enabled: true };
-  }
-
-  if (
-    inventory.availability === "none" &&
+    supply.status === "none" &&
     demandCapture.kind === "waitlist" &&
-    (!access.gated || access.satisfied) &&
-    admin.state === "active"
+    (!gating.required || gating.satisfied)
   ) {
     const label = labelWithOverrides("join_waitlist", payload, "Join Waitlist");
     return { kind: "join_waitlist" as const, label, enabled: true };
   }
 
-  if (
-    temporal.phase === "before" &&
-    demandCapture.kind === "notifyMe" &&
-    admin.state === "active"
-  ) {
+  if (temporal.phase === "before" && demandCapture.kind === "notifyMe") {
     const label = labelWithOverrides("notify_me", payload, "Notify Me");
     return { kind: "notify_me" as const, label, enabled: true };
   }
@@ -892,7 +863,7 @@ function noticesFor(
   pres: RowViewModel["presentation"]
 ): RowNotice[] {
   const out: RowNotice[] = [];
-  const { temporal, inventory, access, admin, reasonTexts } = item.state;
+  const { temporal, supply, gating, reasonTexts } = item.state;
   if (pres === "locked") {
     out.push({
       icon: "info",
@@ -901,24 +872,17 @@ function noticesFor(
     });
     return out;
   }
-  if (admin.state === "paused")
-    out.push({ icon: "warning", title: "Sales Paused" });
+  // listing/admin axis removed; no paused notice in UI layer
   if (temporal.phase === "before")
     out.push({ icon: "info", title: "Not on Sale" });
   if (temporal.phase === "after")
     out.push({ icon: "info", title: "Sales Window Ended" });
   if (temporal.phase === "expired")
     out.push({ icon: "info", title: "Past Event" });
-  if (inventory.availability === "none")
-    out.push({ icon: "info", title: "Sold Out" });
+  if (supply.status === "none") out.push({ icon: "info", title: "Sold Out" });
 
   // Axis-specific reasonTexts
-  for (const r of [
-    ...temporal.reasons,
-    ...inventory.reasons,
-    ...access.reasons,
-    ...admin.reasons,
-  ]) {
+  for (const r of [...temporal.reasons, ...supply.reasons, ...gating.reasons]) {
     if (reasonTexts[r]) out.push({ meta: reasonTexts[r] });
   }
   return out;
@@ -946,16 +910,16 @@ export function mapItemToRowVM(
     quantityUI: qUI,
     priceUI: pUI,
 
-    lowInventory: item.display.lowInventory,
+    lowRemaining: item.display.lowRemaining,
     badges: item.display.badges,
 
     maxSelectable: item.commercial.maxSelectable ?? 0,
-    remainingCount: item.state.inventory.remaining?.count ?? null,
+    remainingCount: item.state.availability.remaining?.count ?? null,
 
     cta,
     notices,
 
-    isGated: item.state.access.gated,
+    isGated: item.state.gating.required,
     gatesVisible: pres === "locked",
     reasons: [...item.state.reasons],
   };
@@ -970,7 +934,7 @@ export function mapItemToRowVM(
 + const allOutOfStock =
 +   items.length > 0 &&
 +   items.every((it) => it.state.admin.state !== "unpublished") &&
-+   items.every((it) => it.state.inventory.availability === "none");
++   items.every((it) => it.state.availability.status === "none");
 
 - const anyGatedVisible = rowVMs.some((r) => r.presentation === "locked");
 - const anyGatedHidden = items.some((it) => it.gates?.requirements?.length && (it.gates?.visibilityWhenGated ?? "visible") === "hidden");
@@ -1145,15 +1109,15 @@ export const fxGreenfield: ProductPanelPayload = {
           nextWindow: null,
           reasons: [],
         },
-        inventory: {
-          availability: "available",
+        availability: {
+          status: "available",
           remaining: { count: 42, perUser: 6, perOrder: 8 },
           reasons: [],
         },
-        access: {
-          gated: false,
+        gating: {
+          required: false,
           satisfied: true,
-          visibilityWhenGated: "visible",
+          visibilityPolicy: "visible",
           requirements: [],
           reasons: [],
         },
@@ -1204,22 +1168,22 @@ export const fxGreenfield: ProductPanelPayload = {
           nextWindow: null,
           reasons: [],
         },
-        inventory: {
-          availability: "none",
+        availability: {
+          status: "none",
           remaining: { count: 0, perUser: 1, perOrder: 1 },
-          reasons: ["capacity_reached"],
+          reasons: ["sold_out"],
         },
-        access: {
-          gated: false,
+        gating: {
+          required: false,
           satisfied: true,
-          visibilityWhenGated: "visible",
+          visibilityPolicy: "visible",
           requirements: [],
           reasons: [],
         },
         admin: { state: "active", approvalRequired: false, reasons: [] },
         demandCapture: { kind: "waitlist" },
         reasons: [],
-        reasonTexts: { capacity_reached: "Capacity reached." },
+        reasonTexts: { sold_out: "Sold out." },
       },
       commercial: { maxSelectable: 0, limits: { perUser: 1, perOrder: 1 } },
       relations: { requires: null, applyQuantity: "independent" },
@@ -1251,15 +1215,15 @@ export const fxGreenfield: ProductPanelPayload = {
       },
       state: {
         temporal: { phase: "during", reasons: [] },
-        inventory: {
-          availability: "available",
+        availability: {
+          status: "available",
           remaining: { count: 50, perUser: 2, perOrder: 2 },
           reasons: [],
         },
-        access: {
-          gated: false,
+        gating: {
+          required: false,
           satisfied: true,
-          visibilityWhenGated: "visible",
+          visibilityPolicy: "visible",
           requirements: [],
           reasons: [],
         },
@@ -1301,18 +1265,18 @@ export const fxGreenfield: ProductPanelPayload = {
       },
       state: {
         temporal: { phase: "before", reasons: ["outside_window"] },
-        inventory: {
-          availability: "available",
+        availability: {
+          status: "available",
           remaining: { count: 5, perUser: 1, perOrder: 1 },
           reasons: [],
         },
-        access: {
-          gated: true,
+        gating: {
+          required: true,
           satisfied: false,
-          visibilityWhenGated: "visible",
+          visibilityPolicy: "visible",
           requirements: [
             {
-              kind: "access_code",
+              kind: "unlock_code", // machine term; UI shows "access code"
               satisfied: false,
               validWindow: {
                 startsAt: "2025-10-22T00:00:00Z",
@@ -1325,7 +1289,7 @@ export const fxGreenfield: ProductPanelPayload = {
         admin: { state: "active", approvalRequired: false, reasons: [] },
         demandCapture: { kind: "none" },
         reasons: [],
-        reasonTexts: { requires_code: "Enter your access code to unlock." },
+        reasonTexts: { requires_code: "Enter your access code to proceed." },
       },
       commercial: { maxSelectable: 0, limits: { perUser: 1, perOrder: 1 } },
       relations: { requires: null, applyQuantity: "independent" },
@@ -1367,16 +1331,16 @@ Machine reason codes with recommended severity and icon mapping:
 - `window_ended` – info – "Sales window ended"
 - `expired` – info – "Past event"
 
-**Inventory:**
+**Availability:**
 
-- `capacity_reached` – neutral – "Sold Out"
+- `sold_out` – neutral – "Sold Out"
 - `unknown_remaining` – warning – "Availability unknown"
 
-**Access:**
+**Gating:**
 
-- `requires_code` – info – "Enter access code to unlock"
-- `access_code_expired` – warning – "Code expired"
-- `access_code_maxed` – warning – "Code max uses reached"
+- `requires_code` – info – "Enter access code"
+- `code_expired` – warning – "Code expired"
+- `code_maxed` – warning – "Code max uses reached"
 - `rate_limited` – error – "Too many attempts, try later"
 
 **Admin:**
@@ -1417,14 +1381,14 @@ Axis-specific rules to prevent business logic creep into the client. Mark these 
 - ✗ Client must not decide "during" vs "before" vs "after"
 - ✗ Client must not parse or compute date/time values
 
-### Inventory Axis
+### Availability Axis
 
-- ✓ Server decides `availability`; client never compares `remaining.count` to zero
+- ✓ Server decides `availability.status`; client never compares `remaining.count` to zero
 - ✓ `remaining.count/perUser/perOrder` are hints only; `commercial.maxSelectable` is the clamp
 - ✗ Client must not compute "sold out" from remaining count
 - ✗ Client must not calculate availability from capacity math
 
-### Access Axis
+### Gating Axis
 
 - ✓ Server evaluates all gate requirements; client only shows/hides based on `satisfied`
 - ✓ Client submits access codes to server; server returns updated `satisfied` state
@@ -1441,8 +1405,8 @@ Axis-specific rules to prevent business logic creep into the client. Mark these 
 ### Demand Capture Axis
 
 - ✓ Server decides waitlist/notifyMe eligibility; client only renders the configured CTA
-- ✗ Client must not choose waitlist vs notifyMe based on timing or inventory
-- ✗ Client must not implement waitlist capacity logic
+- ✗ Client must not choose waitlist vs notifyMe based on timing or availability
+- ✗ Client must not implement waitlist logic based on venue capacity
 
 ### Commercial (Clamps)
 
@@ -1466,7 +1430,7 @@ Axis-specific rules to prevent business logic creep into the client. Mark these 
 **Server**
 
 - [ ] Emit `items[].state` (five axes) and delete `commercial.status`.
-- [ ] Rename `remaining.inventory` → `remaining.count`; never send the word “inventory” elsewhere.
+- [ ] Rename `remaining.inventory` → `remaining.count`; avoid using the word “inventory” elsewhere.
 - [ ] Omit items with `admin.state='unpublished'`.
 - [ ] Add `product.fulfillment`.
 - [ ] Ensure `commercial.maxSelectable` is correct; keep `limits` for hints only.
@@ -1492,7 +1456,7 @@ Axis-specific rules to prevent business logic creep into the client. Mark these 
 
 - **Fulfillment is explicit** → Scanner UX and permissions can key off fulfillment fields without inventing new product types. Future redemption contexts (e.g., "lounge_access", "merch_exclusive") slot in cleanly.
 
-- **Waitlist vs notify‑me** is just the `demandCapture` axis → Flip a server value, the UI shifts. No branching combinatorics, no client conditionals based on timing or inventory state.
+- **Waitlist vs notify‑me** is just the `demandCapture` axis → Flip a server value, the UI shifts. No branching combinatorics, no client conditionals based on timing or availability state.
 
 - **No magic types** → `addon` is not a type—it's a product with relations. This keeps the type system clean and prevents special-case proliferation as new product categories emerge.
 
