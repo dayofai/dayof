@@ -455,6 +455,24 @@ export const ContextSchema = z.object({
   locale: z.string().min(2),
   eventAllOutOfStock: z.boolean().optional(),
   effectivePrefs: EffectivePrefsSchema,
+  // Optional panel-level dynamic notices (beyond per-row notices)
+  dynamicNotices: z
+    .array(
+      z.object({
+        code: z.enum([
+          "access_code_prompt",
+          "fomo_low_supply",
+          "payment_plan_available",
+          "event_sold_out",
+        ]),
+        severity: z.enum(["info", "warning"]).default("info"),
+        placement: z
+          .enum(["panelHeader", "panelFooter"])
+          .default("panelHeader"),
+        text: z.string().optional(),
+      })
+    )
+    .optional(),
 });
 
 export const SectionIdSchema = z.string().min(1);
