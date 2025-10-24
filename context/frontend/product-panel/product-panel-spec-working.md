@@ -1381,12 +1381,20 @@ Axis-specific rules to prevent business logic creep into the client. Mark these 
 - ✗ Client must not decide "during" vs "before" vs "after"
 - ✗ Client must not parse or compute date/time values
 
-### Availability Axis
+### Supply Axis
 
-- ✓ Server decides `availability.status`; client never compares `remaining.count` to zero
+- ✓ Server decides `supply.status`; client never compares `remaining.count` to zero
 - ✓ `remaining.count/perUser/perOrder` are hints only; `commercial.maxSelectable` is the clamp
 - ✗ Client must not compute "sold out" from remaining count
-- ✗ Client must not calculate availability from capacity math
+- ✗ Client must not calculate supply from venue/seat capacity math
+
+Seats.io note:
+
+- Keep `supply.status` even when counts exist. Seating introduces holds/adjacency/blocks where counts aren’t authoritative. Recommended invariant:
+  - `supply.status = 'available'` iff `commercial.maxSelectable > 0` and seat-map constraints pass
+  - `supply.status = 'none'` iff `commercial.maxSelectable = 0` or seat-map closed
+  - `supply.status = 'unknown'` during seat session setup/errors
+- Add reason codes like `seat_map_unavailable`, `seats_hold_active`, `adjacency_required`, `single_seat_gap`, `provider_error` for UI messaging.
 
 ### Gating Axis
 
