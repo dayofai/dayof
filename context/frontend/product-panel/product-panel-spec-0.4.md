@@ -27,9 +27,9 @@
 
 8. **Rendering Composition (Derived Atoms Only)**
 
-   - Row presentation (normal/locked/suppressed)
+   - Row presentation (normal/locked)
    - Purchasable boolean
-   - CTA decision tree _(incl. approvalRequired → Request)_
+   - CTA decision tree
    - Quantity & price visibility rules
 
 9. **Gating & Unlock (No Leakage)**
@@ -129,8 +129,13 @@
         "variant": "info",
         "priority": 90
       }
-    ]
+    ],
+    "effectivePrefs": {
+      "showTypeListWhenSoldOut": true,
+      "displayPaymentPlanAvailable": false
+    }
   },
+  "sections": [{ "id": "main", "label": "Tickets", "order": 1 }],
   "items": [
     {
       "product": {
@@ -150,7 +155,15 @@
         "demand": { "kind": "none", "reasons": [] },
         "messages": []
       },
-      "commercial": { "maxSelectable": 6 },
+      "commercial": {
+        "price": {
+          "amount": 5000,
+          "currency": { "code": "USD", "base": 10, "exponent": 2 },
+          "scale": 2
+        },
+        "feesIncluded": false,
+        "maxSelectable": 6
+      },
       "display": { "badges": [] }
     }
   ],
@@ -213,7 +226,7 @@ _No local countdown strings, no client‑invented banners, no approval flows, no
   - `gating.listingPolicy` ∈ `"omit_until_unlocked"` (default) | `"visible_locked"`
   - Access‑code validation is server‑side only.
 
-- **Demand axis:** `demand.kind` ∈ `"none" | "waitlist" | "notifyMe"`.
+- **Demand axis:** `demand.kind` ∈ `"none" | "waitlist" | "notify_me"`.
 - **Unified messages:** row‑level display text comes **only** from `state.messages[]`
   Each message MAY include `{ code, text?, params?, placement?, variant?, priority? }`.
 - **Panel banners:** come **only** from `context.panelNotices[]` (priority‑ordered; informational only, not primary CTAs).
@@ -336,6 +349,7 @@ export type RowState = {
   quantityUI: QuantityUI;
   priceUI: PriceUI;
   cta: RowCTA;
+  maxSelectable: number;
 };
 
 export type SectionState = {
@@ -603,7 +617,7 @@ This separation makes the system **testable** (toggle one axis at a time), **ext
 
 ### **Normative**
 
-- `demand.kind` **MUST** be one of: `"none" | "waitlist" | "notifyMe"`.
+- `demand.kind` **MUST** be one of: `"none" | "waitlist" | "notify_me"`.
 - `demand.reasons[]` **MAY** annotate machine facts (e.g., `waitlist_available`).
 - Demand **does not** override gating: if `gating.required && !satisfied`, the client **MUST NOT** surface demand CTAs that would leak locked inventory.
 - CTA mapping from `demand.kind` is defined in §8 (Rendering/CTA Decision).
@@ -619,7 +633,7 @@ This separation makes the system **testable** (toggle one axis at a time), **ext
 "demand": { "kind": "waitlist", "reasons": ["waitlist_available"] }
 
 // Notify-me (before sale)
-"demand": { "kind": "notifyMe", "reasons": [] }
+"demand": { "kind": "notify_me", "reasons": [] }
 
 // No alternate
 "demand": { "kind": "none", "reasons": [] }
@@ -628,7 +642,7 @@ This separation makes the system **testable** (toggle one axis at a time), **ext
 ### **Tests**
 
 - With `supply.status="none"` and `demand.kind="waitlist"` and gate satisfied (or not required), CTA **MUST** resolve to **Join Waitlist** (per §8).
-- With `temporal.phase="before"` and `demand.kind="notifyMe"`, CTA **MUST** resolve to **Notify Me** (per §8).
+- With `temporal.phase="before"` and `demand.kind="notify_me"`, CTA **MUST** resolve to **Notify Me** (per §8).
 - With `gating.required=true` and `satisfied=false`, demand CTAs **MUST NOT** appear (until unlocked).
 - **No approval CTAs:** The client **MUST NOT** render any "Request Access" or approval-related CTAs; these are not part of this contract.
 
@@ -639,7 +653,7 @@ This separation makes the system **testable** (toggle one axis at a time), **ext
 ### **Normative**
 
 - **No duplication:** A cause appears once (in its axis' `reasons[]`); display text appears once (`state.messages[]`) or as `context.panelNotices[]`.
-- **Gating precedence:** If `gating.required=true` AND `gating.satisfied=false`, demand CTAs (waitlist/notifyMe) **MUST NOT** be shown, even if `demand.kind` is set.
+- **Gating precedence:** If `gating.required=true` AND `gating.satisfied=false`, demand CTAs (waitlist/notify_me) **MUST NOT** be shown, even if `demand.kind` is set.
   - **Rationale:** Prevents leaking locked inventory. A waitlist CTA for an unsatisfied gated item would reveal its existence to unauthorized users.
   - **Example:** A members-only ticket sells out. The server sets `demand.kind="waitlist"` but keeps `gating.satisfied=false` for non-members. The client shows neither purchase nor waitlist CTAs until the gate is satisfied.
 - **Visibility vs. lock:** Visibility is controlled by **sendability** (`omit_until_unlocked` or server omission). Locking is a **rendered state** of a **sent** item.
@@ -745,7 +759,7 @@ The server is the single source for configuration, banner text, and copy artifac
 
   - Copy registries:
 
-    - `copyTemplates[]` **MAY** supply templates keyed by `code` (for interpolating `messages[].params`).
+    - `copyTemplates[]` **MAY** supply templates with `{ key, template }` structure, where `key` matches `messages[].code` for interpolating `messages[].params`.
     - `clientCopy` **MAY** provide client‑reactive strings (e.g., min/max selection errors).
 
   - Help text:
@@ -790,7 +804,7 @@ Each element in `items[]` is a **Panel Item** the client renders verbatim (no cl
       - See §3.2 for full spec.
     - `gating`: `{ required: boolean, satisfied: boolean, listingPolicy: "omit_until_unlocked" | "visible_locked", reasons[], requirements?[] }`
       - See §3.3 for full spec including `requirements[]` shape (kind, validWindow, limit).
-    - `demand`: `{ kind: "none" | "waitlist" | "notifyMe", reasons[] }`
+    - `demand`: `{ kind: "none" | "waitlist" | "notify_me", reasons[] }`
       - See §3.4 for full spec.
 
     **Display text channel (composes axis info into UI strings):**
@@ -882,7 +896,7 @@ Each element in `items[]` is a **Panel Item** the client renders verbatim (no cl
 
 - **Dynamic updates**: As the user changes selection quantities, the client **requests** a new payload from the server (or receives a push update). The server recalculates `pricing` including all fees, taxes, discounts, payment plan effects, etc. The client **replaces** the footer with the new `pricing` object.
 
-- Absence of `pricing` or missing lines **MUST NOT** trigger client recomputation; the footer simply does not render lines that are not provided.
+- **Always present**: `pricing` is always included in the payload. If there is nothing to display yet (e.g., no selection), send `{ currency, lineItems: [] }`. The client **MUST NOT** compute or backfill totals; it renders only what the server provides.
 
 ---
 
@@ -1137,7 +1151,7 @@ Understanding how context, items, and pricing work together:
 - **Pricing authority**
 
   - Given `pricing.lineItems=[]`, the footer **MUST** render no lines (no client recomputation); changing quantities **MUST** request new server pricing rather than compute locally.
-  - **Pricing removal:** Removing `pricing` from the payload causes the client to omit the footer; the client **MUST NOT** compute totals locally.
+  - `pricing` is always present; the client **MUST NOT** compute totals locally under any circumstances.
 
 ---
 
@@ -2231,7 +2245,7 @@ The client **MUST** derive, per `items[]` element:
 
     1. If `isPurchasable` → `cta.kind="quantity"` and `cta.enabled = (commercial.maxSelectable > 0)`.
     2. Else if `state.supply.status === "none"` **and** `state.demand.kind === "waitlist"` → `cta.kind="waitlist"` (enabled).
-    3. Else if `state.temporal.phase === "before"` **and** `state.demand.kind === "notifyMe"` → `cta.kind="notify"` (enabled).
+    3. Else if `state.temporal.phase === "before"` **and** `state.demand.kind === "notify_me"` → `cta.kind="notify"` (enabled).
     4. Else → `cta.kind="none"`.
 
 - **CTA label text**
@@ -2266,13 +2280,13 @@ The client **MUST** derive, per `items[]` element:
 
 #### C) CTA resolution (in order; first match wins)
 
-| Condition                                                          | `cta.kind` | Notes                                                                   |
-| ------------------------------------------------------------------ | ---------- | ----------------------------------------------------------------------- |
-| `presentation === "locked"`                                        | `none`     | Gate precedence; see §3.5                                               |
-| `isPurchasable`                                                    | `quantity` | Quantity control shown if `commercial.maxSelectable > 0`                |
-| `supply.status === "none"` **AND** `demand.kind === "waitlist"`    | `waitlist` | Label from `messages[]` or `copyTemplates`; action handler is app‑level |
-| `temporal.phase === "before"` **AND** `demand.kind === "notifyMe"` | `notify`   | Label from payload                                                      |
-| Otherwise                                                          | `none`     | Purely informational row                                                |
+| Condition                                                           | `cta.kind` | Notes                                                                   |
+| ------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------- |
+| `presentation === "locked"`                                         | `none`     | Gate precedence; see §3.5                                               |
+| `isPurchasable`                                                     | `quantity` | Quantity control shown if `commercial.maxSelectable > 0`                |
+| `supply.status === "none"` **AND** `demand.kind === "waitlist"`     | `waitlist` | Label from `messages[]` or `copyTemplates`; action handler is app‑level |
+| `temporal.phase === "before"` **AND** `demand.kind === "notify_me"` | `notify`   | Label from payload                                                      |
+| Otherwise                                                           | `none`     | Purely informational row                                                |
 
 #### D) Quantity & Price visibility
 
@@ -2367,7 +2381,7 @@ The client **MAY** derive rollups **only** for layout/controls, never to show ba
       "listingPolicy": "omit_until_unlocked",
       "reasons": []
     },
-    "demand": { "kind": "notifyMe", "reasons": [] },
+    "demand": { "kind": "notify_me", "reasons": [] },
     "messages": [
       {
         "code": "outside_window",
@@ -2471,7 +2485,7 @@ function deriveCTA(item, pres, purch) {
   const s = item.state;
   if (s.supply.status === "none" && s.demand.kind === "waitlist")
     return { kind: "waitlist", enabled: true };
-  if (s.temporal.phase === "before" && s.demand.kind === "notifyMe")
+  if (s.temporal.phase === "before" && s.demand.kind === "notify_me")
     return { kind: "notify", enabled: true };
   return { kind: "none", enabled: false };
 }
@@ -2496,7 +2510,7 @@ function deriveCTA(item, pres, purch) {
   _Expect_ `isPurchasable=false`, `quantityUI="hidden"`, `priceUI="hidden"`. If the server wants copy, it supplies a message (e.g., “Availability updating…”).
 
 - **Notify vs. waitlist priority**
-  _Given_ `temporal.phase="before"`, `demand.kind="notifyMe"`, and later a refresh with `supply.status="none"` and `demand.kind="waitlist"`
+  _Given_ `temporal.phase="before"`, `demand.kind="notify_me"`, and later a refresh with `supply.status="none"` and `demand.kind="waitlist"`
   _Expect_ CTA moves from `notify` to `waitlist` after refresh (no client heuristics).
 
 - **No auto banners**
@@ -2556,7 +2570,8 @@ The client **derives UI state** from server facts using pure functions (atoms). 
 
 **Allowed derivations:**
 
-- **Row presentation:** `normal | locked | suppressed` from server facts (locked = present + `gating.required && !satisfied`).
+- **Row presentation:** `normal | locked` from server facts (locked = present + `gating.required && !satisfied`).
+  - Items with `listingPolicy="omit_until_unlocked"` are not sent; they have no presentation state.
 - **Purchasable boolean:** `temporal.phase="during"` AND `supply.status="available"` AND (gate satisfied or not required).
 - **CTA selection:** `purchase` / `join_waitlist` / `notify_me` / `none` from **server fields only** (`demand.kind`, `supply.status`, `temporal.phase`, gating).
 - **Selection validity:** Enable/disable bottom CTA against `context.orderRules` (min types/tickets), without computing business policy.
@@ -2643,7 +2658,7 @@ Use this when editing schemas, payloads, and fixtures. Items marked **removed** 
 | Area               | Previously used (do not ship)             | Ship now (canonical)                                             | Notes                                  |
 | ------------------ | ----------------------------------------- | ---------------------------------------------------------------- | -------------------------------------- |
 | Availability axis  | `availability.*`, `stock`, `inventory`    | **`supply.status`**, `supply.reasons`, `supply.remaining?`       | "inventory/stock" are forbidden terms. |
-| Demand axis        | `demandCapture`                           | **`demand.kind`** ∈ `none \| waitlist \| notifyMe`               | Single noun, standard CTAs.            |
+| Demand axis        | `demandCapture`                           | **`demand.kind`** ∈ `none \| waitlist \| notify_me`              | Single noun, standard CTAs.            |
 | Gating visibility  | `visibilityPolicy: "visible" \| "hidden"` | **`listingPolicy`**: `"omit_until_unlocked" \| "visible_locked"` | "Sendability" is explicit.             |
 | Hidden gating hint | Row placeholders, counts of hidden SKUs   | **`context.gatingSummary.hasHiddenGatedItems: boolean`**         | Boolean hint only; no leakage.         |
 | Row text channels  | `reasonTexts`, `microcopy` split          | **`state.messages[]`** (+ optional `copyTemplates`)              | One display channel per row.           |
@@ -2941,7 +2956,7 @@ gating: {
   listingPolicy: "omit_until_unlocked" | "visible_locked"
   reasons: string[]
 }
-demand.kind: "none" | "waitlist" | "notifyMe"
+demand.kind: "none" | "waitlist" | "notify_me"
 
 // Messaging
 state.messages[]: { code: string; text?: string; params?: {}; placement: string; variant?: "neutral" | "info" | "warning" | "error"; priority?: number }
