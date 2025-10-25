@@ -2636,6 +2636,603 @@ The client **derives UI state** from server facts using pure functions (atoms). 
 
 .
 
+## 9. Gating & Unlock (No Leakage)
+
+> **Purpose:** Define how access‑controlled items are represented, hidden, revealed, and rendered—without leaking SKU identity, price, or counts before authorization. This section is **normative** and composes with §§3.3, 5.3/5.3a, 7, 8, and 13.
+
+---
+
+### 9.1 Normative
+
+#### A. Authoritative fields & sendability
+
+- Each item’s gating lives in `state.gating`:
+  `{ required: boolean, satisfied: boolean, listingPolicy: "omit_until_unlocked"|"visible_locked", reasons[], requirements?[] }`.
+  See §3.3 for the full axis shape.
+- **Default sendability:** If `required=true` **and** `satisfied=false` and `listingPolicy` is **absent**, treat it as `"omit_until_unlocked"`.
+- **Omit policy (`"omit_until_unlocked"`):**
+
+  - When unsatisfied, the item **MUST NOT** appear in `items[]`.
+  - The **only** allowed hint is `context.gatingSummary.hasHiddenGatedItems: boolean`. No placeholders, no counts, no names.
+
+- **Visible‑locked policy (`"visible_locked"`):**
+
+  - When unsatisfied, the item **MUST** be present in `items[]` but rendered as **locked**.
+  - While locked, price **MUST** be **masked**, quantity UI **MUST** be **hidden**, and row CTA **MUST** be **none** (see §8 decision tables).
+
+- **Unlock transition:** Upon successful unlock, the server **MUST**:
+
+  - Include previously omitted items in `items[]` **or** flip visible‑locked rows to `gating.satisfied=true`.
+  - Recompute `commercial.maxSelectable` and `pricing` as needed.
+  - Update `context.gatingSummary.hasHiddenGatedItems` accordingly (see §9.4).
+
+#### B. GatingSummary (panel‑level hints)
+
+- `context.gatingSummary` **MUST** be present **iff** gating exists for the event.
+- It **MUST** include:
+
+  - `hasHiddenGatedItems: boolean` — `true` **iff** there exists at least one **omitted** gated item that currently has purchasable stock (per §8 purchasability) or could become available during the current session (server decision).
+    _Do not set true for items that are omitted but permanently unavailable._
+
+- It **MAY** include:
+
+  - `hasAccessCode: boolean` — feature presence hint only.
+
+- Clients **MUST NOT** infer anything beyond this boolean (no SKU counts, no names, no ranges).
+
+#### C. Unlock UX derivation (panel‑level, not notices)
+
+- The access‑code UI (the **AccessCodeCTA**) is **derived**, not configured:
+
+  - It **MUST** appear when **either**:
+
+    - `context.gatingSummary.hasHiddenGatedItems === true`, **or**
+    - Any visible item is locked: `gating.required && !gating.satisfied && listingPolicy="visible_locked"`.
+      _(Matches §5.3a.)_
+
+- Panel banners about codes (e.g., instructional “Enter access code…”) **MUST** come from `context.panelNotices[]` (optional). The AccessCodeCTA itself is **not** a notice (see §5.3/§5.3a).
+
+#### D. No leakage & precedence
+
+- Clients **MUST NOT**:
+
+  - Render row placeholders for omitted items.
+  - Display or log codes, tokens, or any derived inference about hidden SKUs.
+  - Surface demand CTAs (waitlist/notify) for an item while it is gated and unsatisfied. **Gating precedence applies.** (See §3.5 and §8.)
+
+- Locked rows (`visible_locked`) **MUST** mask price and hide quantity controls regardless of `commercial.price` presence (§6).
+
+#### E. Validation & error handling
+
+- Access‑code validation, rate limiting, and unlock token issuance happen **server‑side**. The client **MUST NOT** validate or rate‑limit locally.
+- On invalid/expired code, the server returns a payload state that conveys errors via:
+
+  - A panel‑level notice (e.g., `{ code:"code_invalid", variant:"error", text:"Invalid access code" }`), **or**
+  - A row message for a **still‑locked** row (e.g., `{ code:"code_invalid", placement:"row.under_title", variant:"error" }`).
+    The client renders **only** what the payload says (no local strings), per §7.
+
+#### F. Requirements metadata (optional, for copy only)
+
+- `gating.requirements[]` **MAY** include structured facts (e.g., `{ kind:"unlock_code", satisfied:false, validWindow, limit }`).
+- Clients **MUST** treat `requirements[]` as **explanatory** metadata only (copy and tooling). They **MUST NOT** derive purchasability or sendability from it. `gating.satisfied` remains authoritative.
+
+#### G. State replacement
+
+- After any unlock attempt, the client **MUST** replace local derived state from the **new** payload (no local flips, no predictions). See §8.3 and §13.
+
+---
+
+### 9.2 Rationale
+
+- **Zero‑leak default:** Scrapers love disabled rows. `omit_until_unlocked` eliminates name/price leakage by not sending the row at all.
+- **Two explicit modes:** Marketing sometimes needs a tease. `visible_locked` is the opt‑in tease, with strict masking rules.
+- **One unlock surface:** Keeping the AccessCodeCTA panel‑level avoids per‑row code UX complexity and aligns with `gatingSummary`.
+- **Server as oracle:** The server owns the unlock lifecycle, stock truth, and clamp. The client merely re‑renders on new facts.
+
+---
+
+### 9.3 Decision tables
+
+#### A) Sendability & presentation
+
+| `required` | `satisfied` | `listingPolicy`       | In `items[]`? | Row `presentation` | Price UI | Quantity UI | Row CTA |
+| ---------- | ----------- | --------------------- | ------------- | ------------------ | -------- | ----------- | ------- |
+| false      | —           | —                     | ✅            | `normal`           | per §8   | per §8      | per §8  |
+| true       | false       | `omit_until_unlocked` | ❌            | —                  | —        | —           | —       |
+| true       | false       | `visible_locked`      | ✅            | `locked`           | masked   | hidden      | none    |
+| true       | true        | _(either)_            | ✅            | `normal`           | per §8   | per §8      | per §8  |
+
+#### B) When to show the AccessCodeCTA (panel‑level)
+
+| Condition                                                                            | Show AccessCodeCTA? |
+| ------------------------------------------------------------------------------------ | ------------------- |
+| `context.gatingSummary.hasHiddenGatedItems === true`                                 | ✅                  |
+| Any visible item locked (`required && !satisfied && listingPolicy="visible_locked"`) | ✅                  |
+| Neither of the above                                                                 | ❌                  |
+
+> Instructional banners about codes are optional notices (`context.panelNotices[]`), separate from the AccessCodeCTA.
+
+#### C) Demand precedence (no leakage)
+
+| Locked state? (`required && !satisfied`) | `demand.kind`              | Row CTA                  |
+| ---------------------------------------- | -------------------------- | ------------------------ |
+| true                                     | `"waitlist"`/`"notify_me"` | **none**                 |
+| false                                    | `"waitlist"`               | `join_waitlist` (per §8) |
+| false                                    | `"notify_me"`              | `notify` (per §8)        |
+
+---
+
+### 9.4 Server obligations (for clarity)
+
+- **`hasHiddenGatedItems` truthiness:**
+  Set `true` when **any omitted** gated SKU is meaningfully unlockable (e.g., has stock or may open during the current sale), `false` otherwise. Do not thrash this flag for transient, non‑purchasable states.
+- **After unlock:**
+
+  - Include newly unlocked items (previously omitted), or flip `satisfied=true` on formerly locked items.
+  - Recompute `commercial.maxSelectable` and all `pricing`.
+  - Adjust `hasHiddenGatedItems` to reflect remaining hidden stock (it may stay `true` if the code only unlocked a subset).
+
+- **Error states:** Convey invalid/expired/limit‑exhausted outcomes via messages/notices; never rely on client‑invented copy.
+
+---
+
+### 9.5 Examples (tiny, canonical)
+
+#### A) Hidden until unlock (default)
+
+```jsonc
+// Payload (pre-unlock): the gated item is omitted; only a hint + optional notice
+"context": {
+  "gatingSummary": { "hasHiddenGatedItems": true },
+  "panelNotices": [
+    { "code": "requires_code", "variant": "info", "text": "Enter access code to view tickets", "priority": 90 }
+  ]
+},
+"items": [
+  // ... public items only
+]
+```
+
+#### B) Visible locked (tease)
+
+```jsonc
+{
+  "product": {
+    "id": "prod_members",
+    "name": "Members Presale",
+    "type": "ticket"
+  },
+  "state": {
+    "temporal": { "phase": "during", "reasons": [] },
+    "supply": { "status": "available", "reasons": [] },
+    "gating": {
+      "required": true,
+      "satisfied": false,
+      "listingPolicy": "visible_locked",
+      "reasons": ["requires_code"]
+    },
+    "demand": { "kind": "none", "reasons": [] },
+    "messages": [
+      {
+        "code": "requires_code",
+        "text": "Requires access code",
+        "placement": "row.under_title",
+        "variant": "info",
+        "priority": 80
+      }
+    ]
+  },
+  "commercial": {
+    "price": {
+      "amount": 9000,
+      "currency": { "code": "USD", "base": 10, "exponent": 2 },
+      "scale": 2
+    },
+    "feesIncluded": false,
+    "maxSelectable": 0
+  },
+  "display": { "badges": ["Members"] }
+}
+```
+
+#### C) After successful unlock
+
+```jsonc
+// Same item after server validation
+"state": {
+  "temporal": { "phase": "during", "reasons": [] },
+  "supply": { "status": "available", "reasons": [] },
+  "gating": { "required": true, "satisfied": true, "listingPolicy": "visible_locked", "reasons": [] },
+  "demand": { "kind": "none", "reasons": [] },
+  "messages": []
+},
+"commercial": { "maxSelectable": 2 }
+```
+
+#### D) Invalid code (panel‑level)
+
+```jsonc
+"context": {
+  "gatingSummary": { "hasHiddenGatedItems": true },
+  "panelNotices": [
+    { "code": "code_invalid", "variant": "error", "text": "Invalid access code. Please try again.", "priority": 100 }
+  ]
+}
+```
+
+#### E) Requirements metadata (explanatory only)
+
+```jsonc
+"gating": {
+  "required": true,
+  "satisfied": false,
+  "listingPolicy": "visible_locked",
+  "requirements": [{
+    "kind": "unlock_code",
+    "satisfied": false,
+    "validWindow": { "startsAt": "2025-10-22T00:00:00Z", "endsAt": "2025-10-25T23:59:59Z" },
+    "limit": { "maxUses": 100, "usesRemaining": 23 }
+  }],
+  "reasons": ["requires_code"]
+}
+```
+
+#### F) Public sold out + hidden gated (no “sold out” dead‑end)
+
+```jsonc
+"context": {
+  "gatingSummary": { "hasHiddenGatedItems": true },
+  "panelNotices": [
+    { "code": "requires_code", "variant": "info", "text": "Enter access code to view tickets", "priority": 90 }
+  ]
+},
+"items": [
+  // public items with supply.status="none"
+],
+// Panel SHOULD NOT collapse to final sold-out state; show AccessCodeCTA.
+```
+
+---
+
+### 9.6 Tests (acceptance checks)
+
+- **Omit enforcement**
+  _Given_ `required=true`, `satisfied=false`, `listingPolicy="omit_until_unlocked"`
+  _Expect_ item **absent** from `items[]`; `context.gatingSummary.hasHiddenGatedItems=true` **iff** omitted stock is meaningfully available.
+
+- **Locked rendering**
+  _Given_ `required=true`, `satisfied=false`, `listingPolicy="visible_locked"`
+  _Expect_ row `presentation="locked"`, **price masked**, **quantity hidden**, **CTA none**; render any messages per §7.
+
+- **Unlock transition**
+  _When_ server validates code → next payload has either newly included items or flipped `satisfied=true`
+  _Expect_ client to **replace** state and re‑derive (§8). No local flips.
+
+- **Gating precedence over demand**
+  _Given_ locked row and `demand.kind="waitlist"`
+  _Expect_ **no** waitlist CTA until `satisfied=true`. (Row CTA remains none.)
+
+- **AccessCodeCTA derivation**
+  _Given_ `hasHiddenGatedItems=true` **or** any visible locked row
+  _Expect_ AccessCodeCTA present (panel‑level).
+  _Given_ neither condition
+  _Expect_ no AccessCodeCTA.
+
+- **Error surfacing**
+  _Given_ invalid code
+  _Expect_ error displayed **only** via payload text (panel notice or row message); no client‑invented copy.
+
+- **No leakage**
+  _Given_ omitted items
+  _Expect_ no SKU placeholders, names, or prices in UI or logs; only the boolean hint in `gatingSummary`.
+
+- **Price masking**
+  _Given_ `presentation="locked"`
+  _Expect_ price UI **masked** even if `commercial.price` is present.
+
+- **Partial unlock**
+  _Given_ code unlocks a subset of gated SKUs
+  _Expect_ newly unlocked items included; `hasHiddenGatedItems` may remain `true` if others remain omitted.
+
+---
+
+### 9.7 Developer checklist (quick)
+
+- [ ] Enforce sendability: omit vs visible‑locked exactly as specified by `listingPolicy`.
+- [ ] Show AccessCodeCTA when `hasHiddenGatedItems` is true **or** any visible row is locked.
+- [ ] Mask price + hide quantity on locked rows; no row CTA while locked.
+- [ ] Do not render demand CTAs (waitlist/notify) for locked rows.
+- [ ] Never invent copy; render `messages[]` / `panelNotices[]` only (templates via `copyTemplates`).
+- [ ] After unlock attempt, re‑render from **new** payload; do not toggle `satisfied` locally.
+- [ ] Do not log codes/tokens (see §13 Security guardrails).
+
+---
+
+### 9.8 Consistency audit (cross‑section)
+
+- **§3.3 (Gating axis):** Listing policy, reasons, and `requirements[]` semantics are unchanged and respected here. ✅
+- **§5.3/5.3a (Prefs & CTAs):** AccessCodeCTA derivation and panel‑notice separation match the rules above. ✅
+- **§7 (Messages):** All user copy comes from `messages[]`/`panelNotices[]`/`copyTemplates`; no `reasonTexts` usage. ✅
+- **§8 (Rendering):** Presentation, price masking, CTA resolution (including precedence) align with the decision tables here. ✅
+- **§13 (Guardrails):** No schedule/availability/clamp math; no leakage; no local unlock; no per‑row payment‑plan badges. ✅
+
+> With these rules, gated flows stay secure by architecture: hidden items don’t exist client‑side until the server says otherwise, and visible locks never leak price or enable alternate CTAs prematurely.
+
+.
+
+.
+
+███████████▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒░░░░░░░░░░
+
+.
+
+.
+
+## 10. Relations & Add‑ons _(selection vs ownership; `matchBehavior`)_
+
+> **What this section does:** defines how a row can **depend on** other rows (parents), and how the client presents and validates those dependencies **without** inventing business rules. This is **not** a new axis; it’s metadata used to constrain selection and explain behavior.
+
+---
+
+### 10.1 **Normative (contract you can validate)**
+
+#### A. Shape
+
+- An item **MAY** include `relations`:
+
+  ```ts
+  relations?: {
+    parentProductIds?: string[];         // IDs this item depends on
+    matchBehavior?: "per_ticket" | "per_order";
+  }
+  ```
+
+- If `relations.parentProductIds` is **absent or empty** ⇒ the item is **standalone** (not an add‑on).
+- If `relations.parentProductIds` is **present and non‑empty** ⇒ the item is an **add‑on** to those **parent** products (IDs must match `items[].product.id` present or potentially present in this panel).
+
+#### B. Semantics (ownership & selection)
+
+- **Add‑on definition:** Any item with `parentProductIds[]` is an **add‑on**. “Add‑on” is a **relationship**, not a product type. `product.type` stays `"ticket" | "digital" | "physical"`.
+- **Parent set:** The **parent set** for an add‑on is the multiset sum of selected quantities across **all** `parentProductIds` that are currently visible/unlocked.
+
+  - Let `parentSelectedCount = Σ selection[parentId]` across the listed IDs (client selection state).
+
+- **`matchBehavior` meaning:**
+
+  - `"per_ticket"` ⇒ An add‑on can be selected **at most** one‑for‑one with **the current** `parentSelectedCount`.
+  - `"per_order"` ⇒ An add‑on is limited **at the order level** regardless of parent quantity (typically one per order or a small cap).
+
+- **Default:** If `parentProductIds[]` exists and `matchBehavior` is **omitted**, clients **MUST** treat it as `"per_order"` for compatibility.
+
+#### C. Server responsibilities
+
+- **Authoritative clamp:** `commercial.maxSelectable` remains the **authoritative cap** for every item (see §§4, 6, 13).
+  The server **MUST** recompute `maxSelectable` for add‑ons on every payload refresh to reflect:
+
+  - stock/holds/limits **and**
+  - the current selection of their parents (per `matchBehavior`).
+
+- **Parent‑absent state:** When `parentSelectedCount === 0`, the server **SHOULD** send `maxSelectable=0` for add‑ons; on parent selection changes, it **MUST** update `maxSelectable` accordingly in the next payload.
+- **Gating zero‑leak:** If **all** parents for an add‑on are omitted due to gating (`omit_until_unlocked`) or are otherwise not sendable, the add‑on **MUST** also be omitted (or sent with `maxSelectable=0` and its own gating), so that parent existence is not leaked.
+- **Multi‑parent:** When multiple parents are listed, the server’s clamp **MUST** reflect the **sum** of all selected parents for `"per_ticket"`, or the order cap for `"per_order"` (still ≤ `maxSelectable`).
+
+#### D. Client responsibilities
+
+- **Never invent caps:** The client **MUST NOT** compute or enforce numeric quantity caps besides `commercial.maxSelectable`.
+  _Corollary:_ The client **MUST** initiate a payload refresh whenever parent selection changes so the server can update dependent `maxSelectable` values.
+- **Visibility & purchasability:** Add‑ons follow the **same** axes rules as any item (temporal, supply, gating, demand). If `maxSelectable=0` or the derived `isPurchasable` (§8) is false, quantity UI is hidden.
+- **Parent presence affordance:** When an add‑on has `parentProductIds[]` and `maxSelectable=0`, the client **MAY** render explanatory copy using server‑provided strings (e.g., `clientCopy.addon_requires_parent`) but **MUST NOT** inject local prose.
+- **Reduce on refresh:** If a payload refresh lowers `maxSelectable` below the user’s current add‑on selection, the client **MUST** clamp the selection down to the new `maxSelectable` (see §8 and selection family) and reflect it immediately.
+- **No leakage:** Clients **MUST NOT** infer or surface any information about parents that are omitted due to gating. No placeholders, counts, or prices.
+
+#### E. Interactions with other fields
+
+- **Limits & caps:** `limits.perOrder`/`limits.perUser` remain informational; `maxSelectable` already reflects them. Clients **MUST NOT** enforce `limits.*` directly.
+- **Demand:** Add‑ons **may** use `demand.kind` (`waitlist`, `notify_me`) like any item. Gating precedence (§3.5) still applies.
+- **Sectioning:** The server **SHOULD** place add‑ons under a distinct section via `display.sectionId` (e.g., `"add_ons"`), but clients **MUST** render them wherever they are assigned.
+
+---
+
+### 10.2 **Rationale (why this shape works)**
+
+- Keeps **one clamp** (`maxSelectable`) as the only numeric authority while allowing **relationship semantics** (per‑ticket/per‑order) to be expressed server‑side and reflected on each refresh.
+- Avoids client‑side math races (parent changes while stock updates) and **prevents leakage** when parents are gated/omitted.
+- Scales from trivial (one parking pass per order) to complex (many parents, dynamic holds) without changing client code.
+
+---
+
+### 10.3 **Examples (tiny, canonical)**
+
+#### A) Per‑ticket meal voucher (initial: no parent selected)
+
+```jsonc
+{
+  "product": { "id": "addon_meal", "name": "Meal Voucher", "type": "digital" },
+  "relations": {
+    "parentProductIds": ["prod_ga", "prod_vip"],
+    "matchBehavior": "per_ticket"
+  },
+  "state": {
+    "temporal": { "phase": "during", "reasons": [] },
+    "supply": { "status": "available", "reasons": [] },
+    "gating": {
+      "required": false,
+      "satisfied": true,
+      "listingPolicy": "omit_until_unlocked",
+      "reasons": []
+    },
+    "demand": { "kind": "none", "reasons": [] },
+    "messages": [
+      {
+        "code": "addon_requires_parent",
+        "text": "Add at least one ticket to select this add‑on",
+        "placement": "row.under_quantity",
+        "variant": "neutral",
+        "priority": 40
+      }
+    ]
+  },
+  "commercial": {
+    "price": {
+      "amount": 1500,
+      "currency": { "code": "USD", "base": 10, "exponent": 2 },
+      "scale": 2
+    },
+    "feesIncluded": false,
+    "maxSelectable": 0
+  },
+  "display": { "badges": ["Add‑on"], "sectionId": "add_ons" }
+}
+```
+
+_After the buyer selects **3** GA tickets and the client refreshes the payload:_
+
+```jsonc
+"commercial": {
+  "price": { "amount": 1500, "currency": { "code": "USD", "base": 10, "exponent": 2 }, "scale": 2 },
+  "feesIncluded": false,
+  "maxSelectable": 3
+}
+```
+
+#### B) Per‑order parking pass (cap 1), parent required
+
+```jsonc
+{
+  "product": {
+    "id": "addon_parking",
+    "name": "Parking Pass",
+    "type": "physical"
+  },
+  "relations": {
+    "parentProductIds": ["prod_ga", "prod_vip"],
+    "matchBehavior": "per_order"
+  },
+  "state": {
+    "temporal": { "phase": "during", "reasons": [] },
+    "supply": { "status": "available", "reasons": [] },
+    "gating": {
+      "required": false,
+      "satisfied": true,
+      "listingPolicy": "omit_until_unlocked",
+      "reasons": []
+    },
+    "demand": { "kind": "none", "reasons": [] },
+    "messages": []
+  },
+  "commercial": {
+    "price": {
+      "amount": 2000,
+      "currency": { "code": "USD", "base": 10, "exponent": 2 },
+      "scale": 2
+    },
+    "feesIncluded": false,
+    "limits": { "perOrder": 1 },
+    "maxSelectable": 0 // before any parent selected
+  },
+  "display": { "badges": ["Add‑on"], "sectionId": "add_ons" }
+}
+```
+
+_After selecting any parent tickets (≥1), refresh yields `maxSelectable: 1`._
+
+#### C) Hidden parent ⇒ add‑on omitted (zero‑leak)
+
+```jsonc
+// Parent product is gated and omitted with listingPolicy="omit_until_unlocked".
+// The add‑on referencing only that parent is also omitted.
+// Context hints gating, but does not leak what the add‑on is.
+"context": {
+  "gatingSummary": { "hasHiddenGatedItems": true },
+  "panelNotices": [
+    { "code": "requires_code", "text": "Enter access code to view all available options", "variant": "info", "priority": 90 }
+  ]
+}
+```
+
+---
+
+### 10.4 **How the UI derives behavior (mechanical)**
+
+> These rules use **only** server facts + current selection, and never compute money or availability.
+
+- **Quantity UI shows** only when (§8):
+
+  - `presentation === "normal"` **and**
+  - `isPurchasable === true` **and**
+  - `commercial.maxSelectable > 0`.
+
+- **Add‑on enablement loop (client duties):**
+
+  1. Parent selection changes → **POST** selection → server recalculates clamps/pricing.
+  2. Client receives refreshed payload → re‑derives UI.
+  3. Any add‑on whose `maxSelectable` increased/decreased updates its UI accordingly.
+
+- **“Per ticket” experience:** Buyers **experience** a one‑for‑one cap because the server reflects parent totals in `maxSelectable` on each refresh. The client **does not** compute a local numeric cap.
+- **“Per order” experience:** The server typically returns `maxSelectable=1` once any parent is selected; the client shows a single‑select affordance.
+
+---
+
+### 10.5 **Edge cases & tests (acceptance checks)**
+
+- **Parent absent ⇒ add‑on disabled**
+  _Given_ `relations.parentProductIds=["prod_ga"]`, `parentSelectedCount=0`
+  _Expect_ server sends `maxSelectable=0`; quantity UI hidden; any row message comes from payload (no client prose).
+
+- **Parent added ⇒ add‑on enabled (per_ticket)**
+  _Given_ buyer selects 3 GA; server refresh sets `maxSelectable=3`
+  _Expect_ quantity UI `stepper`, cap 3; price shown if `isPurchasable=true`.
+
+- **Parent reduced ⇒ add‑on clamped down**
+  _Given_ add‑on selection=3, then parent selection drops to 1; server refresh sets `maxSelectable=1`
+  _Expect_ client clamps selection to 1 immediately upon applying refresh.
+
+- **Per‑order cap respected**
+  _Given_ `"per_order"`, `limits.perOrder=1`, parentSelectedCount=4; server sends `maxSelectable=1`
+  _Expect_ quantity UI single‑select; attempts to exceed are prevented by `maxSelectable`.
+
+- **Hidden parent (omit) ⇒ add‑on omitted**
+  _Given_ the only parent for an add‑on is omitted due to `omit_until_unlocked`
+  _Expect_ the add‑on is also omitted (or `maxSelectable=0` with its own gating); no leakage of name/price.
+
+- **Locked add‑on masks price**
+  _Given_ add‑on has `gating.required=true && !satisfied` and `listingPolicy="visible_locked"`
+  _Expect_ `presentation="locked"`, price masked, quantity hidden, CTA none (per §§3.3, 6, 8).
+
+- **Multi‑parent sum (per_ticket)**
+  _Given_ `parentProductIds=["prod_ga","prod_vip"]`, selection GA=2, VIP=1 → parentSelectedCount=3
+  _Expect_ server returns `maxSelectable=3`; client displays cap 3.
+
+- **No client caps**
+  _Given_ any scenario above
+  _Expect_ client never computes `min(parentSelectedCount, X)` as a hard cap; it only applies the latest server `maxSelectable`.
+
+---
+
+### 10.6 **Developer checklist (quick)**
+
+- [ ] Treat any `relations.parentProductIds[]` item as an **add‑on**; do **not** change `product.type`.
+- [ ] Never compute numeric caps locally; always use `commercial.maxSelectable`.
+- [ ] On **any parent selection change**, trigger a server refresh; re‑derive UI from the new payload.
+- [ ] If a refresh lowers `maxSelectable`, clamp the current selection down to that value.
+- [ ] Do not leak gated parents: if parents are omitted, the dependent add‑on must not reveal them (trust server omission).
+- [ ] Place add‑ons in an “Add‑ons” section via `display.sectionId` when provided; otherwise render where assigned.
+- [ ] Use only payload copy (e.g., `state.messages[]`, `clientCopy`) to explain dependencies; no local strings.
+
+---
+
+**Author note:** This section deliberately preserves the spec’s single‑clamp discipline (**`maxSelectable` is king**) while giving the server all levers to express parent‑child constraints. The client’s job is to **refresh often** and **render faithfully**.
+
+.
+
+.
+
+███████████▓▓▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒░░░░░░░░░░
+
+.
+
+.
+
 # Appendix — Authoring & Migration Notes (non‑normative)
 
 > This appendix is **guidance for authors and implementers**. It explains naming choices, “forbidden → preferred” mappings, and practical “before/after” examples. The body of the spec remains the only normative source.
