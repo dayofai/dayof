@@ -2,6 +2,8 @@
 
 # Product Panel Contract v0.4
 
+> Deprecated and non‑authoritative. Refer to `context/frontend/product-panel/product-panel-spec-0.4.md` for the normative contract. This document is explanatory only and MUST NOT override the spec.
+
 ## Context and Guiding Principles
 
 **A.** _Multi-axis state model:_ Each product’s status is broken down into independent axes (Temporal, Supply, Gating, Demand, etc.) rather than a single aggregate state. This lets the server explicitly signal **why** a ticket is or isn’t available at any moment. The client simply reflects these states, showing clear reasons (e.g. “Sold out”, “Requires code”) provided by the server instead of deducing logic.

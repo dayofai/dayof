@@ -3,6 +3,8 @@
 
 # Product Panel Spec 0.4
 
+> Note: This document is the sole normative contract for the Product Panel. Any other documents are explanatory only and MUST NOT override this spec.
+
 ## Sections
 
 1. **Purpose & Scope**
@@ -1180,7 +1182,7 @@ The server **MAY** include UI preferences that shape **presentation**, not polic
 
   - `true` ⇒ keep rows visible (disabled) when everything’s sold out.
   - `false` ⇒ collapse to a compact sold‑out panel.
-  - Default is server‑defined; client renders whatever is sent.
+  - Default is server‑defined; client renders exactly what is sent. Clients **MUST NOT** assume UI defaults for absent fields.
 
 - `displayPaymentPlanAvailable: boolean` — indicates that installment plans exist at checkout.
 
@@ -1262,7 +1264,7 @@ The panel has two derived CTAs that are **not** `panelNotices[]`:
   - Event not on sale yet (`temporal.phase="before"`) + waitlist enabled → "Join Waitlist"
   - All tickets sold out (`supply.status="none"`) + waitlist → "Join Waitlist"
   - Sales ended (`temporal.phase="after"`) + waitlist for next event → "Join Waitlist"
-- **Label source:** The app provides panel CTA labels via app-level copy or `context.clientCopy` (e.g., `panel_cta_continue`, `panel_cta_waitlist`, `panel_cta_disabled`).
+- **Label source:** PanelActionButton labels **MUST** come from server-provided copy (e.g., `context.clientCopy`) or app-level copy that is sourced from the server (e.g., `panel_cta_continue`, `panel_cta_waitlist`, `panel_cta_disabled`). Clients **MUST NOT** hardcode these strings. See §5.4/§7.1 for template resolution rules.
 
 **AccessCodeCTA (positioned below PanelActionButton):**
 
@@ -1507,6 +1509,7 @@ _Rendering: Both messages appear under title, sorted by priority (requires_code 
 - **No per‑row payment‑plan badges.** Ever. It’s an order‑level concept.
 - **Messages require text or a template.** If neither is present, **omit** the message/notice.
 - **Templates are not business logic.** Interpolate parameters; do not compute counts, dates, or phases. Those originate server‑side.
+- **Unknown placeholders resolve to empty string.** When interpolating templates, any unknown `{placeholder}` **MUST** resolve to `""`.
 - **Respect placements and priorities.** Don't reshuffle banners or move messages to new locations.
 - **No `reasonTexts` mapping:** This is not part of the contract. Use `messages[]` and `copyTemplates[]` for all display text.
 
@@ -2184,6 +2187,7 @@ Rules:
 - [ ] Every item that needs inline text has **`state.messages[]`** (not `reasonTexts`, not legacy `microcopy`).
 - [ ] Every message has a **valid `placement`**.
 - [ ] If `text` is omitted, there is a **matching `copyTemplates[key==code]`** or the message is intentionally omitted.
+- [ ] When interpolating templates, any unknown `{placeholder}` resolves to `""` (empty string).
 - [ ] Messages render in **priority order** within their placement.
 - [ ] No client code translates machine codes; no hardcoded “Sold Out”, “Requires access code”, etc.
 
@@ -2529,6 +2533,8 @@ function deriveCTA(item, pres, purch) {
 - [ ] Do **not** invent banners or strings. Pull CTA labels via `messages[]`/`copyTemplates`.
 - [ ] Respect `commercial.maxSelectable` as the **only** clamp.
 - [ ] Mask price on locked rows; hide price when not purchasable.
+- [ ] If `isPurchasable=true` and `maxSelectable=0`, price is shown and quantity is hidden (see §8.2‑D).
+- [ ] When interpolating templates, any unknown `{placeholder}` resolves to `""` (empty string).
 - [ ] Collapse sold‑out lists only per `effectivePrefs.showTypeListWhenSoldOut`.
 - [ ] On any interaction, call server → replace payload → re‑derive.
 
@@ -2608,6 +2614,18 @@ function deriveCTA(item, pres, purch) {
 
 - Locked rows (`visible_locked`) **MUST** mask price and hide quantity controls regardless of `commercial.price` presence (§6).
 
+**Visual treatment of locked rows (implementation guidance):**
+
+- Locked rows typically appear **greyed-out** with a **lock icon** (visual indicator).
+- Price may be replaced with placeholder text like "Locked" or "—" (not just blank).
+- The row should clearly communicate its locked state through both visual styling and the message from `state.messages[]`.
+
+**Unlock confirmation pattern:**
+
+- When a gated item unlocks but has `supply.status="none"`, the item **MUST** still appear (as a disabled/sold-out row) to confirm the code worked.
+- This prevents user confusion ("Did my code work?") by showing the item exists even when unavailable.
+- The confirmation differs by `listingPolicy`: omitted items appear for the first time; `visible_locked` items transition from locked to unlocked-but-unavailable.
+
 #### E. Validation & error handling
 
 - Access‑code validation, rate limiting, and unlock token issuance happen **server‑side**. The client **MUST NOT** validate or rate‑limit locally.
@@ -2625,6 +2643,48 @@ function deriveCTA(item, pres, purch) {
 #### G. State replacement
 
 - After any unlock attempt, the client **MUST** replace local derived state from the **new** payload (no local flips, no predictions). See §8.3 and §13.
+
+#### H. Unlock flow (user journey)
+
+Understanding the complete unlock sequence helps implementers handle edge cases correctly:
+
+**Pre-unlock state (omit_until_unlocked):**
+
+- User loads panel → server sends **empty or partial** `items[]` (public items only, if any)
+- `context.gatingSummary.hasHiddenGatedItems=true` (the hint)
+- `context.panelNotices[]` includes unlock prompt: `{ code:"requires_code", text:"Enter access code to view tickets" }`
+- Client displays AccessCodeCTA prominently (input + "Apply Code" button)
+- User sees either: (a) no items if all are gated, or (b) public items marked sold out if those exist
+
+**Unlock attempt:**
+
+- User enters code → client POSTs to server `/panel/unlock` (or similar endpoint)
+- Server validates code server-side (checks signature, expiry, usage limits, etc.)
+
+**Post-unlock (success):**
+
+- Server responds with updated payload:
+  - Previously omitted items now appear in `items[]`
+  - Those items have `gating.satisfied=true`
+  - `context.gatingSummary.hasHiddenGatedItems` updates (may stay `true` if partial unlock)
+  - Panel notice may change or be removed
+- Client replaces state → atoms re-derive → React re-renders
+- User sees: newly visible items with `presentation="normal"` (if available) or sold-out status (if `supply.status="none"`)
+
+**Post-unlock (error):**
+
+- Server responds with error payload or notice:
+  - `context.panelNotices[]` includes `{ code:"code_invalid", variant:"error", text:"Invalid access code. Please try again." }`
+  - No items are unlocked; state remains unchanged
+- Client displays error banner (red, high priority)
+- User can retry with correct code
+
+**Critical edge case: Public sold out + hidden gated:**
+
+- **Scenario:** All visible items have `supply.status="none"` but `gatingSummary.hasHiddenGatedItems=true`
+- **Client behavior:** Do **NOT** show "Event Sold Out" final state; show "Enter access code" prompt instead
+- **Rationale:** Prevents misleading users into thinking nothing is available when gated inventory exists
+- **After unlock:** If gated items are also sold out, **then** show "Event Sold Out" (but user got confirmation their code worked)
 
 ---
 
@@ -2783,7 +2843,7 @@ function deriveCTA(item, pres, purch) {
 }
 ```
 
-#### F) Public sold out + hidden gated (no “sold out” dead‑end)
+#### F) Public sold out + hidden gated (no "sold out" dead‑end)
 
 ```jsonc
 "context": {
@@ -2794,9 +2854,51 @@ function deriveCTA(item, pres, purch) {
 },
 "items": [
   // public items with supply.status="none"
-],
-// Panel SHOULD NOT collapse to final sold-out state; show AccessCodeCTA.
+  {
+    "product": { "id": "prod_ga", "name": "General Admission", "type": "ticket" },
+    "state": {
+      "supply": { "status": "none", "reasons": ["sold_out"] },
+      "messages": [
+        { "code": "sold_out", "text": "Sold Out", "placement": "row.under_quantity", "priority": 100 }
+      ]
+    },
+    "commercial": { "maxSelectable": 0 }
+  }
+]
+// Panel SHOULD NOT collapse to final sold-out state; show AccessCodeCTA instead.
+// User sees: sold-out public items + prominent "Enter access code" prompt (not "Event Sold Out" finale).
 ```
+
+#### G) Reason code usage guidance
+
+Gating-related codes and their typical presentation:
+
+- **`requires_code`** (axis reason + panel notice + row message)
+
+  - As axis reason: `gating.reasons: ["requires_code"]`
+  - As panel notice: Instructional banner "Enter access code to view tickets" (info variant)
+  - As row message: Small text "Requires access code" under locked item title (info variant)
+  - Visual: Lock icon, greyed-out row styling
+
+- **`code_invalid`** (panel notice, error state)
+
+  - Shown after failed unlock attempt
+  - Panel notice: "Invalid access code. Please try again." (error variant, red banner)
+  - High priority (displays prominently)
+  - Client does NOT generate this; server includes it in error response payload
+
+- **`unlocked`** (row message, optional celebration)
+  - May appear after successful unlock: "Unlocked with your code" (neutral variant)
+  - Server may omit this if the unlocked state is obvious from newly visible items
+  - Purpose: explicit confirmation feedback
+
+**Visual treatment by code:**
+
+| Code            | Icon     | Styling    | Typical Placement            | Variant |
+| --------------- | -------- | ---------- | ---------------------------- | ------- |
+| `requires_code` | 🔒 Lock  | Grey/muted | Row: under title; Panel: top | info    |
+| `code_invalid`  | ⚠️ Alert | Red border | Panel: top banner            | error   |
+| `unlocked`      | ✓ Check  | Normal     | Row: under title (optional)  | neutral |
 
 ---
 
@@ -2840,9 +2942,21 @@ function deriveCTA(item, pres, purch) {
   _Given_ code unlocks a subset of gated SKUs
   _Expect_ newly unlocked items included; `hasHiddenGatedItems` may remain `true` if others remain omitted.
 
+- **Public sold out + hidden gated (no "sold out" dead-end)**
+  _Given_ all visible items have `supply.status="none"` **AND** `gatingSummary.hasHiddenGatedItems=true`
+  _Expect_ client **MUST NOT** display final "Event Sold Out" state; **MUST** show AccessCodeCTA and unlock prompt notice instead.
+  _Rationale_ Prevents misleading users when gated inventory still exists.
+
+- **Unlocked but sold out (confirmation feedback)**
+  _Given_ user successfully unlocks code but unlocked item has `supply.status="none"`
+  _Expect_ item appears as disabled/sold-out row (not omitted) to confirm code validation succeeded.
+  _User benefit_ Clear feedback: "Your code worked, but this ticket sold out."
+
 ---
 
 ### 9.7 Developer checklist (quick)
+
+**Core contract compliance:**
 
 - [ ] Enforce sendability: omit vs visible‑locked exactly as specified by `listingPolicy`.
 - [ ] Show AccessCodeCTA when `hasHiddenGatedItems` is true **or** any visible row is locked.
@@ -2851,6 +2965,19 @@ function deriveCTA(item, pres, purch) {
 - [ ] Never invent copy; render `messages[]` / `panelNotices[]` only (templates via `copyTemplates`).
 - [ ] After unlock attempt, re‑render from **new** payload; do not toggle `satisfied` locally.
 - [ ] Do not log codes/tokens (see §13 Security guardrails).
+
+**Visual implementation:**
+
+- [ ] Locked rows: greyed-out styling + lock icon + price placeholder ("Locked" or "—").
+- [ ] Reason code display: `requires_code` shows lock icon; `code_invalid` shows red error banner.
+- [ ] Unlock confirmation: unlocked items that are sold out still appear (disabled) to confirm code worked.
+
+**Edge case handling:**
+
+- [ ] Public sold out + `hasHiddenGatedItems=true`: show unlock prompt, NOT "Event Sold Out" finale.
+- [ ] Post-unlock sold out: render item as disabled row with sold-out message (confirmation feedback).
+- [ ] Invalid code: display server-provided error notice prominently; allow retry.
+- [ ] Partial unlock: keep AccessCodeCTA visible if `hasHiddenGatedItems` remains `true`.
 
 ---
 
@@ -2876,7 +3003,11 @@ function deriveCTA(item, pres, purch) {
 
 ## 10. Relations & Add‑ons _(selection vs ownership; `matchBehavior`)_
 
-> **What this section does:** defines how a row can **depend on** other rows (parents), and how the client presents and validates those dependencies **without** inventing business rules. This is **not** a new axis; it’s metadata used to constrain selection and explain behavior.
+> **What this section does:** defines how a row can **depend on** other rows (parents), and how the client presents and validates those dependencies **without** inventing business rules. This is **not** a new axis; it's metadata used to constrain selection and explain behavior.
+>
+> **Common use cases:** Add-ons like parking passes, meal vouchers, or merchandise that should only be purchasable alongside a main ticket. For example, a parking pass might be limited to one per order regardless of ticket quantity (`per_order`), while a meal voucher might be available for each ticket purchased (`per_ticket`).
+>
+> **Key principle:** The server is the final gatekeeper. It validates all parent-child relationships on submission, so even if a user bypassed the UI, the server's `maxSelectable` and order validation would catch invalid selections.
 
 ---
 
@@ -2908,6 +3039,11 @@ function deriveCTA(item, pres, purch) {
   - `"per_ticket"` ⇒ An add‑on can be selected **at most** one‑for‑one with **the current** `parentSelectedCount`.
   - `"per_order"` ⇒ An add‑on is limited **at the order level** regardless of parent quantity (typically one per order or a small cap).
 
+- **Practical examples:**
+
+  - `"per_ticket"`: A "Fast Pass" add-on for each ticket. If a user selects 3 VIP tickets, the client should allow up to 3 Fast Passes to match (enforced via server-updated `maxSelectable`).
+  - `"per_order"`: A "Parking Pass" limited to one per order. No matter how many GA or VIP tickets are selected, only one Parking Pass can be added. The UI would disable adding a second once `maxSelectable` is reached.
+
 - **Default:** If `parentProductIds[]` exists and `matchBehavior` is **omitted**, clients **MUST** treat it as `"per_order"` for compatibility.
 
 #### C. Server responsibilities
@@ -2928,8 +3064,9 @@ function deriveCTA(item, pres, purch) {
   _Corollary:_ The client **MUST** initiate a payload refresh whenever parent selection changes so the server can update dependent `maxSelectable` values.
 - **Visibility & purchasability:** Add‑ons follow the **same** axes rules as any item (temporal, supply, gating, demand). If `maxSelectable=0` or the derived `isPurchasable` (§8) is false, quantity UI is hidden.
 - **Parent presence affordance:** When an add‑on has `parentProductIds[]` and `maxSelectable=0`, the client **MAY** render explanatory copy using server‑provided strings (e.g., `clientCopy.addon_requires_parent`) but **MUST NOT** inject local prose.
-- **Reduce on refresh:** If a payload refresh lowers `maxSelectable` below the user’s current add‑on selection, the client **MUST** clamp the selection down to the new `maxSelectable` (see §8 and selection family) and reflect it immediately.
+- **Reduce on refresh:** If a payload refresh lowers `maxSelectable` below the user's current add‑on selection, the client **MUST** clamp the selection down to the new `maxSelectable` (see §8 and selection family) and reflect it immediately.
 - **No leakage:** Clients **MUST NOT** infer or surface any information about parents that are omitted due to gating. No placeholders, counts, or prices.
+- **UI presentation flexibility:** The contract doesn't mandate how add-ons are displayed. Some UIs might nest add-ons under parent tickets; others list them separately with explanatory text (e.g., "Requires a GA ticket"). What matters is that the dependency is clear to the user through server-provided copy and badges.
 
 #### E. Interactions with other fields
 
@@ -2944,10 +3081,13 @@ function deriveCTA(item, pres, purch) {
 - Keeps **one clamp** (`maxSelectable`) as the only numeric authority while allowing **relationship semantics** (per‑ticket/per‑order) to be expressed server‑side and reflected on each refresh.
 - Avoids client‑side math races (parent changes while stock updates) and **prevents leakage** when parents are gated/omitted.
 - Scales from trivial (one parking pass per order) to complex (many parents, dynamic holds) without changing client code.
+- **Security:** The server validates everything on submission. If a user somehow bypassed the UI and tried to add 5 parking passes when `maxSelectable=1`, the server's order validation would reject it. The client UI is a convenience, not a security boundary.
 
 ---
 
 ### 10.3 **Examples (tiny, canonical)**
+
+The following examples demonstrate how `matchBehavior` works in practice. Notice how `maxSelectable` starts at 0 when no parent is selected, then updates via server refresh when parents are added.
 
 #### A) Per‑ticket meal voucher (initial: no parent selected)
 
@@ -3002,6 +3142,8 @@ _After the buyer selects **3** GA tickets and the client refreshes the payload:_
 ```
 
 #### B) Per‑order parking pass (cap 1), parent required
+
+This example shows a typical per-order add-on. The server enforces `limits.perOrder=1`, and `maxSelectable` updates from 0 to 1 once any parent ticket is selected (regardless of parent quantity).
 
 ```jsonc
 {
@@ -3169,6 +3311,8 @@ _After selecting any parent tickets (≥1), refresh yields `maxSelectable: 1`._
     ```
 
   - Clients **MUST** render `lineItems` **in the order provided**. Clients **MUST NOT** reorder, insert, or compute derived rows.
+  - **Visual exception:** Clients **MAY** apply visual styling to distinguish TOTAL (e.g., bold, separator line above) without reordering.
+  - **Edge case:** If `TOTAL` appears mid-array (server bug), still render in provided order; do not auto-move to end.
   - **Negative amounts are allowed** (e.g., discounts). Render signed values exactly as provided.
 
 - **Mode (status of the math)**
@@ -3199,10 +3343,57 @@ _After selecting any parent tickets (≥1), refresh yields `maxSelectable: 1`._
   - Any change in selection, unlock, discount, or rule **MUST** cause the client to request/receive a refreshed payload. The footer then **replaces** itself with the new `pricing`.
   - With **no selection**, `pricing` still exists. The server **MAY** send an empty breakdown (`lineItems: []`) or a single `TOTAL` of 0. The client renders **exactly** what is present (no local totals).
 
+- **When to request pricing refresh (implementation triggers)**
+
+  - **MUST refresh** on:
+
+    - User changes any item quantity (debounce 300ms recommended)
+    - User enters/applies discount code
+    - User unlocks gated items (code validation success)
+    - Server pushes updated payload (WebSocket/SSE)
+
+  - **MUST NOT** refresh on:
+
+    - Pure UI interactions (expanding sections, hovering badges)
+    - Client-side validation errors (max quantity warnings)
+    - Rendering or scrolling events
+
+  - While awaiting refresh, keep displaying **previous pricing state**; do not show loading spinners in the footer itself (use top-level loading indicators if needed).
+
 - **Accessibility & formatting**
 
   - Clients **MUST** format Dinero snapshots for display (locale, currency symbol) but **MUST NOT** alter numeric values.
-  - The **label** field is the source of truth for line names (“Fees”, “Estimated tax”, etc.). Clients **MUST NOT** substitute their own strings.
+  - The **label** field is the source of truth for line names ("Fees", "Estimated tax", etc.). Clients **MUST NOT** substitute their own strings.
+
+- **Dinero formatting (implementation guidance)**
+
+  - The client **MAY** format Dinero snapshots using one of two approaches:
+
+    **Approach A: Using Dinero.js utils**
+
+    ```ts
+    import { dinero, toDecimal } from "dinero.js";
+
+    const price = dinero(snapshot); // reconstruct from snapshot
+    const formatted = toDecimal(price); // "150.00"
+    ```
+
+    **Approach B: Direct from snapshot (no Dinero import required)**
+
+    ```ts
+    function formatDineroSnapshot(snapshot: DineroSnapshot): string {
+      const { amount, currency, scale } = snapshot;
+      const divisor = Math.pow(currency.base, scale);
+      const value = amount / divisor;
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: currency.code,
+      }).format(value);
+    }
+    ```
+
+  - Both approaches are valid; choose based on bundle size vs. simplicity tradeoffs.
+  - The client **MUST NOT** perform arithmetic on snapshot values beyond display formatting.
 
 - **Interplay with rows (§6 & §8)**
 
@@ -3222,8 +3413,73 @@ _After selecting any parent tickets (≥1), refresh yields `maxSelectable: 1`._
 ### **Rationale**
 
 - Keeping **all** money math on the server eliminates client/server drift, race conditions, and rounding bugs.
-- Treating inclusions as **what the server chooses to show** (breakout vs. folded into “Tickets”) avoids duplicate logic and disagreements.
+- Treating inclusions as **what the server chooses to show** (breakout vs. folded into "Tickets") avoids duplicate logic and disagreements.
 - Using Dinero snapshots across the wire ensures consistent precision and currency handling with zero floating‑point surprises.
+
+---
+
+### **State transitions (loading & errors)**
+
+- **During pricing refresh:**
+
+  - Keep displaying the **last valid `pricing`** state.
+  - Apply subtle "updating" indicator (e.g., 50% opacity overlay or small spinner icon) if refresh takes >500ms.
+  - **MUST NOT** clear the footer to empty state during refresh (prevents jarring layout shifts).
+
+- **On pricing fetch error:**
+
+  - Keep displaying last valid pricing with error indicator (e.g., warning icon + "Prices may be outdated").
+  - Retry automatically after 3s; show "Retry" button if 3 attempts fail.
+  - **MUST NOT** block checkout if pricing is stale <30s (server will revalidate).
+
+- **On currency mismatch (validation error):**
+
+  - Display error state immediately: "Configuration error. Please contact support."
+  - Log error with payload excerpt for debugging; **MUST NOT** attempt to render broken pricing.
+
+---
+
+### **Visual rendering patterns (implementation guidance)**
+
+- **Empty state (no selection):**
+
+  ```text
+  [No pricing footer displayed]
+  ```
+
+  Rationale: Showing "$0.00" before selection implies something is in cart; showing nothing is clearer.
+
+- **Standard breakdown:**
+
+  ```text
+  Tickets        $150.00
+  Fees           $ 18.00
+  Tax            $ 12.00
+  ──────────────────────
+  Total          $180.00
+  ```
+
+  Use visual hierarchy: regular weight for line items, bold for TOTAL.
+
+- **With discount (negative amount):**
+
+  ```text
+  Tickets        $150.00
+  Fees           $ 18.00
+  Promo applied  -$ 10.00
+  ──────────────────────
+  Total          $158.00
+  ```
+
+  Render negative amounts with minus sign; use distinct color (not red, as red implies error—use theme accent or green for savings).
+
+- **All-inclusive (single line):**
+
+  ```text
+  Total          $ 50.00
+  ```
+
+  When server sends only TOTAL, render just that line (no artificial breakdown).
 
 ---
 
@@ -3315,6 +3571,13 @@ _Fees are included in tickets; server chose not to show a separate `FEES` row._
 
   - _Given_ any `items[].commercial.price.currency.code` ≠ `pricing.currency.code` → _Expect_ client validation error or hard block (single currency per panel).
 
+- **Currency mismatch (error state)**
+
+  - _Given_ `items[0].commercial.price.currency.code="USD"` and `items[1].commercial.price.currency.code="EUR"`
+  - _Expect_ client **MUST** reject payload during validation; display error state: "Configuration error: Mixed currencies detected"
+  - _Implementation:_ Validate currency consistency immediately upon payload receipt, before any rendering.
+  - _Rationale:_ Mixed currency is a server configuration bug, not a runtime state; fail fast.
+
 - **No local math**
 
   - _Given_ `lineItems` omit `TOTAL` → _Expect_ no computed total; render only present rows.
@@ -3342,14 +3605,42 @@ _Fees are included in tickets; server chose not to show a separate `FEES` row._
 
 ---
 
-### **Developer checklist (quick)**
+### **Developer checklist (implementation audit)**
 
-- [ ] Treat `pricing` as read‑only, server‑authored math. No sums on the client.
-- [ ] Render `lineItems` in payload order; use each row’s `label` text verbatim.
-- [ ] Enforce single currency across items and footer.
-- [ ] Show discounts as negatives; never invert signs.
-- [ ] Keep row price visibility rules from §6/§8; the footer is independent of row masking.
-- [ ] For “incl. fees / + fees” row copy, use server strings; **do not** infer from the footer.
+**Money handling:**
+
+- [ ] All Dinero snapshots formatted for display only (no arithmetic on `amount` fields)
+- [ ] Currency consistency validated on every payload receipt
+- [ ] Negative amounts (discounts) rendered with minus sign and distinct styling
+- [ ] No rounding or precision changes applied to snapshot values
+
+**Rendering:**
+
+- [ ] `lineItems` rendered in exact payload order (no reordering logic)
+- [ ] `label` text used verbatim (no substitutions like "Subtotal" → "Items")
+- [ ] Empty `lineItems[]` renders nothing (no synthetic "$0.00" line)
+- [ ] Visual hierarchy applied (TOTAL distinguished via styling, not reordering)
+
+**State management:**
+
+- [ ] Previous pricing displayed during refresh (no empty state flash)
+- [ ] Pricing refresh triggered only on quantity/selection changes, not UI events
+- [ ] Debounce on quantity changes (300ms recommended) to avoid excessive server calls
+
+**Error handling:**
+
+- [ ] Currency mismatch causes validation failure (payload rejected)
+- [ ] Stale pricing (fetch error) handled gracefully with retry logic
+- [ ] Unknown line item codes rendered as-is (label + amount, no dropping)
+
+**Testing coverage:**
+
+- [ ] Fixture: Empty lineItems (no selection)
+- [ ] Fixture: Standard breakdown (tickets + fees + tax + total)
+- [ ] Fixture: With discount (negative amount)
+- [ ] Fixture: All-inclusive (single TOTAL line)
+- [ ] Fixture: Unknown line item code (e.g., "ADJUSTMENT")
+- [ ] Fixture: Currency mismatch (validation error)
 
 .
 
