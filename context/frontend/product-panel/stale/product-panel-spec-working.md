@@ -75,7 +75,7 @@ The following sections (A-N) capture key decisions and edge cases discovered dur
 - **Defaults & overrides:** system supports **per‑order** and **per‑line (line‑item)** fees; each can be **percent or absolute**; show which defaults apply on the ticket config screen; allow per‑type overrides.
 - **Pricing summary**: server computes; the panel can show **simple (subtotal/fees/taxes/total)** or **detailed** breakdown.
 - **Inclusive flags:** support `feesIncluded` and `taxesIncluded` booleans to alter presentation.
-- **Payment plans:** don’t show schedule here; **badge** or microcopy “Payment plan available”.
+- **Payment plans:** Controlled at the **order level** (not per-type). When available, indicate via **panel-level DynamicNotice** (not per-product badge). Availability is a **preference** passed to the panel (`effectivePrefs.paymentPlanAvailable`), not derived from product state. Schedule details shown via HoverCard or drawer.
 
 ### H) Schedules
 
@@ -446,6 +446,7 @@ export const EffectivePrefsSchema = z.object({
   displayRemainingThreshold: z.number().int().nonnegative().default(10),
   showFeesHint: z.boolean().default(true),
   showTypeListWhenSoldOut: z.boolean().default(true),
+  paymentPlanAvailable: z.boolean().default(false),
   ctaLabelOverrides: z.record(z.string(), z.string()).default({}),
 });
 
@@ -456,6 +457,9 @@ export const ContextSchema = z.object({
   eventAllOutOfStock: z.boolean().optional(),
   effectivePrefs: EffectivePrefsSchema,
   // Optional panel-level dynamic notices (beyond per-row notices)
+  // Implementation note: DynamicNotice component can display multiple notice rows
+  // using shadcn's Item components for consistent layout and styling.
+  // See: https://ui.shadcn.com/docs/components/item
   dynamicNotices: z
     .array(
       z.object({
@@ -613,11 +617,12 @@ export const RelationsSchema = z
       })
       .nullable()
       .optional(),
-    applyQuantity: z
-      .enum(["matchParent", "independent"])
-      .default("matchParent"),
+    applyQuantity: z.enum(["matchParent", "independent"]).optional(),
+    // Server rule: if applyQuantity not explicitly set:
+    //   placement='children' → default to 'matchParent'
+    //   placement='section' → default to 'independent'
   })
-  .default({ applyQuantity: "matchParent" });
+  .default({});
 
 export const DisplaySchema = z.object({
   placement: z.enum(["section", "children"]).default("section"),
@@ -698,7 +703,7 @@ export type ProductPanelPayload = z.output<typeof ProductPanelPayloadSchema>;
 
 ## 5) Jotai Alignment: Server vs. Client Boundaries
 
-**Server (authoritative)**
+### Server (authoritative)
 
 - `state.temporal.phase`, `currentWindow`, `nextWindow`
 - `state.supply.status`, `remaining.count`, `limits`
@@ -707,7 +712,7 @@ export type ProductPanelPayload = z.output<typeof ProductPanelPayloadSchema>;
 - `commercial.maxSelectable` (final clamp)
 - `pricing.summary` (all money math)
 
-**Client (derived atoms = presentation only)**
+### Client (derived atoms = presentation only)
 
 - `rowPresentation`:
 
@@ -1421,6 +1426,43 @@ Seats.io note:
 - ✗ Client must not validate access codes, windows, or limits
 - ✗ Client must not implement brute-force protection (server concern)
 
+**Sold-Out + Gating Logic:**
+
+- When **all** top-level products (including hidden gated ones) are sold out, suppress AccessCodeCTA:
+
+  ```ts
+  // Server logic
+  gatingSummary.hasHiddenGatedItems =
+    anyGatedItemsOmitted && anyOmittedItemHasStock;
+  // If all items (visible + hidden) have supply.status='none', set to false
+  ```
+
+- This prevents showing access code entry when it won't help (all options are sold out)
+
+**Sold-Out Microcopy Variations:**
+
+Server determines which sold-out message based on available alternatives:
+
+```ts
+// Server logic for sold-out panelNotices
+if (allSoldOut && hasAccessCode && !anyOmittedItemHasStock) {
+  // All sold out including gated items
+  text = "Event sold out";
+  // Do NOT include access code CTA
+} else if (allVisibleSoldOut && hasHiddenGatedItems) {
+  // Public sold out, gated items available
+  text = "Enter access code to view tickets";
+  action = { kind: "open_drawer", target: "access_code" };
+} else if (allSoldOut && hasWaitlist) {
+  // Sold out with waitlist
+  text = "You can join the waitlist to be notified if tickets become available";
+  action = { kind: "open_drawer", target: "waitlist" };
+} else if (allSoldOut && hasAccessCode && hasWaitlist) {
+  // Should not happen (contradicts first rule), but handle gracefully
+  text = "You can enter an access code or join the waitlist";
+}
+```
+
 ### Admin Axis
 
 - ✓ Items with `state='unpublished'` must not be sent to client
@@ -1453,7 +1495,7 @@ Seats.io note:
 
 ## 12) Implementation Checklist
 
-**Server**
+### Server
 
 - [ ] Emit `items[].state` (five axes) and delete `commercial.status`.
 - [ ] Rename `remaining.inventory` → `remaining.count`; avoid using the word “inventory” elsewhere.
@@ -1463,7 +1505,7 @@ Seats.io note:
 - [ ] Keep all money math in `pricing.summary`.
 - [ ] Default `effectivePrefs.showTypeListWhenSoldOut = true`.
 
-**Client**
+### Client
 
 - [ ] Replace `schemas.ts` with v0.3 above.
 - [ ] Update `mapping.ts`, `selectors.ts` per patches.
@@ -1516,7 +1558,7 @@ Flags alter presentation without changing amounts:
 - **`feesIncluded: true`**: Price already includes fees; show "(incl. fees)" microcopy
 - **`taxesIncluded: true`**: Price already includes taxes; show "(incl. taxes)" microcopy
 
-### Examples
+### Examples (Pricing Summary Footer)
 
 **Simple mode (exclusive):**
 

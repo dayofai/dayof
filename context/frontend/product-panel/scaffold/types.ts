@@ -1,18 +1,17 @@
-
 // src/state/types.ts
-import type { ProductPanelPayload } from "../contract/schemas";
+import type { ProductPanelPayload } from '../contract/schemas';
 
-export type RowPresentation = "normal" | "locked" | "suppressed";
-export type QuantityUI = "hidden" | "select" | "stepper";
-export type PriceUI = "hidden" | "shown" | "masked";
+export type RowPresentation = 'normal' | 'locked' | 'suppressed';
+export type QuantityUI = 'hidden' | 'select' | 'stepper';
+export type PriceUI = 'hidden' | 'shown' | 'masked';
 
 export type CTAKind =
-  | "purchase"
-  | "request"
-  | "join_waitlist"
-  | "notify_me"     // not in the primary mapping table, but supported by contract
-  | "backorder"     // for physical goods if enabled
-  | "none";
+  | 'purchase'
+  | 'request'
+  | 'join_waitlist'
+  | 'notify_me' // not in the primary mapping table, but supported by contract
+  | 'backorder' // for physical goods if enabled
+  | 'none';
 
 export interface RowCTA {
   kind: CTAKind;
@@ -22,7 +21,7 @@ export interface RowCTA {
 }
 
 export interface RowNotice {
-  icon?: "info" | "warning" | "success" | "error";
+  icon?: 'info' | 'warning' | 'success' | 'error';
   title?: string;
   text?: string;
   badge?: string;
@@ -30,7 +29,7 @@ export interface RowNotice {
 }
 
 export interface RowViewModel {
-  key: string;                      // productId/variantId
+  key: string; // productId/variantId
   sectionId: string;
   productId: string;
   variantId: string;
@@ -43,8 +42,8 @@ export interface RowViewModel {
   lowInventory?: boolean;
   badges?: string[];
 
-  maxSelectable: number;            // authoritative clamp (never recomputed)
-  remainingInventory: number | "infinite" | null | undefined;
+  maxSelectable: number; // authoritative clamp (never recomputed)
+  remainingInventory: number | 'infinite' | null | undefined;
 
   cta: RowCTA;
   notices: RowNotice[];
@@ -62,10 +61,10 @@ export interface SectionViewModel {
 }
 
 export interface PanelViewModel {
-  context: ProductPanelPayload["context"];
+  context: ProductPanelPayload['context'];
   sections: SectionViewModel[];
-  panelMode: "full" | "compactWaitlistOnly";     // driven by effectivePrefs & item states
-  pricing: ProductPanelPayload["pricing"];
+  panelMode: 'full' | 'compactWaitlistOnly'; // driven by effectivePrefs & item states
+  pricing: ProductPanelPayload['pricing'];
   // roll-ups
   allOutOfStock: boolean;
   anyGatedVisible: boolean;
