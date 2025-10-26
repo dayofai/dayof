@@ -3,7 +3,39 @@
 
 # Product Panel Spec 0.4
 
-> Note: This document is the sole normative contract for the Product Panel. Any other documents are explanatory only and MUST NOT override this spec.
+> **Note:** This document is the sole normative contract for the Product Panel. Any other documents are explanatory only and MUST NOT override this spec.
+>
+> **Architecture Context:** This spec is designed for DayOf's specific tech stack—assumptions about deployment, rendering, and state management are baked into every decision. Understanding the architecture explains **why** the contract looks the way it does.
+>
+> **Key Stack Facts:**
+>
+> - **Framework**: TanStack Start v1 (SSR-first, server functions, not REST API)
+> - **Deployment**: Vercel with **atomic deploys** (server + client = one build, one version, always in sync)
+> - **Rendering**: Isomorphic execution (same code runs server-side for SSR and client-side for hydration)
+> - **State**: Jotai atoms + TanStack Query (derived state from server facts, no prop drilling)
+> - **Validation**: Zod 4 schemas validate **twice**: server (SSR/loaders) and client (hydration/forms)
+> - **Data Flow**: Server functions → server state → atoms derive presentation → React renders
+>
+> **How This Impacts The Contract:**
+>
+> 1. **No version skew** → Strict validation (`.strict()`) catches bugs; unknown fields are errors, not forward-compat concerns
+> 2. **SSR + hydration** → Same schemas run server + client; consistency is critical to prevent hydration mismatches
+> 3. **Atomic deploys** → Schema changes deploy atomically; no "old client + new server" scenarios
+> 4. **Server functions** → No separate API versioning; contract is isomorphic (server and client share types)
+> 5. **Derived state** → Client never computes business logic; atoms transform server facts into UI state
+> 6. **No caching across deploys** → No stale data surviving deployments; every deploy = fresh contract
+>
+> **What This Means for Implementers:**
+>
+> - Unknown fields = validation errors (fail fast, not graceful degradation)
+> - Business fields are **required** (no `.default()` hiding server bugs)
+> - Enums are **strict** (coordinated deploys are fine; catch typos immediately)
+> - Template checks happen at **render time** (schema layer doesn't know about template registry)
+> - Currency/money handled via **Dinero.js V2 snapshots** (nothing happens to money outside Dinero utils)
+>
+> This is **not** a traditional REST API contract designed for independent client/server versioning. It's an **isomorphic TanStack Start contract** where server and client are two execution contexts of the same codebase.
+>
+> See §14 "Architecture Context: TanStack Start & Validation Strategy" for detailed rationale and comparison with traditional API design patterns.
 
 ## Sections
 
@@ -84,10 +116,10 @@
   - **Single speech channel per level:** rows speak via `state.messages[]`; the panel speaks via `context.panelNotices[]`. No other strings.
   - **Replace over infer:** When new payloads arrive, the client **replaces** derived state from server facts; it does not back‑compute truth.
 
-- **Compatibility rules:**
+- **Validation & compatibility (TanStack Start):**
 
-  - Clients **MUST** ignore unknown fields gracefully.
-  - Servers **SHOULD** treat unspecified optional fields as absent (do not rely on client defaults for business logic).
+  - Clients **MUST** validate payloads strictly on both server (SSR/loaders) and client (hydration). Unknown fields are **validation errors**.
+  - Servers **MUST** send all business‑meaningful fields explicitly; clients **MUST NOT** invent defaults that change business meaning.
   - All machine codes and enums are authoritative; clients **MUST NOT** transform codes into UI text without payload strings/templates.
 
 ---
@@ -447,7 +479,7 @@ This separation makes the system **testable** (toggle one axis at a time), **ext
 
 - **No leakage:** Only `gating.listingPolicy` and server omission control whether an item is sent. Client **MUST NOT** infer missing items except via `context.gatingSummary.hasHiddenGatedItems`.
 
-- **Purchasability (derived later):** “Purchasable” is a client‐derived boolean: `temporal.phase="during"` **AND** `supply.status="available"` **AND** (`gating.required=false` **OR** `gating.satisfied=true`). The derivation lives in §8; this section defines the axes that make it possible.
+- **Purchasability (derived later):** “Purchasable” is a client‐derived boolean: `temporal.phase="during"` **AND** `supply.status="available"` **AND** (`gating.required=false` **OR** `gating.satisfied=true`) **AND** `commercial.maxSelectable > 0`. The derivation lives in §8; this section defines the axes that make it possible.
 
 ---
 
@@ -613,6 +645,14 @@ This separation makes the system **testable** (toggle one axis at a time), **ext
 - **No leakage:** The client **MUST NOT** display, cache, or log any information about omitted items beyond the boolean `hasHiddenGatedItems` hint.
 - **Price masking:** Locked rows (`gating.required=true && satisfied=false`) **MUST** mask price and hide quantity controls.
 
+### **UX nuances (non-normative, clarifying)**
+
+- **Post‑unlock confirmation:** If a user enters a valid access code but the unlocked inventory is already sold out, the UI should still confirm success.
+  - For previously visible‑locked items, keep the row visible but disabled with a sold‑out message (confirms the code worked).
+  - For items previously omitted via `omit_until_unlocked`, show a panel‑level confirmation (e.g., a short notice indicating the code was valid) if no new rows appear; avoid a “dead end” feeling.
+- **Price visibility:** Prices are masked only when a row is locked. For sold‑out or otherwise non‑purchasable rows (including when `commercial.maxSelectable=0`), price **MUST NOT** be shown per §8 price visibility rules. The normative rules above still govern masking when locked.
+- **Public sold‑out + hidden gated stock:** When `context.gatingSummary.hasHiddenGatedItems === true`, prefer an access‑code prompt over a terminal “Event Sold Out” state to guide the user toward unlocking.
+
 ---
 
 ## 3.4 Demand (alternate actions)
@@ -666,7 +706,7 @@ This separation makes the system **testable** (toggle one axis at a time), **ext
 - A gated, unsatisfied item **cannot** be both omitted and visible: `listingPolicy` defines exactly one behavior.
 - Given `gating.required=true`, `satisfied=false`, `demand.kind="waitlist"`: row **MUST** show lock state with **no** waitlist CTA (gating precedence).
 - **Banner exclusivity:** With an empty `context.panelNotices[]`, the panel **MUST NOT** render any top banners—even if all visible rows are sold out. All panel-level notices **MUST** come from `context.panelNotices[]` only.
-- Unknown fields in `state` **MUST** be ignored without breaking derivations.
+- Unknown fields in `state` are **invalid** under strict validation.
 
 ---
 
@@ -717,7 +757,7 @@ This separation makes the system **testable** (toggle one axis at a time), **ext
   - `items` _(required, array)_
   - `pricing` _(required)_
 
-- Clients **MUST** ignore unknown top‑level keys and unknown sub‑fields.
+- Clients **MUST** validate root keys strictly; unknown top‑level keys are **invalid**.
 - Machine codes (e.g., in `reasons[]` and `messages[].code`) **MUST** be `snake_case`. Field names remain camelCase.
 
 ---
@@ -1133,7 +1173,7 @@ Understanding how context, items, and pricing work together:
 - **Root keys present**
 
   - Given a payload without `context`, `sections`, `items`, or `pricing`, the client **MUST** reject the payload (validation error).
-  - Given an unknown top‑level key, the client **MUST** ignore it without side‑effects.
+  - Given an unknown top‑level key, the client **MUST** reject the payload (validation error).
 
 - **Context rules respected**
 
@@ -1180,9 +1220,10 @@ The server **MAY** include UI preferences that shape **presentation**, not polic
 
 - `showTypeListWhenSoldOut: boolean` —
 
-  - `true` ⇒ keep rows visible (disabled) when everything’s sold out.
+  - `true` ⇒ keep rows visible (disabled) when everything's sold out.
   - `false` ⇒ collapse to a compact sold‑out panel.
   - Default is server‑defined; client renders exactly what is sent. Clients **MUST NOT** assume UI defaults for absent fields.
+  - **Rationale:** Different events benefit from different treatments. Showing sold‑out types builds context and FOMO (driving waitlist signups), while hiding them provides a cleaner UX for postponed/cancelled events. This flexibility is independent of the strict price‑hiding policy (see §6/§8).
 
 - `displayPaymentPlanAvailable: boolean` — indicates that installment plans exist at checkout.
 
@@ -1193,7 +1234,7 @@ The server **MAY** include UI preferences that shape **presentation**, not polic
   - **Informational only:** tells the client what threshold the server is using; the client does not perform the comparison.
   - This flag **MUST NOT** alter purchasability or client logic.
 
-- Unknown prefs **MUST** be ignored safely by clients.
+- Unknown prefs are **invalid** (validation error).
 
 #### 5.2 Copy channels (single source at each level)
 
@@ -1611,16 +1652,14 @@ _Rendering: Both messages appear under title, sorted by priority (requires_code 
   - `type: "ticket" | "digital" | "physical"`.
   - `fulfillment?: { methods: string[]; details?: Record<string, unknown> }`
 
-    - `methods[]` **MUST** use server‑defined enums; client **MAY** ignore unknowns:
-
+    - `methods[]` **MUST** use server‑defined enums; unknown values are **invalid** (validation error):
       - Recommended baseline: `"eticket"`, `"will_call"`, `"physical_mail"`, `"apple_pass"`, `"shipping"`.
       - The client uses these to display appropriate icons or labels (e.g., mobile phone icon for `"eticket"`, Apple Wallet logo for `"apple_pass"`, shipping truck for `"physical_mail"`).
-
     - `details` is vendor‑ or product‑specific metadata; **display‑only**.
       - May include shipping info, pickup instructions, redemption requirements, etc.
       - Client renders as supplementary text/tooltips; does not affect business logic.
 
-  - Extra fields **MAY** appear (e.g., `description: string`, `subtitle: string`, `category: string`); clients **MUST** ignore unknown fields gracefully.
+  - Extra fields are limited to: `description?: string`, `subtitle?: string`, `category?: string`. Unknown extra fields are **invalid**.
     - **`description`**: longer product description for detail views or hovercards
     - These are **static product metadata**; for dynamic status text, use `state.messages[]`
 
@@ -1854,8 +1893,8 @@ _Note: This parking pass requires a parent ticket (GA or VIP) and is limited to 
 - **Clamp is king.** The **only** value that constrains the quantity UI is `commercial.maxSelectable`.
   _Do not_ clamp off `supply.remaining` or `limits.*`.
 - **Fees hint only.** `feesIncluded` changes copy ("incl. fees" / "+ fees") but never math; all math is server‑computed in `pricing`.
-- **Price visibility policy.** Price is shown (`priceUI="shown"`) **only** when purchasable (except `priceUI="masked"` for locked rows). Showing price for non-purchasable rows (sold out, not on sale yet) is **disallowed**.
-  _Reason:_ avoids tease/anchor effects and maintains clear purchasability signals.
+- **Price visibility policy.** Price is shown (`priceUI="shown"`) **only** when purchasable (except `priceUI="masked"` for locked rows). Showing price for non-purchasable rows (sold out, not on sale yet, or when `commercial.maxSelectable=0`) is **disallowed**.
+  _Reason:_ Displaying a price for an item you cannot buy creates psychological "tease" and "anchor" effects—users fixate on the unavailable price, leading to confusion ("Why show it if I can't buy it?") and potential frustration. By hiding price when not purchasable, we maintain clear, honest signals: if you see a price, you can act on it. Locked rows use masking (not hiding) to preserve the gating UX without leaking pricing to unauthorized users.
 - **Fulfillment is never a gate.** Icons and notes only; it **MUST NOT** change purchasability.
   - **Special requirements** (age restrictions, ID requirements, redemption conditions) are conveyed via `state.messages[]` or badge hovercards.
   - **Example:** An alcohol voucher might have a message `"Must present valid ID (21+)"` or a badge `"21+"` with a hovercard explaining the requirement.
@@ -1907,7 +1946,7 @@ _Note: This parking pass requires a parent ticket (GA or VIP) and is limited to 
 
 - **Unknown fulfillment method**
   _Given_ `product.fulfillment.methods=["weird_future_channel"]`
-  _Expect_ ignore unknown method; do not fail rendering.
+  _Expect_ validation error (unknown method).
 
 - **Add-on without parent**
   _Given_ an add-on with `relations.parentProductIds=["prod_vip"]` but no VIP ticket in the order
@@ -1956,9 +1995,9 @@ _Note: This parking pass requires a parent ticket (GA or VIP) and is limited to 
 - [ ] `variant` contains no money; omit or keep minimal (empty `{}` for GA tickets).
 - [ ] `commercial.price` is a Dinero snapshot; `maxSelectable` present; `feesIncluded` set.
 - [ ] Quantity UI clamps **only** to `maxSelectable` (never `limits.*` or `supply.remaining`).
-- [ ] Price masked when locked; quantity hidden when locked or sold out.
+- [ ] Price masked when locked; price hidden when not purchasable; quantity hidden when locked or not purchasable.
 - [ ] Copy comes from `state.messages[]` / `context.copyTemplates` (no hardcoded strings).
-- [ ] Fulfillment icons/tooltips driven by `product.fulfillment.methods`; unknown methods ignored.
+- [ ] Fulfillment icons/tooltips driven by `product.fulfillment.methods`; values MUST be from the enum (unknown methods are invalid).
 - [ ] Add-on dependencies respected via `relations.parentProductIds` and `matchBehavior`.
 - [ ] Currency consistency: all items' `commercial.price.currency.code` matches `pricing.currency.code`.
 
@@ -2225,7 +2264,8 @@ The client **MUST** derive, per `items[]` element:
 - **Purchasable boolean** `isPurchasable: boolean`
   `isPurchasable = (state.temporal.phase === "during")  
 && (state.supply.status === "available")  
-&& (!state.gating.required || state.gating.satisfied)`
+&& (!state.gating.required || state.gating.satisfied)  
+&& (commercial.maxSelectable > 0)`
 
 - **Quantity UI** `quantityUI: "hidden" | "select" | "stepper"`
 
@@ -2240,7 +2280,7 @@ The client **MUST** derive, per `items[]` element:
   - `"masked"` when `presentation === "locked"`.
   - `"shown"` **iff** `presentation === "normal"` **AND** `isPurchasable === true`.
   - Otherwise `"hidden"`.
-    _(This is intentionally stricter than some prior drafts: sold‑out or out‑of‑window rows do **not** show price; we avoid tease/anchor effects unless purchasable.)_
+  - **Rationale:** This strict policy prevents psychological "tease/anchor" effects. Showing a price for something you can't buy creates confusion and frustration ("Why display it if I can't select it?"). Hiding price until purchasable maintains honest, actionable signals. Locked rows use masking (not hiding) to preserve gating UX without leaking price to unauthorized users. See §6 for full policy discussion.
 
 - **CTA** `cta.kind: "quantity" | "waitlist" | "notify" | "none"` with `cta.enabled: boolean`
 
@@ -2265,6 +2305,45 @@ The client **MUST** derive, per `items[]` element:
 
 ---
 
+#### 8.1.a Row decision cheatsheet (developer aid)
+
+```ts
+function getRowPresentation(state: ItemState): "normal" | "locked" {
+  const g = state.gating;
+  if (g.required && !g.satisfied && g.listingPolicy === "visible_locked")
+    return "locked";
+  return "normal"; // Items with omit_until_unlocked never arrive in items[]
+}
+
+function isPurchasable(state: ItemState, maxSelectable: number): boolean {
+  return (
+    state.temporal.phase === "during" &&
+    state.supply.status === "available" &&
+    (!state.gating.required || state.gating.satisfied) &&
+    maxSelectable > 0
+  );
+}
+
+type CTA = {
+  kind: "quantity" | "waitlist" | "notify" | "none";
+  enabled?: boolean;
+};
+function getRowCTA(state: ItemState, maxSelectable: number): CTA {
+  if (getRowPresentation(state) === "locked") return { kind: "none" };
+  if (isPurchasable(state, maxSelectable))
+    return { kind: "quantity", enabled: maxSelectable > 0 };
+  if (state.supply.status === "none" && state.demand.kind === "waitlist")
+    return { kind: "waitlist", enabled: true };
+  if (state.temporal.phase === "before" && state.demand.kind === "notify_me")
+    return { kind: "notify", enabled: true };
+  return { kind: "none" };
+}
+```
+
+> Use payload‑provided strings for labels (see §5). This snippet mirrors the truth tables above; it is illustrative only.
+
+---
+
 ### 8.2 Decision tables (mechanical mapping)
 
 #### A) Presentation
@@ -2277,10 +2356,10 @@ The client **MUST** derive, per `items[]` element:
 
 #### B) Purchasable
 
-| `temporal.phase` | `supply.status` | Gate satisfied?              | `isPurchasable` |
-| ---------------- | --------------- | ---------------------------- | --------------- |
-| `"during"`       | `"available"`   | `(!required \|\| satisfied)` | `true`          |
-| Any other combo  | Any other combo | Any                          | `false`         |
+| `temporal.phase` | `supply.status` | Gate satisfied?              | `maxSelectable` | `isPurchasable` |
+| ---------------- | --------------- | ---------------------------- | --------------- | --------------- |
+| `"during"`       | `"available"`   | `(!required \|\| satisfied)` | `> 0`           | `true`          |
+| Any other combo  | Any other combo | Any                          | Any             | `false`         |
 
 #### C) CTA resolution (in order; first match wins)
 
@@ -2298,7 +2377,6 @@ The client **MUST** derive, per `items[]` element:
 | -------------- | --------------- | --------------- | ------------ | --------- |
 | `locked`       | —               | —               | hidden       | masked    |
 | `normal`       | `false`         | any             | hidden       | hidden    |
-| `normal`       | `true`          | `0`             | hidden       | shown     |
 | `normal`       | `true`          | `1`             | select       | shown     |
 | `normal`       | `true`          | `> 1`           | stepper      | shown     |
 
@@ -2463,10 +2541,12 @@ function derivePresentation(item) {
 
 function derivePurchasable(item) {
   const s = item.state;
+  const max = item.commercial.maxSelectable ?? 0;
   return (
     s.temporal.phase === "during" &&
     s.supply.status === "available" &&
-    (!s.gating.required || s.gating.satisfied)
+    (!s.gating.required || s.gating.satisfied) &&
+    max > 0
   );
 }
 
@@ -2506,8 +2586,8 @@ function deriveCTA(item, pres, purch) {
   _Expect_ `presentation="locked"`, `cta="none"`, price masked.
 
 - **Clamp beats counts**
-  _Given_ `isPurchasable=true` **and** `commercial.maxSelectable=0`
-  _Expect_ `quantityUI="hidden"`, `priceUI="shown"`, `cta.kind="quantity"`, `cta.enabled=false`.
+  _Given_ `temporal.phase="during"`, `supply.status="available"`, `gating` satisfied or not required, and `commercial.maxSelectable=0`
+  _Expect_ `isPurchasable=false`, `quantityUI="hidden"`, `priceUI="hidden"`, `cta.kind="quantity"` not selected (no quantity CTA).
 
 - **Unknown supply**
   _Given_ `temporal.phase="during"` **and** `supply.status="unknown"`
@@ -2533,7 +2613,7 @@ function deriveCTA(item, pres, purch) {
 - [ ] Do **not** invent banners or strings. Pull CTA labels via `messages[]`/`copyTemplates`.
 - [ ] Respect `commercial.maxSelectable` as the **only** clamp.
 - [ ] Mask price on locked rows; hide price when not purchasable.
-- [ ] If `isPurchasable=true` and `maxSelectable=0`, price is shown and quantity is hidden (see §8.2‑D).
+- [ ] If `maxSelectable=0`, the row is not purchasable; price is hidden and quantity is hidden.
 - [ ] When interpolating templates, any unknown `{placeholder}` resolves to `""` (empty string).
 - [ ] Collapse sold‑out lists only per `effectivePrefs.showTypeListWhenSoldOut`.
 - [ ] On any interaction, call server → replace payload → re‑derive.
@@ -3089,6 +3169,26 @@ Gating-related codes and their typical presentation:
 
 The following examples demonstrate how `matchBehavior` works in practice. Notice how `maxSelectable` starts at 0 when no parent is selected, then updates via server refresh when parents are added.
 
+#### Quick reference box — per‑ticket vs per‑order
+
+```jsonc
+// Per‑ticket add‑on: matches parent quantity (e.g., Fast Pass)
+{
+  "product": { "id": "add_fastpass", "name": "Fast Pass", "type": "digital" },
+  "relations": { "parentProductIds": ["prod_ga", "prod_vip"], "matchBehavior": "per_ticket" },
+  "commercial": { "maxSelectable": 0 }
+}
+
+// Per‑order add‑on: one per order regardless of parent quantity (e.g., Parking)
+{
+  "product": { "id": "add_parking", "name": "Parking Pass", "type": "physical" },
+  "relations": { "parentProductIds": ["prod_ga", "prod_vip"], "matchBehavior": "per_order" },
+  "commercial": { "limits": { "perOrder": 1 }, "maxSelectable": 0 }
+}
+```
+
+> Server recomputes `maxSelectable` on refresh based on current parent selection and stock; client never invents caps.
+
 #### A) Per‑ticket meal voucher (initial: no parent selected)
 
 ```jsonc
@@ -3229,7 +3329,7 @@ _After selecting any parent tickets (≥1), refresh yields `maxSelectable: 1`._
 
 - **Parent added ⇒ add‑on enabled (per_ticket)**
   _Given_ buyer selects 3 GA; server refresh sets `maxSelectable=3`
-  _Expect_ quantity UI `stepper`, cap 3; price shown if `isPurchasable=true`.
+  _Expect_ quantity UI `stepper`, cap 3; price shown when row is purchasable (per §8).
 
 - **Parent reduced ⇒ add‑on clamped down**
   _Given_ add‑on selection=3, then parent selection drops to 1; server refresh sets `maxSelectable=1`
@@ -3294,7 +3394,7 @@ _After selecting any parent tickets (≥1), refresh yields `maxSelectable: 1`._
 
 - **Shape (until the pricing contract fully stabilizes)**
 
-  - The server **SHOULD** send the **line‑item form** and **MAY** also send simpler fields (clients ignore unknowns safely):
+  - The server **SHOULD** send the **line‑item form** and **MAY** also send simpler fields. Unknown fields are **invalid**.
 
     ```jsonc
     "pricing": {
@@ -3631,7 +3731,7 @@ _Fees are included in tickets; server chose not to show a separate `FEES` row._
 
 - [ ] Currency mismatch causes validation failure (payload rejected)
 - [ ] Stale pricing (fetch error) handled gracefully with retry logic
-- [ ] Unknown line item codes rendered as-is (label + amount, no dropping)
+- [ ] Unknown line item codes are invalid (strict enum); update server before introducing new codes
 
 **Testing coverage:**
 
@@ -3682,7 +3782,7 @@ _Fees are included in tickets; server chose not to show a separate `FEES` row._
 
 - **Extending the registry**
 
-  - New codes **MAY** be introduced without a client release; clients **MUST** ignore unknown codes safely.
+  - New codes **MUST** be added to the shared schema and deployed atomically with server and client.
   - Prefer short, specific codes (one meaning each). Avoid synonyms (`event_sold_out` **not** `event_fully_booked`).
 
 - **Scope**
@@ -4028,6 +4128,86 @@ The client **derives UI state** from server facts using pure functions (atoms). 
 
 ---
 
+### Architecture Context: TanStack Start & Validation Strategy
+
+**Deployment Model:** DayOf uses **TanStack Start with server functions**, which fundamentally shapes our validation approach.
+
+**Key Architectural Facts:**
+
+1. **Atomic Deployments**: Server and client code deploy together as a single Vercel project. There is **no version skew**—server and client are always the same version.
+
+2. **Isomorphic Validation**: The same Zod schemas validate data on both:
+
+   - **Server-side**: During SSR, loader execution, and server function calls
+   - **Client-side**: During hydration, subsequent fetches, and form submissions
+
+3. **SSR/Hydration Consistency**: The critical risk is not forward compatibility (no old clients exist), but **server-rendered HTML mismatching client hydration**. Strict validation catches these bugs immediately.
+
+4. **Greenfield Architecture**: No legacy clients, no long-lived mobile apps with independent release schedules, no cached data surviving deployments.
+
+**Why This Matters for Schemas:**
+
+Traditional API design assumes **version skew**: old clients hitting new servers, requiring forward-compatible schemas that ignore unknown fields. With TanStack Start server functions:
+
+- **No old clients exist** → Unknown fields are bugs, not future features
+- **SSR + hydration use same schemas** → Strict validation ensures consistency
+- **Atomic deploys** → Adding enum values just requires one coordinated deploy
+- **Server functions** → No separate API versioning; server + client update together
+
+**Validation Philosophy:**
+
+| Traditional REST API                     | TanStack Start (Our Approach)        |
+| ---------------------------------------- | ------------------------------------ |
+| `.passthrough()` (ignore unknown fields) | `.strict()` (reject unknown fields)  |
+| Optional with `.default()` everywhere    | Required fields fail fast            |
+| Extensible enums (`z.string()`)          | Strict enums (`z.enum()`)            |
+| Forward compatibility priority           | Bug detection priority               |
+| **Goal**: Old clients don't break        | **Goal**: Server/client stay in sync |
+
+**Concrete Example:**
+
+```typescript
+// ❌ Traditional REST API approach (not needed for us)
+const OrderRulesSchema = z
+  .object({
+    types: z.enum(["single", "multiple"]).default("multiple"), // Hide server bugs
+  })
+  .passthrough(); // Ignore unknown fields
+
+// ✅ TanStack Start approach (what we do)
+const OrderRulesSchema = z
+  .object({
+    types: z.enum(["single", "multiple"]), // Required; fail if missing
+  })
+  .strict(); // Reject unknown fields immediately
+```
+
+**Benefits of Strict Validation:**
+
+1. **Catches Server Bugs**: Missing required fields fail validation, not silently at render time
+2. **SSR/Hydration Safety**: Schema mismatches surface immediately, preventing hydration errors
+3. **Type Safety**: No optional-everywhere types that hide bugs
+4. **Clear Contracts**: Required fields document server obligations explicitly
+5. **Fail Fast**: Validation errors at the boundary, not deep in component trees
+
+**When We Would Need Forward Compatibility:**
+
+- Long-lived mobile apps (we're web-only for panel)
+- Cached API responses surviving deployments (we don't cache across deploys)
+- Multiple frontends with independent release schedules (our frontends deploy atomically)
+
+**We have none of these**, so strict validation is the correct choice.
+
+**Schema Decisions Explained:**
+
+- **`.strict()` everywhere**: Unknown fields = validation errors = bugs caught early
+- **No `.default()` on business fields**: Server must send explicit values; hiding missing data is worse than failing
+- **Required fields**: `orderRules.types` is required, not `optional().default("multiple")`
+- **Strict enums**: `z.enum(["single", "multiple"])` not `z.string()` (coordinated deploys are fine)
+- **Remove copy refinements**: Template existence checked at render time, not schema time (separation of concerns)
+
+---
+
 ### 14.1 Normative — Schema Architecture
 
 #### A. Single source principle
@@ -4045,7 +4225,8 @@ The client **derives UI state** from server facts using pure functions (atoms). 
 
 #### C. Schema composition rules
 
-- Use Zod's `.strict()` for **all** object schemas to reject unknown fields (fail-fast on schema drift).
+- Use Zod's `.strict()` on the root `PanelDataSchema` to reject unknown top‑level keys (SSR/hydration consistency; atomic deploys).
+- Prefer `.strict()` for nested object schemas to catch shape drift.
 - Use `.default()` for **optional fields with server-defined defaults** only; client **MUST NOT** invent defaults for business fields.
 - Use `.readonly()` for **immutable reference data** (e.g., `context.copyTemplates`).
 - Chain `.brand()` for **nominal types** where primitive aliasing would be unsafe (e.g., `ProductId`, `DineroSnapshot`).
@@ -4112,17 +4293,17 @@ type DineroSnapshot = z.infer<typeof DineroSnapshotSchema>;
 
 const OrderRulesSchema = z
   .object({
-    types: z.enum(["single", "multiple"]).default("multiple"),
-    typesPerOrder: z.enum(["single", "multiple"]).default("multiple"),
-    ticketsPerType: z.enum(["single", "multiple"]).default("multiple"),
-    minSelectedTypes: z.number().int().nonnegative().default(0),
-    minTicketsPerSelectedType: z.number().int().nonnegative().default(0),
+    types: z.enum(["single", "multiple"]),
+    typesPerOrder: z.enum(["single", "multiple"]),
+    ticketsPerType: z.enum(["single", "multiple"]),
+    minSelectedTypes: z.number().int().nonnegative(),
+    minTicketsPerSelectedType: z.number().int().nonnegative(),
   })
   .strict();
 
 const GatingSummarySchema = z
   .object({
-    hasHiddenGatedItems: z.boolean().default(false),
+    hasHiddenGatedItems: z.boolean(), // Required; server decides explicitly
     hasAccessCode: z.boolean().optional(),
   })
   .strict();
@@ -4147,11 +4328,10 @@ const NoticeSchema = z
     priority: z.number().default(0),
     expiresAt: z.string().datetime().optional(),
   })
-  .strict()
-  .refine(
-    (notice) => notice.text !== undefined || notice.params !== undefined,
-    "Notice must have either text or params for template resolution"
-  );
+  .strict();
+// Note: No .refine() check for "text or params required"
+// Rationale: Template existence cannot be validated at schema time (coupling).
+// Enforcement: Render layer omits notices/messages with neither text nor matching template.
 
 const CopyTemplateSchema = z
   .object({
@@ -4195,18 +4375,18 @@ const HoverCardSchema = z
 
 const EffectivePrefsSchema = z
   .object({
-    showTypeListWhenSoldOut: z.boolean().default(true),
-    displayPaymentPlanAvailable: z.boolean().default(false),
+    showTypeListWhenSoldOut: z.boolean(),
+    displayPaymentPlanAvailable: z.boolean(),
     displayRemainingThreshold: z.number().int().positive().optional(),
   })
   .strict();
 
 const ContextSchema = z
   .object({
-    orderRules: OrderRulesSchema.optional(),
+    orderRules: OrderRulesSchema, // REQUIRED per §4
     gatingSummary: GatingSummarySchema.optional(),
     panelNotices: z.array(NoticeSchema).default([]),
-    effectivePrefs: EffectivePrefsSchema.default({}),
+    effectivePrefs: EffectivePrefsSchema,
     copyTemplates: z.array(CopyTemplateSchema).optional(),
     clientCopy: ClientCopySchema.optional(),
     tooltips: z.array(TooltipSchema).optional(),
@@ -4233,8 +4413,8 @@ const SectionSchema = z
 
 const TemporalSchema = z
   .object({
-    phase: z.enum(["before", "during", "after"]).default("before"),
-    reasons: z.array(MachineCodeSchema).default([]),
+    phase: z.enum(["before", "during", "after"]),
+    reasons: z.array(MachineCodeSchema),
     currentWindow: z
       .object({
         startsAt: z.string().datetime(),
@@ -4252,9 +4432,9 @@ const TemporalSchema = z
 
 const SupplySchema = z
   .object({
-    status: z.enum(["available", "none", "unknown"]).default("available"),
+    status: z.enum(["available", "none", "unknown"]),
     remaining: z.number().int().nonnegative().optional(),
-    reasons: z.array(MachineCodeSchema).default([]),
+    reasons: z.array(MachineCodeSchema),
   })
   .strict();
 
@@ -4279,20 +4459,18 @@ const GatingRequirementSchema = z
 
 const GatingSchema = z
   .object({
-    required: z.boolean().default(false),
-    satisfied: z.boolean().default(false),
-    listingPolicy: z
-      .enum(["omit_until_unlocked", "visible_locked"])
-      .default("omit_until_unlocked"),
-    reasons: z.array(MachineCodeSchema).default([]),
+    required: z.boolean(),
+    satisfied: z.boolean(),
+    listingPolicy: z.enum(["omit_until_unlocked", "visible_locked"]),
+    reasons: z.array(MachineCodeSchema),
     requirements: z.array(GatingRequirementSchema).optional(),
   })
   .strict();
 
 const DemandSchema = z
   .object({
-    kind: z.enum(["none", "waitlist", "notify_me"]).default("none"),
-    reasons: z.array(MachineCodeSchema).default([]),
+    kind: z.enum(["none", "waitlist", "notify_me"]),
+    reasons: z.array(MachineCodeSchema),
   })
   .strict();
 
@@ -4311,11 +4489,10 @@ const MessageSchema = z
     variant: z.enum(["neutral", "info", "warning", "error"]).default("info"),
     priority: z.number().default(0),
   })
-  .strict()
-  .refine(
-    (msg) => msg.text !== undefined || msg.params !== undefined,
-    "Message must have either text or params for template resolution"
-  );
+  .strict();
+// Note: No .refine() check for "text or params required"
+// Rationale: Template existence cannot be validated at schema time (coupling).
+// Enforcement: Render layer omits messages with neither text nor matching template (§5.4, §7.1).
 
 const StateSchema = z
   .object({
@@ -4323,7 +4500,7 @@ const StateSchema = z
     supply: SupplySchema,
     gating: GatingSchema,
     demand: DemandSchema,
-    messages: z.array(MessageSchema).default([]),
+    messages: z.array(MessageSchema), // Required; server must send (even if empty array)
   })
   .strict();
 
@@ -4333,18 +4510,16 @@ const StateSchema = z
 
 const FulfillmentSchema = z
   .object({
-    methods: z
-      .array(
-        z.enum([
-          "eticket",
-          "apple_pass",
-          "will_call",
-          "physical_mail",
-          "shipping",
-          "nfc",
-        ])
-      )
-      .default([]),
+    methods: z.array(
+      z.enum([
+        "eticket",
+        "apple_pass",
+        "will_call",
+        "physical_mail",
+        "shipping",
+        "nfc",
+      ])
+    ),
     details: z.record(z.unknown()).optional(),
   })
   .strict();
@@ -4367,8 +4542,7 @@ const VariantSchema = z
     name: z.string().optional(),
     attributes: z.record(z.unknown()).optional(),
   })
-  .strict()
-  .default({});
+  .strict();
 
 const CommercialSchema = z
   .object({
@@ -4395,11 +4569,10 @@ const CommercialSchema = z
 
 const RelationsSchema = z
   .object({
-    parentProductIds: z.array(ProductIdSchema).default([]),
+    parentProductIds: z.array(ProductIdSchema).optional(),
     matchBehavior: z.enum(["per_ticket", "per_order"]).optional(),
   })
-  .strict()
-  .default({});
+  .strict();
 
 const BadgeDetailRefSchema = z
   .object({
@@ -4410,20 +4583,20 @@ const BadgeDetailRefSchema = z
 
 const DisplaySchema = z
   .object({
-    badges: z.array(z.string()).default([]),
+    badges: z.array(z.string()),
     badgeDetails: z.record(BadgeDetailRefSchema).optional(),
     sectionId: SectionIdSchema.optional(),
-    showLowRemaining: z.boolean().default(false),
+    showLowRemaining: z.boolean(),
   })
   .strict();
 
 const PanelItemSchema = z
   .object({
     product: ProductSchema,
-    variant: VariantSchema,
+    variant: VariantSchema.optional(),
     state: StateSchema,
     commercial: CommercialSchema,
-    relations: RelationsSchema,
+    relations: RelationsSchema.optional(),
     display: DisplaySchema,
   })
   .strict()
@@ -4486,7 +4659,7 @@ const PanelDataSchema = z
     items: z.array(PanelItemSchema).default([]),
     pricing: PricingSchema,
   })
-  .strict()
+  .strict() // reject unknown top-level keys for SSR/hydration consistency
   .refine(
     (data) => {
       // Currency consistency: all items must match pricing currency
@@ -4819,9 +4992,7 @@ export const anyLockedVisibleAtom = atom((get) => {
 /** Selection is valid per orderRules (§5.3a) */
 export const selectionValidAtom = atom((get) => {
   const panel = get(panelDataQueryAtom);
-  const { orderRules } = panel.context;
-
-  if (!orderRules) return true; // No rules = always valid
+  const { orderRules } = panel.context; // REQUIRED per §4
 
   // Count selected types
   const selectedTypes = panel.items.filter(
@@ -5129,14 +5300,26 @@ function AccessCodeInput() {
 import { describe, it, expect } from "vitest";
 import { PanelDataSchema, PanelItemSchema } from "./schemas";
 
+// Test helper: minimal valid context (required fields)
+const validContext = {
+  orderRules: {
+    types: "multiple" as const,
+    typesPerOrder: "multiple" as const,
+    ticketsPerType: "multiple" as const,
+    minSelectedTypes: 0,
+    minTicketsPerSelectedType: 0,
+  },
+  panelNotices: [],
+  effectivePrefs: {
+    showTypeListWhenSoldOut: true,
+    displayPaymentPlanAvailable: false,
+  },
+};
+
 describe("PanelDataSchema", () => {
   it("validates minimal valid payload", () => {
     const minimal = {
-      context: {
-        orderRules: {},
-        panelNotices: [],
-        effectivePrefs: {},
-      },
+      context: validContext,
       sections: [{ id: "main", label: "Tickets", order: 1 }],
       items: [],
       pricing: {
@@ -5149,27 +5332,29 @@ describe("PanelDataSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("rejects payload with unknown top-level field", () => {
-    const invalid = {
-      context: {},
-      sections: [],
+  it("rejects unknown top-level fields", () => {
+    const withUnknown = {
+      context: validContext,
+      sections: [{ id: "main", label: "Tickets", order: 1 }],
       items: [],
-      pricing: { currency: {}, lineItems: [] },
-      unknownField: "should fail", // .strict() catches this
+      pricing: {
+        currency: { code: "USD", base: 10, exponent: 2 },
+        lineItems: [],
+      },
+      unknownField: "should be rejected",
     };
 
-    const result = PanelDataSchema.safeParse(invalid);
+    const result = PanelDataSchema.safeParse(withUnknown);
     expect(result.success).toBe(false);
   });
 
   it("rejects payload with currency mismatch", () => {
     const invalid = {
-      context: {},
+      context: validContext,
       sections: [{ id: "main", label: "Tickets", order: 1 }],
       items: [
         {
           product: { id: "prod1", name: "GA", type: "ticket" },
-          variant: {},
           state: {
             temporal: { phase: "during", reasons: [] },
             supply: { status: "available", reasons: [] },
@@ -5191,8 +5376,7 @@ describe("PanelDataSchema", () => {
             feesIncluded: false,
             maxSelectable: 1,
           },
-          display: { badges: [] },
-          relations: {},
+          display: { badges: [], showLowRemaining: false },
         },
       ],
       pricing: {
@@ -5208,13 +5392,28 @@ describe("PanelDataSchema", () => {
 
   it("rejects item with duplicate product IDs", () => {
     const invalid = {
-      context: {},
+      context: validContext,
       sections: [{ id: "main", label: "Tickets", order: 1 }],
       items: [
-        { product: { id: "prod1" } /* ... */ },
-        { product: { id: "prod1" } /* ... */ }, // Duplicate
+        {
+          product: {
+            id: "prod1",
+            name: "GA",
+            type: "ticket",
+          } /* ... minimal required fields omitted for brevity */,
+        },
+        {
+          product: {
+            id: "prod1",
+            name: "VIP",
+            type: "ticket",
+          } /* ... minimal required fields omitted for brevity */,
+        },
       ],
-      pricing: { currency: { code: "USD" }, lineItems: [] },
+      pricing: {
+        currency: { code: "USD", base: 10, exponent: 2 },
+        lineItems: [],
+      },
     };
 
     const result = PanelDataSchema.safeParse(invalid);
@@ -5227,7 +5426,6 @@ describe("PanelItemSchema", () => {
   it("rejects omit_until_unlocked item that should be omitted", () => {
     const invalid = {
       product: { id: "secret", name: "Secret", type: "ticket" },
-      variant: {},
       state: {
         temporal: { phase: "during", reasons: [] },
         supply: { status: "available", reasons: [] },
@@ -5235,18 +5433,21 @@ describe("PanelItemSchema", () => {
           required: true,
           satisfied: false, // Not satisfied
           listingPolicy: "omit_until_unlocked", // Should be omitted
-          reasons: ["requires_code"],
+          reasons: [],
         },
         demand: { kind: "none", reasons: [] },
         messages: [],
       },
       commercial: {
-        price: { amount: 9000, currency: { code: "USD" }, scale: 2 },
+        price: {
+          amount: 9000,
+          currency: { code: "USD", base: 10, exponent: 2 },
+          scale: 2,
+        },
         feesIncluded: false,
         maxSelectable: 0,
       },
-      display: { badges: [] },
-      relations: {},
+      display: { badges: [], showLowRemaining: false },
     };
 
     const result = PanelItemSchema.safeParse(invalid);
@@ -5276,7 +5477,8 @@ describe("MachineCodeSchema", () => {
 
 #### Schema discipline
 
-- **MUST** use `.strict()` on all object schemas to catch unknown fields.
+- **Root schema strict:** Use `.strict()` on `PanelDataSchema` so clients reject unknown top-level keys (SSR/hydration consistency).
+- **Nested strictness:** Use `.strict()` for nested object schemas to catch unknown sub-fields.
 - **MUST** derive TypeScript types via `z.infer<>` (no manual types).
 - **MUST** validate all server responses with root schema (`PanelDataSchema`).
 - **MUST NOT** use Zod transformers for business logic (display formatting only).
@@ -5300,7 +5502,8 @@ describe("MachineCodeSchema", () => {
 
 **Schema authoring:**
 
-- [ ] All object schemas use `.strict()` to reject unknown fields
+- [ ] Root `PanelDataSchema` uses `.strict()` (reject unknown top-level keys)
+- [ ] Nested object schemas use `.strict()` (catch unknown sub-fields)
 - [ ] Optional fields with server defaults use `.default()` (no client-invented defaults)
 - [ ] Enums use `z.enum()` with exhaustive values (matches spec §§3–12)
 - [ ] Money fields use `DineroSnapshotSchema` (never plain numbers)
@@ -5340,7 +5543,9 @@ describe("MachineCodeSchema", () => {
 
 ### 14.12 Migration Notes (schema evolution)
 
-#### Adding new fields (backward compatible)
+**Atomic Deployment Model**: With TanStack Start, server + client always deploy together. This simplifies schema evolution significantly.
+
+#### Adding new optional fields
 
 ```typescript
 // Old schema
@@ -5350,30 +5555,34 @@ const OldSchema = z
   })
   .strict();
 
-// New schema (backward compatible)
+// New schema (add optional field)
 const NewSchema = z
   .object({
     name: z.string(),
-    description: z.string().optional(), // Optional = backward compatible
+    description: z.string().optional(), // New optional field
   })
   .strict();
 ```
 
-#### Breaking changes (coordinate with backend)
+**Deploy**: Update schema → deploy server + client together → done. Both sides know about the new field immediately; no coordination complexity.
+
+#### Changing field types (atomic deploy)
 
 ```typescript
-// Breaking: changing field type
-const Breaking = z.object({
-  price: z.number(), // Was DineroSnapshotSchema
-  // ❌ Requires coordinated deploy
+// Changing field type
+const Updated = z.object({
+  price: DineroSnapshotSchema, // Changed from z.number()
+  // ✅ Deploy server + client together; no version skew
 });
 
-// Non-breaking: adding discriminated union case
+// Adding enum values
 const SupplySchema = z.object({
   status: z.enum(["available", "none", "unknown", "pending"]), // Added "pending"
-  // ✅ Old clients ignore unknown enum values
+  // ✅ Update schema + deploy atomically; strict validation catches issues
 });
 ```
+
+**Key Insight**: With atomic deploys, "breaking changes" just means "update the schema and deploy." No multi-version support needed.
 
 #### Schema versioning (future)
 
@@ -5822,3 +6031,108 @@ commercial.maxSelectable: number
 This appendix will grow with real fixtures and gotchas from implementation. When in doubt, simplify: one axis, one banner channel, one row message channel, and a boolean hint for hidden gated items.
 
 ---
+
+## Q. ReUI Filters + shadcn Field + TanStack Form + Jotai + Query
+
+### Purpose
+
+Non‑normative integration pattern showing how to pair ReUI Filters with shadcn Field for accessible layout, Jotai for state (no prop drilling), TanStack Form for optional form modeling, TanStack Query for data fetching, and TanStack Start (router) for URL/search‑param sync — while respecting Product Panel guardrails (§§3–13).
+
+### Scope and fit
+
+- Use for list/data filtering UIs around the panel (e.g., browsing events, add‑ons directories), not to override server truths in the panel contract.
+- Server remains the source of truth; filters shape the query, not the business decisions.
+
+### Constraints (align with spec)
+
+- Copy: no client‑invented strings for the panel; filter UI labels come from component config, not panel payload.
+- Security: never leak gated info; don’t log sensitive tokens; sanitize/validate filter payload on server.
+- State: Jotai is the single source of truth for filter state; sync into TanStack Form only if needed.
+- Query: include filters structurally in the Query key (stable/serializable) to drive invalidation/refetch.
+- URL: optional sync to router search params; avoid encoding secrets.
+- a11y: wrap filter UI in shadcn Field primitives for label/description/error consistency.
+
+### Blueprint
+
+#### Install components
+
+```bash
+bunx shadcn@latest add @reui/filters
+bunx shadcn@latest add field
+```
+
+#### Define filter atom and field config (typed)
+
+- `filtersAtom = atom<Filter[]>([])` (use ReUI public types)
+- `fields: FilterFieldConfig[] | FilterFieldGroup[]` from the page context
+
+#### Accessible wrapper with shadcn Field
+
+```tsx
+<Field>
+  <FieldLabel>Filters</FieldLabel>
+  <FieldDescription>Refine results</FieldDescription>
+  <Filters fields={fields} filters={filters} onChange={setFilters} />
+  <FieldError />
+</Field>
+```
+
+#### Optional TanStack Form sync
+
+- If filters belong to a form, bind via a `form.Field name="filters"` and pass `value/onChange` to `<Filters>`, or mirror Jotai → form using `form.setFieldValue('filters', filters)`.
+
+#### TanStack Query integration
+
+- Query key: `['dataset', { filters }]` (stable, JSON‑serializable)
+- Server endpoint validates a whitelist of fields/operators and values with Zod; never interpolate raw strings into SQL.
+
+#### URL/search‑param sync (optional)
+
+- Encode filters as a compact, stable string; use TanStack Start router search params. Keep the Jotai atom and router in two‑way sync with debounced updates.
+
+#### Testing
+
+- Unit: when `filtersAtom` changes, the Query key changes and refetches.
+- a11y: Field renders label/description/error; no positive tabIndex; valid roles.
+- Security: ensure server rejects unknown fields/operators; snapshot tests for payload validation.
+
+### Example (minimal, typed)
+
+```tsx
+// atoms
+type AppFilter = {
+  id: string;
+  field: string;
+  operator: string;
+  values: unknown[];
+};
+const filtersAtom = atom<AppFilter[]>([]);
+
+function FiltersField({ fields }: { fields: any[] }) {
+  const [filters, setFilters] = useAtom(filtersAtom);
+  return (
+    <Field>
+      <FieldLabel>Filters</FieldLabel>
+      <Filters fields={fields} filters={filters} onChange={setFilters} />
+      <FieldError />
+    </Field>
+  );
+}
+
+// query
+const { data } = useQuery({
+  queryKey: ["dataset", { filters: useAtomValue(filtersAtom) }],
+  queryFn: () => api.listItems({ filters: get(filtersAtom) }),
+});
+```
+
+### Do / Don’t (quick)
+
+- Do: keep Jotai as source; validate on server; include filters in queryKey; wrap in Field; sync URL when useful.
+- Don’t: hardcode panel strings; leak gated info; mutate queryKey types; store secrets in URL.
+
+### References
+
+- ReUI Filters: [reui.io/docs/filters](https://reui.io/docs/filters)
+- shadcn Field: [ui.shadcn.com/docs/components/field](https://ui.shadcn.com/docs/components/field)
+- shadcn Field video: [YouTube](https://www.youtube.com/watch?v=gjrXeqgxbas)
