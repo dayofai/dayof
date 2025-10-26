@@ -1,5 +1,7 @@
 <!-- markdownlint-disable MD025 -->
 <!-- markdownlint-disable MD024 -->
+<!-- markdownlint-disable MD028 -->
+<!-- markdownlint-disable MD036 -->
 
 # Product Panel Spec 0.4
 
@@ -356,26 +358,52 @@ React Components (consume via useAtomValue)
 #### No props, no drilling (pattern)
 
 ```ts
-function ProductPanel() {
-  const panelState = useAtomValue(panelStateAtom);
-  return panelState.sections.map((section) => (
-    <Section key={section.id} id={section.id} />
+function ProductPanel({ eventId }: { eventId: string }) {
+  const atoms = useMemo(() => createPanelAtoms(eventId), [eventId]);
+
+  return (
+    <PanelAtomsContext.Provider value={atoms}>
+      <PanelContent />
+    </PanelAtomsContext.Provider>
+  );
+}
+
+function PanelContent() {
+  const atoms = usePanelAtoms();
+  const panel = useAtomValue(atoms.queryAtom);
+
+  return panel.sections.map((section) => (
+    <Section key={section.id} sectionId={section.id} />
   ));
 }
 
-function Section({ id }: { id: string }) {
-  const section = useAtomValue(sectionStateAtom(id));
-  return section.rows.map((row) => (
-    <ProductRow key={row.key} rowId={row.key} />
-  ));
+function Section({ sectionId }: { sectionId: string }) {
+  const atoms = usePanelAtoms();
+  const panel = useAtomValue(atoms.queryAtom);
+
+  return panel.items
+    .filter((item) => item.display.sectionId === sectionId)
+    .map((item) => (
+      <ProductRow key={item.product.id} productId={item.product.id} />
+    ));
 }
 
-function ProductRow({ rowId }: { rowId: string }) {
-  const rowState = useAtomValue(rowStateAtom(rowId));
-  const [quantity, setQuantity] = useAtom(selectionFamily(rowId));
-  // rowState: { presentation, quantityUI, priceUI, cta, ... }
+function ProductRow({ productId }: { productId: ProductId }) {
+  const atoms = usePanelAtoms();
+  const presentation = useAtomValue(atoms.presentationFamily(productId));
+  const cta = useAtomValue(atoms.ctaKindFamily(productId));
+  const [quantity, setQuantity] = useAtom(atoms.selectionFamily(productId));
+  // Derived state accessed via atomFamily, not passed as props
 }
 ```
+
+**Key points:**
+
+- Components receive only IDs (productId, sectionId) at collection boundaries, not data objects
+- Atoms accessed via Context hook (usePanelAtoms) - no props drilling
+- atomFamily ensures stable atom references (prevents memory leaks)
+- Factory pattern supports multiple panel instances (scoped state)
+- IDs passed ONLY where `.map()` happens; non-collection components have zero props
 
 #### State Types Hierarchy (authoritative names)
 
@@ -405,29 +433,44 @@ export type PanelState = {
 #### State Atoms Pattern (derive → compose → consume)
 
 ```ts
-export const productPanelQueryAtom =
-  atomWithQuery<ProductPanelPayload>(/* ... */);
+// Created via factory (see §14.4 for full implementation)
+const atoms = createPanelAtoms(eventId);
 
-export const rowStatesAtom = atom((get) => {
-  const payload = get(productPanelQueryAtom);
-  return payload.items.map((item) => deriveRowState(item, payload));
-});
-
-export const panelStateAtom = atom<PanelState>((get) => {
-  const rowStates = get(rowStatesAtom);
-  const sections = get(sectionsAtom);
-  // compose PanelState from rowStates + sections + rollups
-  return derivePanelState({ rowStates, sections });
-});
-
-export const selectionFamily = atomFamily((rowKey: string) =>
-  atom(0, (get, set, qty: number) => {
-    const row = get(rowStateAtom(rowKey));
-    const clamped = Math.max(0, Math.min(qty, row.maxSelectable));
-    set(selectionFamily(rowKey), clamped);
+// Item lookup helper (atomFamily for stable references)
+const itemByIdFamily = atomFamily((productId: ProductId) =>
+  atom((get) => {
+    const panel = get(atoms.queryAtom);
+    return panel.items.find((i) => i.product.id === productId) ?? null;
   })
 );
+
+// Row state derived from item (atomFamily pattern)
+const rowStateFamily = atomFamily((productId: ProductId) =>
+  atom((get) => {
+    const item = get(itemByIdFamily(productId));
+    if (!item) return null;
+    return deriveRowState(item, get(atoms.queryAtom));
+  })
+);
+
+// Selection with clamping (writable atom pattern)
+const selectionFamily = atomFamily((productId: ProductId) => {
+  const valueAtom = atom(0);
+  return atom(
+    (get) => get(valueAtom),
+    (get, set, qty: number) => {
+      const item = get(itemByIdFamily(productId));
+      const clamped = Math.max(
+        0,
+        Math.min(qty, item?.commercial.maxSelectable ?? 0)
+      );
+      set(valueAtom, clamped);
+    }
+  );
+});
 ```
+
+> **Note:** This shows the conceptual pattern. Full idiomatic implementation with Context provider in §14.4.
 
 #### Why “State” not “ViewModel”
 
@@ -3107,6 +3150,8 @@ function deriveCTA(item, pres, purch) {
 
 > **Strings:** Any visible label for these controls must be supplied in `state.messages[]` (e.g., `placement: "row.cta_label"`) or resolvable via `copyTemplates` (§5.4). No hardcoded UI text.
 
+> **Implementation Note:** In actual code, these pure functions are wrapped in `atomFamily` instances within the `createPanelAtoms` factory (§14.4). The pseudocode above shows the derivation logic; §14.4 shows the idiomatic Jotai structure with Context provider pattern.
+
 ---
 
 ### 8.7 Edge cases & tests (acceptance)
@@ -3187,16 +3232,16 @@ The client chooses presentation mode based on payload structure:
 
 **Compact Layout:**
 
-```
-items.length === 1
+```ts
+items.length === 1;
 ```
 
 Single product display (card-based, streamlined)
 
 **Full Layout:**
 
-```
-items.length > 1
+```ts
+items.length > 1;
 ```
 
 Multiple products (row-based list with sections)
@@ -3300,8 +3345,8 @@ function deriveQuantityUI(
 
 **A) Minimal compact (single ticket, no qty selector):**
 
-```
-items.length === 1 && maxSelectable === 1
+```ts
+items.length === 1 && maxSelectable === 1;
 ```
 
 - Product card: name + price (left only)
@@ -3311,8 +3356,8 @@ items.length === 1 && maxSelectable === 1
 
 **B) Compact with quantity (multiple tickets available):**
 
-```
-items.length === 1 && maxSelectable > 1
+```ts
+items.length === 1 && maxSelectable > 1;
 ```
 
 - Product card: name + price (left), quantity stepper (right)
@@ -3321,8 +3366,8 @@ items.length === 1 && maxSelectable > 1
 
 **C) Gated-only (no items, access code entry):**
 
-```
-items.length === 0 && gatingSummary.hasHiddenGatedItems === true
+```ts
+items.length === 0 && gatingSummary.hasHiddenGatedItems === true;
 ```
 
 - **Cannot use compact product layout** (no product exists)
@@ -3377,7 +3422,7 @@ Row message placements consolidate into zones under price:
 
 **Example:** Item with pre-sale timing and low stock:
 
-```
+```md
 General Admission
 $50.00
 
@@ -5874,258 +5919,560 @@ export function useUpdateSelection(eventId: string) {
 
 ---
 
+```typescript
+function deriveCTA(item, pres, purch) {
+  if (pres === "locked") return { kind: "none", enabled: false };
+  if (purch)
+    return { kind: "quantity", enabled: item.commercial.maxSelectable > 0 };
+  const s = item.state;
+  if (s.supply.status === "none" && s.demand.kind === "waitlist")
+    return { kind: "waitlist", enabled: true };
+  if (s.temporal.phase === "before" && s.demand.kind === "notify_me")
+    return { kind: "notify", enabled: true };
+  return { kind: "none", enabled: false };
+}
+```
+
+> **Strings:** Any visible label for these controls must be supplied in `state.messages[]` (e.g., `placement: "row.cta_label"`) or resolvable via `copyTemplates` (§5.4). No hardcoded UI text.
+
+> **Implementation Note:** In actual code, these pure functions are wrapped in `atomFamily` instances within the `createPanelAtoms` factory (§14.4). The pseudocode above shows the derivation logic; §14.4 shows the idiomatic Jotai structure with Context provider pattern.
+
+---
+
 ### 14.4 Jotai Integration
 
-> **Purpose:** Type-safe atoms for derived state and selection management.
+> **Purpose:** Type-safe atoms for derived state and selection management using idiomatic Jotai patterns.
+
+#### Architecture Overview
+
+The Product Panel uses a **scoped atom factory pattern** for proper multi-instance support:
+
+- **createPanelAtoms factory**: Creates isolated atom instances per eventId
+- **Context provider**: Scopes atoms to component tree (no global pollution)
+- **atomFamily for collections**: Stable atom references per productId (prevents memory leaks)
+- **Writable atom pattern**: Primitive atom wrapped in derived atom for validation
+
+**Benefits:**
+
+- Multiple panel instances supported (admin preview + customer view, event comparisons)
+- Zero props drilling (atoms accessed via Context hook)
+- Type-safe by construction (factory return type enforces shape)
+- Testable (easy to mock atoms via custom provider)
+- SSR/hydration safe (stable ID references)
+
+#### Implementation
 
 ```typescript
-import { atom, type PrimitiveAtom } from "jotai";
+import { atom } from "jotai";
 import { atomFamily } from "jotai/utils";
 import { atomWithQuery } from "jotai-tanstack-query";
 import type { PanelData, PanelItem, ProductId } from "./schemas";
 import { panelKeys, fetchPanelData } from "./api";
 
 // ============================================================================
-// Query Atom (TanStack Query + Jotai)
+// Scoped Atom Factory (one per panel instance)
 // ============================================================================
 
-export const panelDataQueryAtom = (eventId: string) =>
-  atomWithQuery<PanelData>(() => ({
+export function createPanelAtoms(eventId: string) {
+  // Query atom (single source of truth for server data)
+  const queryAtom = atomWithQuery<PanelData>(() => ({
     queryKey: panelKeys.event(eventId),
     queryFn: () => fetchPanelData(eventId),
   }));
 
-// ============================================================================
-// Selection Atoms (per-item quantity)
-// ============================================================================
+  // Helper: lookup item by productId
+  const itemByIdFamily = atomFamily((productId: ProductId) =>
+    atom((get) => {
+      const panel = get(queryAtom);
+      return panel.items.find((i) => i.product.id === productId) ?? null;
+    })
+  );
 
-/** Per-product selection state (quantity) */
-export const selectionFamily = atomFamily((productId: ProductId) =>
-  atom(0, (get, set, newQty: number) => {
-    // Clamp to maxSelectable (authoritative)
-    const panel = get(panelDataQueryAtom); // Assumes eventId in scope
-    const item = panel.items.find((it) => it.product.id === productId);
-    const max = item?.commercial.maxSelectable ?? 0;
-    const clamped = Math.max(0, Math.min(newQty, max));
-    set(selectionFamily(productId), clamped);
-  })
-);
+  // ============================================================================
+  // Per-Item Derived State (§8 rendering composition)
+  // ============================================================================
 
-// ============================================================================
-// Derived State Atoms (§8 rendering composition)
-// ============================================================================
+  /** Row presentation: normal | locked */
+  const presentationFamily = atomFamily((productId: ProductId) =>
+    atom((get) => {
+      const item = get(itemByIdFamily(productId));
+      if (!item) return "normal" as const;
 
-/** Row presentation: normal | locked */
-export const rowPresentationAtom = (item: PanelItem) =>
-  atom((get) => {
-    const { gating } = item.state;
-    return gating.required &&
-      !gating.satisfied &&
-      gating.listingPolicy === "visible_locked"
-      ? ("locked" as const)
-      : ("normal" as const);
-  });
+      const { gating } = item.state;
+      return gating.required &&
+        !gating.satisfied &&
+        gating.listingPolicy === "visible_locked"
+        ? ("locked" as const)
+        : ("normal" as const);
+    })
+  );
 
-/** Purchasable boolean (§8.1) */
-export const isPurchasableAtom = (item: PanelItem) =>
-  atom((get) => {
-    const { temporal, supply, gating } = item.state;
-    return (
-      temporal.phase === "during" &&
-      supply.status === "available" &&
-      (!gating.required || gating.satisfied)
+  /** Purchasable boolean (§8.1) */
+  const isPurchasableFamily = atomFamily((productId: ProductId) =>
+    atom((get) => {
+      const item = get(itemByIdFamily(productId));
+      if (!item) return false;
+
+      const { temporal, supply, gating } = item.state;
+      return (
+        temporal.phase === "during" &&
+        supply.status === "available" &&
+        (!gating.required || gating.satisfied)
+      );
+    })
+  );
+
+  /** CTA kind (§8.1) */
+  const ctaKindFamily = atomFamily((productId: ProductId) =>
+    atom((get) => {
+      const presentation = get(presentationFamily(productId));
+      if (presentation === "locked") return "none" as const;
+
+      const item = get(itemByIdFamily(productId));
+      if (!item) return "none" as const;
+
+      const isPurchasable = get(isPurchasableFamily(productId));
+      if (isPurchasable && item.commercial.maxSelectable > 0) {
+        return "quantity" as const;
+      }
+
+      const { supply, demand, temporal } = item.state;
+      if (supply.status === "none" && demand.kind === "waitlist") {
+        return "waitlist" as const;
+      }
+      if (temporal.phase === "before" && demand.kind === "notify_me") {
+        return "notify" as const;
+      }
+
+      return "none" as const;
+    })
+  );
+
+  /** Quantity UI mode (§8.1 + §8.9 consistency rule) */
+  const quantityUIFamily = atomFamily((productId: ProductId) =>
+    atom((get) => {
+      const panel = get(queryAtom);
+      const presentation = get(presentationFamily(productId));
+      const isPurchasable = get(isPurchasableFamily(productId));
+      const item = get(itemByIdFamily(productId));
+
+      if (!item || presentation !== "normal" || !isPurchasable) {
+        return "hidden" as const;
+      }
+
+      const { maxSelectable } = item.commercial;
+      if (maxSelectable <= 0) return "hidden" as const;
+
+      // Full layout consistency rule (§8.9)
+      const isFullLayout = panel.items.length > 1;
+      const anyItemMultiQty = panel.items.some(
+        (i) => i.commercial.maxSelectable > 1
+      );
+
+      if (isFullLayout && anyItemMultiQty) {
+        return "stepper" as const;
+      }
+
+      return maxSelectable === 1 ? ("select" as const) : ("stepper" as const);
+    })
+  );
+
+  /** Price UI mode (§8.1) */
+  const priceUIFamily = atomFamily((productId: ProductId) =>
+    atom((get) => {
+      const presentation = get(presentationFamily(productId));
+      if (presentation === "locked") return "masked" as const;
+
+      const isPurchasable = get(isPurchasableFamily(productId));
+      return isPurchasable ? ("shown" as const) : ("hidden" as const);
+    })
+  );
+
+  // ============================================================================
+  // Selection State (writable)
+  // ============================================================================
+
+  /** Per-product selection state with clamping */
+  const selectionFamily = atomFamily((productId: ProductId) => {
+    const valueAtom = atom(0);
+
+    return atom(
+      (get) => get(valueAtom),
+      (get, set, newQty: number) => {
+        const item = get(itemByIdFamily(productId));
+        const max = item?.commercial.maxSelectable ?? 0;
+        const clamped = Math.max(0, Math.min(newQty, max));
+        set(valueAtom, clamped);
+      }
     );
   });
 
-/** CTA kind (§8.1) */
-export const ctaKindAtom = (item: PanelItem) =>
-  atom((get) => {
-    const presentation = get(rowPresentationAtom(item));
-    if (presentation === "locked") return "none" as const;
+  // ============================================================================
+  // Panel-Level Rollups
+  // ============================================================================
 
-    const isPurchasable = get(isPurchasableAtom(item));
-    if (isPurchasable) {
-      return item.commercial.maxSelectable > 0
-        ? ("quantity" as const)
-        : ("none" as const);
-    }
-
-    const { supply, demand, temporal } = item.state;
-    if (supply.status === "none" && demand.kind === "waitlist") {
-      return "waitlist" as const;
-    }
-    if (temporal.phase === "before" && demand.kind === "notify_me") {
-      return "notify" as const;
-    }
-
-    return "none" as const;
+  /** All visible items are sold out (no hidden gated considered) */
+  const allVisibleSoldOutAtom = atom((get) => {
+    const panel = get(queryAtom);
+    return panel.items.every((item) => item.state.supply.status === "none");
   });
 
-/** Quantity UI mode (§8.1 + §8.9 consistency rule) */
-export const quantityUIAtom = (item: PanelItem) =>
-  atom((get) => {
-    const panel = get(panelDataQueryAtom);
-    const presentation = get(rowPresentationAtom(item));
-    const isPurchasable = get(isPurchasableAtom(item));
-    const { maxSelectable } = item.commercial;
+  /** Any visible item is locked (requires showing access code CTA) */
+  const anyLockedVisibleAtom = atom((get) => {
+    const panel = get(queryAtom);
+    return panel.items.some(
+      (item) =>
+        item.state.gating.required &&
+        !item.state.gating.satisfied &&
+        item.state.gating.listingPolicy === "visible_locked"
+    );
+  });
 
-    if (presentation !== "normal" || !isPurchasable || maxSelectable <= 0) {
-      return "hidden" as const;
-    }
+  /** Selection is valid per orderRules (§5.3a) */
+  const selectionValidAtom = atom((get) => {
+    const panel = get(queryAtom);
+    const { orderRules } = panel.context;
 
-    // Full layout consistency rule (§8.9)
-    const isFullLayout = panel.items.length > 1;
-    const anyItemMultiQty = panel.items.some(
-      (i) => i.commercial.maxSelectable > 1
+    const selectedTypes = panel.items.filter(
+      (item) => get(selectionFamily(item.product.id)) > 0
     );
 
-    if (isFullLayout && anyItemMultiQty) {
-      return "stepper" as const; // Enforce consistency
-    }
-
-    // Standard per-row derivation
-    return maxSelectable === 1 ? ("select" as const) : ("stepper" as const);
-  });
-
-/** Price UI mode (§8.1) */
-export const priceUIAtom = (item: PanelItem) =>
-  atom((get) => {
-    const presentation = get(rowPresentationAtom(item));
-    if (presentation === "locked") return "masked" as const;
-
-    const isPurchasable = get(isPurchasableAtom(item));
-    return isPurchasable ? ("shown" as const) : ("hidden" as const);
-  });
-
-// ============================================================================
-// Panel-level rollups
-// ============================================================================
-
-/** All visible items are sold out (no hidden gated considered) */
-export const allVisibleSoldOutAtom = atom((get) => {
-  const panel = get(panelDataQueryAtom);
-  return panel.items.every((item) => item.state.supply.status === "none");
-});
-
-/** Any visible item is locked (requires showing access code CTA) */
-export const anyLockedVisibleAtom = atom((get) => {
-  const panel = get(panelDataQueryAtom);
-  return panel.items.some(
-    (item) =>
-      item.state.gating.required &&
-      !item.state.gating.satisfied &&
-      item.state.gating.listingPolicy === "visible_locked"
-  );
-});
-
-/** Selection is valid per orderRules (§5.3a) */
-export const selectionValidAtom = atom((get) => {
-  const panel = get(panelDataQueryAtom);
-  const { orderRules } = panel.context; // REQUIRED per §4
-
-  // Count selected types
-  const selectedTypes = panel.items.filter(
-    (item) => get(selectionFamily(item.product.id)) > 0
-  );
-
-  // Min types check
-  if (selectedTypes.length < orderRules.minSelectedTypes) {
-    return false;
-  }
-
-  // Min tickets per type check
-  for (const item of selectedTypes) {
-    const qty = get(selectionFamily(item.product.id));
-    if (qty < orderRules.minTicketsPerSelectedType) {
+    if (selectedTypes.length < orderRules.minSelectedTypes) {
       return false;
     }
-  }
 
-  return true;
-});
+    for (const item of selectedTypes) {
+      const qty = get(selectionFamily(item.product.id));
+      if (qty < orderRules.minTicketsPerSelectedType) {
+        return false;
+      }
+    }
 
-/** Panel action button state (derived, atom-driven labels) */
-export const panelActionButtonAtom = atom((get) => {
-  const panel = get(panelDataQueryAtom);
-  const { clientCopy = {} } = panel.context;
-
-  // Determine layout context for singular/plural
-  const isCompactLayout = panel.items.length === 1;
-  const isSingular =
-    isCompactLayout && panel.items[0]?.commercial.maxSelectable === 1;
-
-  // Default labels by kind (atom-supplied)
-  const defaultLabels = {
-    checkout: { singular: "Get Ticket", plural: "Get Tickets" },
-    waitlist: { singular: "Join Waitlist", plural: "Join Waitlist" },
-    notify_me: { singular: "Notify Me", plural: "Notify Me" },
-  };
-
-  // Helper to get label for a kind
-  const getLabel = (kind: "checkout" | "waitlist" | "notify_me") => {
-    const override = isSingular
-      ? clientCopy.panel_action_button_cta
-      : clientCopy.panel_action_button_cta_plural;
-
-    return (
-      override ||
-      (isSingular ? defaultLabels[kind].singular : defaultLabels[kind].plural)
-    );
-  };
-
-  // Check if any item is purchasable
-  const anyPurchasable = panel.items.some((item) => {
-    const isPurchasable = get(isPurchasableAtom(item));
-    return isPurchasable && item.commercial.maxSelectable > 0;
+    return true;
   });
 
-  if (anyPurchasable) {
+  /** Panel action button state (derived, atom-driven labels) */
+  const panelActionButtonAtom = atom((get) => {
+    const panel = get(queryAtom);
+    const { clientCopy = {} } = panel.context;
+
+    const isCompactLayout = panel.items.length === 1;
+    const isSingular =
+      isCompactLayout && panel.items[0]?.commercial.maxSelectable === 1;
+
+    const defaultLabels = {
+      checkout: { singular: "Get Ticket", plural: "Get Tickets" },
+      waitlist: { singular: "Join Waitlist", plural: "Join Waitlist" },
+      notify_me: { singular: "Notify Me", plural: "Notify Me" },
+    };
+
+    const getLabel = (kind: "checkout" | "waitlist" | "notify_me") => {
+      const override = isSingular
+        ? clientCopy.panel_action_button_cta
+        : clientCopy.panel_action_button_cta_plural;
+      return (
+        override ||
+        (isSingular ? defaultLabels[kind].singular : defaultLabels[kind].plural)
+      );
+    };
+
+    const anyPurchasable = panel.items.some((item) => {
+      const isPurchasable = get(isPurchasableFamily(item.product.id));
+      return isPurchasable && item.commercial.maxSelectable > 0;
+    });
+
+    if (anyPurchasable) {
+      return {
+        kind: "checkout" as const,
+        enabled: true,
+        label: getLabel("checkout"),
+      };
+    }
+
+    const hasWaitlist = panel.items.some((item) => {
+      const gateSatisfied =
+        !item.state.gating.required || item.state.gating.satisfied;
+      return gateSatisfied && item.state.demand.kind === "waitlist";
+    });
+
+    if (hasWaitlist) {
+      return {
+        kind: "waitlist" as const,
+        enabled: true,
+        label: getLabel("waitlist"),
+      };
+    }
+
+    const hasNotifyMe = panel.items.some((item) => {
+      return (
+        item.state.temporal.phase === "before" &&
+        item.state.demand.kind === "notify_me"
+      );
+    });
+
+    if (hasNotifyMe) {
+      return {
+        kind: "notify_me" as const,
+        enabled: true,
+        label: getLabel("notify_me"),
+      };
+    }
+
     return {
       kind: "checkout" as const,
-      enabled: true,
+      enabled: false,
       label: getLabel("checkout"),
     };
-  }
-
-  // Check for waitlist
-  const hasWaitlist = panel.items.some((item) => {
-    const gateSatisfied =
-      !item.state.gating.required || item.state.gating.satisfied;
-    return gateSatisfied && item.state.demand.kind === "waitlist";
   });
 
-  if (hasWaitlist) {
-    return {
-      kind: "waitlist" as const,
-      enabled: true,
-      label: getLabel("waitlist"),
-    };
-  }
+  // ============================================================================
+  // Return scoped atoms
+  // ============================================================================
 
-  // Check for notify_me
-  const hasNotifyMe = panel.items.some((item) => {
-    return (
-      item.state.temporal.phase === "before" &&
-      item.state.demand.kind === "notify_me"
-    );
-  });
-
-  if (hasNotifyMe) {
-    return {
-      kind: "notify_me" as const,
-      enabled: true,
-      label: getLabel("notify_me"),
-    };
-  }
-
-  // Fallback: disabled checkout
   return {
-    kind: "checkout" as const,
-    enabled: false,
-    label: getLabel("checkout"),
+    queryAtom,
+    itemByIdFamily,
+    presentationFamily,
+    isPurchasableFamily,
+    ctaKindFamily,
+    quantityUIFamily,
+    priceUIFamily,
+    selectionFamily,
+    allVisibleSoldOutAtom,
+    anyLockedVisibleAtom,
+    selectionValidAtom,
+    panelActionButtonAtom,
   };
-});
+}
 ```
+
+#### Context Provider Setup
+
+```typescript
+import { createContext, useContext, useMemo } from "react";
+
+/** Context for scoped panel atoms */
+const PanelAtomsContext = createContext<ReturnType<
+  typeof createPanelAtoms
+> | null>(null);
+
+/** Hook to access panel atoms (must be used within ProductPanel) */
+export function usePanelAtoms() {
+  const atoms = useContext(PanelAtomsContext);
+  if (!atoms) {
+    throw new Error("usePanelAtoms must be used within ProductPanel component");
+  }
+  return atoms;
+}
+
+/** Panel root component - creates and provides scoped atoms */
+export function ProductPanel({ eventId }: { eventId: string }) {
+  const atoms = useMemo(() => createPanelAtoms(eventId), [eventId]);
+
+  return (
+    <PanelAtomsContext.Provider value={atoms}>
+      <PanelContent />
+    </PanelAtomsContext.Provider>
+  );
+}
+```
+
+#### Component Usage Examples
+
+```typescript
+/** Panel content - accesses atoms via Context */
+function PanelContent() {
+  const atoms = usePanelAtoms();
+  const panel = useAtomValue(atoms.queryAtom);
+  const isValid = useAtomValue(atoms.selectionValidAtom);
+
+  return (
+    <div>
+      <PanelNotices notices={panel.context.panelNotices} />
+
+      {panel.sections.map((section) => (
+        <Section key={section.id} sectionId={section.id} />
+      ))}
+
+      <PricingFooter />
+      <PanelActionButton enabled={isValid} />
+    </div>
+  );
+}
+
+/** Section - filters items, passes only productId to rows */
+function Section({ sectionId }: { sectionId: string }) {
+  const atoms = usePanelAtoms();
+  const panel = useAtomValue(atoms.queryAtom);
+  const section = panel.sections.find((s) => s.id === sectionId);
+
+  const sectionItems = panel.items.filter(
+    (item) => item.display.sectionId === sectionId
+  );
+
+  return (
+    <div>
+      <h2>{section?.label}</h2>
+      {sectionItems.map((item) => (
+        <ProductRow
+          key={item.product.id}
+          productId={item.product.id} // ID only, not whole object
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Product row - fetches all data via atoms using productId */
+function ProductRow({ productId }: { productId: ProductId }) {
+  const atoms = usePanelAtoms();
+
+  // Fetch item data
+  const item = useAtomValue(atoms.itemByIdFamily(productId));
+  if (!item) return null;
+
+  // Fetch derived presentation state
+  const presentation = useAtomValue(atoms.presentationFamily(productId));
+  const cta = useAtomValue(atoms.ctaKindFamily(productId));
+  const quantityUI = useAtomValue(atoms.quantityUIFamily(productId));
+  const priceUI = useAtomValue(atoms.priceUIFamily(productId));
+
+  // Fetch & update selection
+  const [quantity, setQuantity] = useAtom(atoms.selectionFamily(productId));
+
+  if (presentation === "locked") {
+    return <LockedRow item={item} />;
+  }
+
+  return (
+    <NormalRow
+      item={item}
+      cta={cta}
+      quantityUI={quantityUI}
+      priceUI={priceUI}
+      quantity={quantity}
+      onQuantityChange={setQuantity}
+    />
+  );
+}
+
+/** Non-collection component - zero props, atoms only */
+function PanelActionButton({ enabled }: { enabled: boolean }) {
+  const atoms = usePanelAtoms();
+  const buttonState = useAtomValue(atoms.panelActionButtonAtom);
+
+  return (
+    <button disabled={!enabled || !buttonState.enabled}>
+      {buttonState.label}
+    </button>
+  );
+}
+```
+
+#### Rationale: Why This Pattern is Idiomatic
+
+**atomFamily for stable references:**
+
+- Each productId gets one cached atom instance
+- Prevents memory leaks from creating new atoms on every render
+- React re-renders don't break atom subscriptions
+
+**Scoped factory for multi-instance:**
+
+- Multiple panels on same page have isolated state
+- Each panel's atoms are independent (no cross-contamination)
+- Factory closes over eventId (no parameter juggling)
+
+**Context for dependency injection:**
+
+- Atoms accessed via hook, maintaining "no props drilling" principle
+- Components get exactly what they need, when they need it
+- Type-safe access (hook enforces provider presence)
+
+**Writable atom pattern:**
+
+- Primitive atom holds value
+- Derived atom wraps it with validation/clamping
+- Write function updates primitive, read function exposes derived
+
+**Direct query reference:**
+
+- Factory closes over eventId, all atoms reference same queryAtom
+- No "assumes eventId in scope" workarounds
+- Clean dependency graph (atoms compose other atoms in same scope)
+
+#### SSR/Hydration/Dynamic Collections
+
+**Why IDs at collection boundaries (not drilling everywhere):**
+
+The "components receive only IDs" pattern solves three problems specific to SSR/hydration/real-time contexts:
+
+**1. SSR/Hydration Consistency**
+
+Server renders items array, client hydrates same array. React reconciliation uses stable ID keys to match server DOM to client components. String IDs (not object references) prevent hydration mismatch warnings.
+
+```typescript
+// Server renders:
+items.map((item) => (
+  <ProductRow key={item.product.id} productId={item.product.id} />
+));
+// HTML: <div data-product-id="prod_ga">...</div>
+
+// Client hydrates:
+items.map((item) => (
+  <ProductRow key={item.product.id} productId={item.product.id} />
+));
+// React matches by key: "prod_ga" → existing DOM node ✅
+```
+
+**2. Efficient Re-Renders for Dynamic Collections**
+
+Items appear (unlock), disappear (re-lock), or update (inventory changes). With ID props, React skips unchanged rows (same string = same component instance). With object props, React re-renders ALL rows (new object references every update).
+
+Performance example: 10 ticket types, user changes qty on row 5 → only row 5 re-renders (not all 10).
+
+**3. Real-Time Sync Without Thrashing**
+
+Server pushes updated panel data, client replaces items array. React reconciles via stable IDs, Jotai atomFamily caches by productId. Unchanged rows skip render; changed rows update atoms only.
+
+```typescript
+// Real-time update flow:
+// 1. Server pushes new panel data
+// 2. Client receives, validates with Zod
+// 3. queryAtom updates with new PanelData
+// 4. React reconciles: same productId = same component, atoms re-derive
+// 5. Only changed atoms trigger re-renders
+```
+
+**Pattern in practice:**
+
+```typescript
+// Parent maps collection, extracts and passes IDs
+const items = panel.items; // From queryAtom
+items.map((item) => <ProductRow productId={item.product.id} />);
+//                               ^^^^^^^^^^^^^^^^^^^^^^^^
+//                               Stable identifier: React key + Jotai atomFamily lookup
+
+// Child fetches data via atoms (no props drilling)
+function ProductRow({ productId }) {
+  const atoms = usePanelAtoms();
+  const item = useAtomValue(atoms.itemByIdFamily(productId)); // Fetch via ID
+  // Rest of data comes from atoms, not props
+}
+```
+
+**IDs passed ONLY where `.map()` happens:**
+
+- Sections array → pass sectionId
+- Items array → pass productId
+- PricingLineItems array → pass code
+- Non-collection components (PricingFooter, PanelActionButton, PanelNotices) → zero props
+
+**IDs are the glue between:**
+
+- React reconciliation (key prop for efficient DOM updates)
+- Jotai atomFamily (lookup parameter for cached atom instances)
+- SSR hydration (stable string references across server/client boundary)
 
 ---
 
@@ -6287,21 +6634,26 @@ const { data: panel, isLoading, error } = usePanelData(eventId);
 //    ^? PanelData (inferred from PanelDataSchema)
 
 // 2. Atoms derive presentation from validated data
+const atoms = usePanelAtoms();
 const rowStates = panel.items.map((item) => ({
   key: item.product.id,
-  presentation: rowPresentationAtom(item),
-  isPurchasable: isPurchasableAtom(item),
-  cta: ctaKindAtom(item),
-  quantityUI: quantityUIAtom(item),
-  priceUI: priceUIAtom(item),
+  presentation: get(atoms.presentationFamily(item.product.id)),
+  isPurchasable: get(atoms.isPurchasableFamily(item.product.id)),
+  cta: get(atoms.ctaKindFamily(item.product.id)),
+  quantityUI: get(atoms.quantityUIFamily(item.product.id)),
+  priceUI: get(atoms.priceUIFamily(item.product.id)),
 }));
 
-// 3. Component consumes typed state
-function ProductRow({ item }: { item: PanelItem }) {
-  const [quantity, setQuantity] = useAtom(selectionFamily(item.product.id));
-  const presentation = useAtomValue(rowPresentationAtom(item));
-  const cta = useAtomValue(ctaKindAtom(item));
+// 3. Component consumes typed state (ID-only)
+function ProductRow({ productId }: { productId: ProductId }) {
+  const atoms = usePanelAtoms();
+  const [quantity, setQuantity] = useAtom(atoms.selectionFamily(productId));
+  const presentation = useAtomValue(atoms.presentationFamily(productId));
+  const cta = useAtomValue(atoms.ctaKindFamily(productId));
   //    ^? "quantity" | "waitlist" | "notify" | "none"
+
+  const item = useAtomValue(atoms.itemByIdFamily(productId));
+  if (!item) return null;
 
   if (presentation === "locked") {
     return <LockedRow item={item} />;
@@ -6640,6 +6992,18 @@ describe("MachineCodeSchema", () => {
 - [ ] Atom families use branded types for parameters (`ProductId` not `string`)
 - [ ] Derived atoms reference schema types (e.g., `PanelItem`, not ad-hoc interfaces)
 - [ ] Form hooks use schema-derived types for `onSubmit` callbacks
+
+**Jotai patterns:**
+
+- [ ] Use createPanelAtoms factory for scoped atom instances (§14.4)
+- [ ] All per-item atoms use atomFamily (not functions returning atoms)
+- [ ] Provide atoms via React Context (PanelAtomsContext)
+- [ ] Components access atoms via usePanelAtoms hook
+- [ ] Writable atoms use primitive + derived wrapper pattern
+- [ ] AtomFamily parameters use branded types (ProductId, not string)
+- [ ] Factory return type explicitly typed for IntelliSense
+- [ ] Components receive only IDs at collection boundaries (productId, sectionId)
+- [ ] Non-collection components have zero props (read atoms directly)
 
 **Testing:**
 
