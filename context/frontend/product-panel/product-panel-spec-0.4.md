@@ -37,6 +37,8 @@
 >
 > See §14 "Architecture Context: TanStack Start & Validation Strategy" for detailed rationale and comparison with traditional API design patterns.
 
+> **Primary Use Case: Ticket Sales.** While this specification uses "product" terminology to support future expansion into digital items (vouchers, downloads) and physical merchandise, the overwhelmingly common case is selling event tickets. The panel component adapts its presentation based on complexity—rendering a streamlined "TicketPanel" layout for simple single-ticket scenarios, or a full row-based layout when multiple products or selection rules are involved.
+
 ## Sections
 
 1. **Purpose & Scope**
@@ -65,6 +67,7 @@
    - Purchasable boolean
    - CTA decision tree
    - Quantity & price visibility rules
+   - Layout modes (compact vs. full) & quantity UI consistency
 
 9. **Gating & Unlock (No Leakage)**
 
@@ -198,7 +201,7 @@
         "feesIncluded": false,
         "maxSelectable": 6
       },
-      "display": { "badges": [] }
+      "display": { "badges": [], "showLowRemaining": false }
     }
   ],
   "pricing": {
@@ -728,7 +731,7 @@ This separation makes the system **testable** (toggle one axis at a time), **ext
     "messages": []
   },
   "commercial": { "maxSelectable": 6 },
-  "display": { "badges": [] }
+  "display": { "badges": [], "showLowRemaining": false }
 }
 ```
 
@@ -790,6 +793,10 @@ The server is the single source for configuration, banner text, and copy artifac
         - Default recommended: `true` (transparency)
       - `displayPaymentPlanAvailable: boolean`: informational flag; if `true`, the server typically includes a `panelNotices[]` entry about payment plans at checkout
       - `displayRemainingThreshold?: number`: optional threshold for urgency styling (e.g., if remaining ≤ this value, set `display.showLowRemaining=true`)
+
+  - `welcomeText?: string` — Optional panel-level welcome/description message that appears prominently in compact layout and at the top of full layout.
+    - When omitted, client uses state-adaptive defaults derived from panel state
+    - Supports markdown formatting (optional implementation detail)
 
 - **MUST/SHOULD** behavior:
 
@@ -961,8 +968,10 @@ Understanding how context, items, and pricing work together:
 
 - `orderRules` tells the client how selections can be composed (one type vs many, minimums, etc.)
 - `gatingSummary.hasHiddenGatedItems` hints that omitted items exist (without leaking details)
-- `panelNotices[]` provides event-level banners ("Payment plans available", "Enter access code")
+- `panelNotices[]` provides event-level banners and specialized content ("Payment plans available", access code entry)
 - `effectivePrefs` controls display behaviors (show/hide sold-out list)
+- `welcomeText` provides optional panel-level welcome message (state-adaptive defaults from clientCopy)
+- `clientCopy` supplies UI labels and validation messages (panel button CTAs, welcome text variants)
 - `copyTemplates`, `tooltips`, `hovercards` supply reusable text artifacts
 
 **Items provide the facts about each product:**
@@ -1009,6 +1018,11 @@ Understanding how context, items, and pricing work together:
     "effectivePrefs": {
       "showTypeListWhenSoldOut": true,
       "displayPaymentPlanAvailable": false
+    },
+    "welcomeText": "Welcome! To join the event, please get your ticket below.",
+    "clientCopy": {
+      "panel_action_button_cta": "Get Ticket",
+      "panel_action_button_cta_plural": "Get Tickets"
     }
   },
   "sections": [{ "id": "main", "label": "Tickets", "order": 1 }],
@@ -1041,7 +1055,7 @@ Understanding how context, items, and pricing work together:
         "feesIncluded": false,
         "maxSelectable": 10
       },
-      "display": { "badges": ["Popular"] }
+      "display": { "badges": ["Popular"], "showLowRemaining": false }
     }
   ],
   "pricing": {
@@ -1144,7 +1158,8 @@ Understanding how context, items, and pricing work together:
         "badgeDetails": {
           "Members": { "kind": "hovercard", "ref": "members_info" }
         },
-        "sectionId": "primary"
+        "sectionId": "primary",
+        "showLowRemaining": false
       }
     }
   ],
@@ -1242,9 +1257,47 @@ The server **MAY** include UI preferences that shape **presentation**, not polic
   Each entry **MAY** include `{ code, text?, params?, placement?, variant?, priority? }`.
   - `variant`: explicit styling variant (e.g., `"warning"`, `"error"`, `"info"`, `"neutral"`) for icon/color selection
   - `priority`: for sorting when multiple messages exist (higher numbers first)
-- **Panel‑level banners:** `context.panelNotices[]` for informational banners only (not CTAs).
-  Each notice **MAY** include `{ code, text?, params?, variant?, priority?, action?, expiresAt? }`.
-  - **Not for primary actions:** Access code entry and waitlist signup are **panel-level CTAs**, not notices (see below).
+- **Panel‑level notices:** `context.panelNotices[]` provides a flexible notice system for panel-level communication.
+
+  **PanelNoticeArea:**
+
+  - Container section at the top of the panel (below header, above content)
+  - Stacks multiple notices vertically in descending priority order
+  - Each notice is a self-contained component
+
+  **PanelNotice component variants:**
+
+  Each notice renders based on its `code` field:
+
+  1. **Standard text notice** (default):
+
+     - Fields: `icon?`, `title?`, `text?`, `description?`
+     - Renders: Icon + heading + body + optional description
+     - Use for: Info banners, warnings, promotional messages
+
+  2. **Access code entry notice** (`code: "requires_code_entry"`):
+     - Renders: Icon + title + description + **inline access code form** (input + submit button)
+     - Use for: Gated-only scenarios (no visible purchasable items)
+     - This is a specialized notice type—it's how the system works for prominent access entry
+
+  **Notice schema:**
+
+  - `code`: Machine code identifier (snake_case) - determines rendering variant
+  - `icon?: string`: Icon name/identifier for visual decoration
+  - `title?: string`: Notice heading (bolded/prominent)
+  - `text?: string`: Notice body text (main message)
+  - `description?: string`: Additional explanatory text (lighter/smaller)
+  - `params?: Record<string, unknown>`: Template interpolation values
+  - `variant?: "neutral" | "info" | "warning" | "error"`: Visual styling
+  - `priority?: number`: Sort order (higher first, default 0)
+  - `action?: { label, kind, target }`: Optional secondary action button
+  - `expiresAt?: string`: ISO timestamp for time-boxed notices
+
+  **Notice stacking:**
+
+  - Multiple notices render vertically in descending priority order
+  - Ties preserve server order
+
 - Clients **MUST NOT** render any text invented locally (no hardcoded "Sold out", no client‑authored banners).
 - `context.reasonTexts` is **not part of this contract**; row text comes from `state.messages[]` only (see §4.1).
 
@@ -1286,37 +1339,101 @@ The separation of panel vs row notices ensures broad messages don't get lost amo
 
 #### 5.3a Panel-level CTA derivation (PanelActionButton & AccessCodeCTA)
 
-The panel has two derived CTAs that are **not** `panelNotices[]`:
+The panel has two derived CTAs:
 
 **PanelActionButton (main button at bottom):**
 
-- **States:**
+This is the primary action button for the entire panel. It appears in both compact and full layouts.
 
-  - `"continue"`: Default when items are purchasable and selection is valid → button shows "Continue" (or "Checkout")
-  - `"waitlist"`: When no items purchasable but waitlist available → button shows "Join Waitlist"
-  - `"disabled"`: When selection invalid (doesn't meet `orderRules`) or nothing purchasable with no waitlist → button grayed out
+**State model:**
 
-- **Waitlist derivation logic:**
-  - **IF** all visible items are **not** purchasable (no item has `temporal.phase="during"` AND `supply.status="available"` AND gating satisfied)
-  - **AND** any **eligible visible** item (gate satisfied or not required; not hidden by `omit_until_unlocked`) has `demand.kind="waitlist"`
-  - **THEN** PanelActionButton state = `"waitlist"` (button shows "Join Waitlist")
-  - **Note:** Respects gating precedence (§3.5)—locked items with waitlist do not trigger panel waitlist CTA until unlocked.
-- **Common scenarios:**
-  - Event not on sale yet (`temporal.phase="before"`) + waitlist enabled → "Join Waitlist"
-  - All tickets sold out (`supply.status="none"`) + waitlist → "Join Waitlist"
-  - Sales ended (`temporal.phase="after"`) + waitlist for next event → "Join Waitlist"
-- **Label source:** PanelActionButton labels **MUST** come from server-provided copy (e.g., `context.clientCopy`) or app-level copy that is sourced from the server (e.g., `panel_cta_continue`, `panel_cta_waitlist`, `panel_cta_disabled`). Clients **MUST NOT** hardcode these strings. See §5.4/§7.1 for template resolution rules.
+```typescript
+{
+  kind: "checkout" | "waitlist" | "notify_me",
+  enabled: boolean,
+  label: string  // From clientCopy or atom-supplied default
+}
+```
+
+**Derivation logic:**
+
+1. **IF** any visible item is purchasable (`isPurchasable === true` per §8.1)
+
+   - **AND** `commercial.maxSelectable > 0`
+   - **THEN** `kind: "checkout"`, `enabled: true`
+
+2. **ELSE IF** all visible items are **not** purchasable
+
+   - **AND** any **eligible visible** item has `demand.kind="waitlist"`
+   - **THEN** `kind: "waitlist"`, `enabled: true`
+   - **Note:** Respects gating precedence (§3.5)—locked items do not trigger waitlist
+
+3. **ELSE IF** any item has `temporal.phase="before"`
+
+   - **AND** `demand.kind="notify_me"`
+   - **THEN** `kind: "notify_me"`, `enabled: true`
+
+4. **ELSE**
+   - **THEN** `kind: "checkout"`, `enabled: false`
+   - Button is disabled/greyed out
+
+**Label resolution (atom-driven, never hardcoded):**
+
+The atom determines label based on `kind` and layout context:
+
+**Singular vs. plural context:**
+
+- Compact layout + `maxSelectable === 1` → Singular
+- Compact layout + `maxSelectable > 1` → Plural
+- Full layout → Plural
+
+**Label selection per state:**
+
+| kind        | Singular context                                        | Plural context                                                 |
+| ----------- | ------------------------------------------------------- | -------------------------------------------------------------- |
+| `checkout`  | `clientCopy.panel_action_button_cta` or "Get Ticket"    | `clientCopy.panel_action_button_cta_plural` or "Get Tickets"   |
+| `waitlist`  | `clientCopy.panel_action_button_cta` or "Join Waitlist" | `clientCopy.panel_action_button_cta_plural` or "Join Waitlist" |
+| `notify_me` | `clientCopy.panel_action_button_cta` or "Notify Me"     | `clientCopy.panel_action_button_cta_plural` or "Notify Me"     |
+
+**Key principle:**
+
+- Atom knows the state and context
+- clientCopy keys provide **overrides** for singular/plural forms
+- Atom supplies sensible defaults when clientCopy not provided
+- **Never hardcode labels** - they come from atom logic + optional server overrides
+
+**Disabled state:**
+
+- Uses same label as enabled state for that kind
+- Visual disabled styling only (greyed out, not clickable)
+
+**Common scenarios:**
+
+- Single ticket available (`maxSelectable=1`) → kind="checkout", "Get Ticket" (singular, enabled)
+- Single product, multiple qty (`maxSelectable=6`) → kind="checkout", "Get Tickets" (plural, enabled)
+- Multiple products → kind="checkout", "Get Tickets" (plural, enabled)
+- All sold out with waitlist → kind="waitlist", "Join Waitlist" (enabled)
+- Not on sale yet with notify → kind="notify_me", "Notify Me" (enabled)
+- No valid action → kind="checkout", label based on context (disabled)
 
 **AccessCodeCTA (positioned below PanelActionButton):**
 
-- **Appears when:**
-  - `context.gatingSummary.hasHiddenGatedItems=true`, OR
-  - Any visible item has `gating.required=true && satisfied=false`
-- **Typical UI:** Input field + "Apply Code" button (or similar)
-- **Not** a `panelNotice`; it's a persistent UI element derived from gating state
-- A panel notice **MAY** provide additional guidance at the top (e.g., "Enter access code to view tickets")
+A subtle, secondary UI element for access code entry (when not using the inline form notice).
 
-**Key principle:** These CTAs are **derived from panel/item state**, not configured via notices. Notices provide context; CTAs provide actions.
+**Appears when:**
+
+- `context.gatingSummary.hasHiddenGatedItems=true`, OR
+- Any visible item has `gating.required=true && satisfied=false`
+- **AND** not using `requires_code_entry` notice
+
+**Typical UI:**
+
+- Icon + "Have an access code? You can enter it here." (clickable link/button)
+- Expands to show input field + "Apply Code" button when clicked
+
+**Note:** For gated-only scenarios (no purchasable items, only hidden gated), use a **panelNotice with `code: "requires_code_entry"`** which renders the access form inline at the top of the panel. This is a proper notice variant.
+
+**Key principle:** PanelActionButton state and label are **derived from panel/item state** via atoms, not configured via notices. Notices provide context; CTAs provide actions.
 
 #### 5.4 Templates & interpolation
 
@@ -1340,17 +1457,43 @@ Row messages can be **server-authored** (included in `state.messages[]`) or **cl
 
 **`context.clientCopy` strings:**
 
-The server **MAY** provide strings for client‑triggered validation/errors, e.g.:
+The server **MAY** provide strings for client‑triggered validation/errors and UI defaults:
+
+**Selection validation:**
 
 - `selection_min_reached` — "Please select at least one ticket."
 - `selection_max_types` — "You can only select one ticket type."
 - `quantity_min_reached` — "Minimum {min} tickets required for this type."
 - `quantity_max_reached` — "Maximum {max} tickets for this type."
 
+**Add-on validation:**
+
+- `addon_requires_parent` — "Add at least one ticket to select this add-on."
+
+**Panel action button labels (state-adaptive):**
+
+- `panel_action_button_cta` — Singular form (compact + maxSelectable=1)
+  - Server override for default labels
+  - Atom selects default based on state: "Get Ticket" (checkout), "Join Waitlist" (waitlist), "Notify Me" (notify_me)
+- `panel_action_button_cta_plural` — Plural form (compact + maxSelectable>1, or full layout)
+  - Server override for default labels
+  - Atom selects default based on state: "Get Tickets" (checkout), "Join Waitlist" (waitlist), "Notify Me" (notify_me)
+
+**Welcome text defaults (state-adaptive):**
+
+- `welcome_default` — Default welcome for purchasable state
+  - Fallback: "Welcome! To join the event, please get your ticket below."
+- `welcome_waitlist` — Welcome when all items sold out with waitlist
+  - Fallback: "This event is sold out. Join the waitlist to be notified if tickets become available."
+- `welcome_notify_me` — Welcome when tickets not on sale yet
+  - Fallback: "Tickets aren't on sale yet. Get notified when they're available."
+
 **Usage:**
 
-- Clients **MUST** use these strings verbatim when they initiate the message (e.g., on invalid checkout press). No local wording.
-- These strings are **templates** that can include placeholders (e.g., `{max}`, `{min}`); the client interpolates them with current values.
+- Clients **MUST** use these strings verbatim when they apply
+- These are **templates** that can include placeholders (e.g., `{max}`, `{min}`)
+- Client interpolates with current runtime values
+- Atom-driven label selection: clientCopy provides overrides; atom supplies defaults based on state
 
 #### 5.6 Tooltips & hovercards (progressive disclosure)
 
@@ -1435,7 +1578,7 @@ _Result: no payment‑plan banner. No badges. Nothing is shown unless the server
 "context": {
   "panelNotices": [
     {
-      "code": "event_sold_out_info",
+      "code": "event_sold_out",
       "variant": "info",
       "text": "All tickets are sold out. Join our waitlist to be notified if tickets become available.",
       "priority": 100
@@ -1444,6 +1587,44 @@ _Result: no payment‑plan banner. No badges. Nothing is shown unless the server
 }
 // Note: The PanelActionButton itself becomes "Join Waitlist" (not via this notice).
 // This notice provides context; the button provides the action.
+```
+
+**B3) Standard notice with title + description:**
+
+```jsonc
+{
+  "code": "payment_plan_available",
+  "variant": "info",
+  "icon": "credit-card",
+  "title": "Payment Plans Available",
+  "description": "Split your purchase into installments at checkout.",
+  "priority": 50
+}
+```
+
+**B4) Access code entry notice (inline form, specialized variant):**
+
+```jsonc
+{
+  "code": "requires_code_entry",
+  "variant": "info",
+  "icon": "lock",
+  "title": "Have an access code?",
+  "description": "Enter your code below to unlock exclusive tickets.",
+  "priority": 100
+  // Renders inline form: input + submit button
+}
+```
+
+**B5) Simple text notice:**
+
+```jsonc
+{
+  "code": "event_sold_out",
+  "variant": "info",
+  "text": "All tickets sold out",
+  "priority": 100
+}
 ```
 
 #### C) Using templates for row messages (no `text` on the message)
@@ -1611,7 +1792,7 @@ _Rendering: Both messages appear under title, sorted by priority (requires_code 
   _Expect_ urgency styling may apply, but quantity controls remain hidden (clamp wins).
 
 - **Panel notice vs PanelActionButton**
-  _Given_ all items sold out with `demand.kind="waitlist"` and a panel notice `{ code:"event_sold_out_info", text:"All tickets sold out..." }`
+  _Given_ all items sold out with `demand.kind="waitlist"` and a panel notice `{ code:"event_sold_out", text:"All tickets sold out..." }`
   _Expect_ the notice banner appears at top (informational), and the PanelActionButton at bottom changes to "Join Waitlist" (primary action).
 
 - **Multiple messages per row**
@@ -1791,7 +1972,7 @@ _Rendering: Both messages appear under title, sorted by priority (requires_code 
     "maxSelectable": 1,
     "limits": { "perOrder": 1 }
   },
-  "display": { "badges": ["Merch"] }
+  "display": { "badges": ["Merch"], "showLowRemaining": false }
 }
 ```
 
@@ -2000,6 +2181,11 @@ _Note: This parking pass requires a parent ticket (GA or VIP) and is limited to 
 - [ ] Fulfillment icons/tooltips driven by `product.fulfillment.methods`; values MUST be from the enum (unknown methods are invalid).
 - [ ] Add-on dependencies respected via `relations.parentProductIds` and `matchBehavior`.
 - [ ] Currency consistency: all items' `commercial.price.currency.code` matches `pricing.currency.code`.
+- [ ] `context.welcomeText` optional; atom derives defaults from state if omitted.
+- [ ] Panel notices support `icon`, `title`, `text`, `description` fields.
+- [ ] Notice variant determined by `code` field (standard vs. specialized rendering).
+- [ ] PanelActionButton labels: atom-driven with clientCopy overrides (never hardcoded).
+- [ ] All examples include `display.showLowRemaining: boolean` (required field).
 
 .
 
@@ -2527,6 +2713,344 @@ The client **MAY** derive rollups **only** for layout/controls, never to show ba
 
 - **Derived:** `presentation="locked"`, `priceUI="masked"`, `quantityUI=hidden`, `cta="none"`.
 
+#### D) Minimal compact (single ticket, purchasable)
+
+```jsonc
+{
+  "context": {
+    "orderRules": {
+      "types": "single",
+      "typesPerOrder": "single",
+      "ticketsPerType": "single",
+      "minSelectedTypes": 0,
+      "minTicketsPerSelectedType": 0
+    },
+    "welcomeText": "Welcome! Get your ticket below.",
+    "panelNotices": [],
+    "effectivePrefs": {
+      "showTypeListWhenSoldOut": true,
+      "displayPaymentPlanAvailable": false
+    }
+  },
+  "sections": [{ "id": "main", "label": "Tickets", "order": 1 }],
+  "items": [
+    {
+      "product": {
+        "id": "prod_ga",
+        "name": "General Admission",
+        "type": "ticket"
+      },
+      "variant": {},
+      "state": {
+        "temporal": { "phase": "during", "reasons": [] },
+        "supply": { "status": "available", "reasons": [] },
+        "gating": {
+          "required": false,
+          "satisfied": true,
+          "listingPolicy": "omit_until_unlocked",
+          "reasons": []
+        },
+        "demand": { "kind": "none", "reasons": [] },
+        "messages": []
+      },
+      "commercial": {
+        "price": {
+          "amount": 1500,
+          "currency": { "code": "USD", "base": 10, "exponent": 2 },
+          "scale": 2
+        },
+        "feesIncluded": false,
+        "maxSelectable": 1
+      },
+      "display": { "badges": [], "showLowRemaining": false }
+    }
+  ],
+  "pricing": {
+    "currency": { "code": "USD", "base": 10, "exponent": 2 },
+    "lineItems": [
+      {
+        "code": "TOTAL",
+        "label": "Total",
+        "amount": {
+          "amount": 1500,
+          "currency": { "code": "USD", "base": 10, "exponent": 2 },
+          "scale": 2
+        }
+      }
+    ]
+  }
+}
+```
+
+- **Derived:**
+  - Layout: **Minimal compact** (1 item, maxSelectable=1)
+  - PanelActionButton: kind="checkout", "Get Ticket" (singular, enabled)
+  - Quantity UI: Hidden (implicit qty=1)
+  - Price UI: Shown ($15.00)
+  - Pricing footer: Optional (may be omitted)
+
+#### E) Compact with quantity (multiple tickets available)
+
+```jsonc
+{
+  "context": {
+    "orderRules": {
+      "types": "single",
+      "typesPerOrder": "single",
+      "ticketsPerType": "multiple",
+      "minSelectedTypes": 0,
+      "minTicketsPerSelectedType": 0
+    },
+    "welcomeText": "Welcome! Select your tickets below.",
+    "clientCopy": {
+      "panel_action_button_cta_plural": "Get Tickets"
+    }
+  },
+  "sections": [{ "id": "main", "label": "Tickets", "order": 1 }],
+  "items": [
+    {
+      "product": {
+        "id": "prod_ga",
+        "name": "General Admission",
+        "type": "ticket"
+      },
+      "variant": {},
+      "state": {
+        "temporal": { "phase": "during", "reasons": [] },
+        "supply": { "status": "available", "reasons": [] },
+        "gating": {
+          "required": false,
+          "satisfied": true,
+          "listingPolicy": "omit_until_unlocked",
+          "reasons": []
+        },
+        "demand": { "kind": "none", "reasons": [] },
+        "messages": []
+      },
+      "commercial": {
+        "price": {
+          "amount": 5000,
+          "currency": { "code": "USD", "base": 10, "exponent": 2 },
+          "scale": 2
+        },
+        "feesIncluded": false,
+        "maxSelectable": 6,
+        "limits": { "perOrder": 6 }
+      },
+      "display": { "badges": [], "showLowRemaining": false }
+    }
+  ],
+  "pricing": {
+    "currency": { "code": "USD", "base": 10, "exponent": 2 },
+    "lineItems": [
+      {
+        "code": "TICKETS",
+        "label": "Tickets",
+        "amount": {
+          "amount": 0,
+          "currency": { "code": "USD", "base": 10, "exponent": 2 },
+          "scale": 2
+        }
+      },
+      {
+        "code": "TOTAL",
+        "label": "Total",
+        "amount": {
+          "amount": 0,
+          "currency": { "code": "USD", "base": 10, "exponent": 2 },
+          "scale": 2
+        }
+      }
+    ]
+  }
+}
+```
+
+- **Derived:**
+  - Layout: **Compact with quantity** (1 item, maxSelectable=6)
+  - PanelActionButton: kind="checkout", "Get Tickets" (plural, enabled)
+  - Quantity UI: Stepper on right (-, count, +), max 6
+  - Price UI: Shown ($50.00)
+  - Pricing footer: **Shown** (required, updates as qty changes)
+
+#### F) Full layout - all single qty (consistent UI)
+
+```jsonc
+{
+  "items": [
+    {
+      "product": { "id": "ga", "name": "General Admission", "type": "ticket" },
+      "variant": {},
+      "state": {
+        "temporal": { "phase": "during", "reasons": [] },
+        "supply": { "status": "available", "reasons": [] },
+        "gating": {
+          "required": false,
+          "satisfied": true,
+          "listingPolicy": "omit_until_unlocked",
+          "reasons": []
+        },
+        "demand": { "kind": "none", "reasons": [] },
+        "messages": []
+      },
+      "commercial": {
+        "price": {
+          "amount": 5000,
+          "currency": { "code": "USD", "base": 10, "exponent": 2 },
+          "scale": 2
+        },
+        "feesIncluded": false,
+        "maxSelectable": 1
+      },
+      "display": { "badges": [], "showLowRemaining": false }
+    },
+    {
+      "product": { "id": "vip", "name": "VIP Pass", "type": "ticket" },
+      "variant": {},
+      "state": {
+        "temporal": { "phase": "during", "reasons": [] },
+        "supply": { "status": "available", "reasons": [] },
+        "gating": {
+          "required": false,
+          "satisfied": true,
+          "listingPolicy": "omit_until_unlocked",
+          "reasons": []
+        },
+        "demand": { "kind": "none", "reasons": [] },
+        "messages": []
+      },
+      "commercial": {
+        "price": {
+          "amount": 10000,
+          "currency": { "code": "USD", "base": 10, "exponent": 2 },
+          "scale": 2
+        },
+        "feesIncluded": false,
+        "maxSelectable": 1
+      },
+      "display": { "badges": [], "showLowRemaining": false }
+    }
+  ]
+}
+```
+
+- **Derived:**
+  - Layout: **Full** (2 items)
+  - Quantity UI: **Simple "Add" buttons** on all rows (consistency: all maxSelectable=1)
+  - PanelActionButton: kind="checkout", "Get Tickets" (plural, enabled)
+
+#### G) Full layout - mixed quantities (consistency rule)
+
+```jsonc
+{
+  "items": [
+    {
+      "product": { "id": "ga", "name": "General Admission", "type": "ticket" },
+      "variant": {},
+      "state": {
+        "temporal": { "phase": "during", "reasons": [] },
+        "supply": { "status": "available", "reasons": [] },
+        "gating": {
+          "required": false,
+          "satisfied": true,
+          "listingPolicy": "omit_until_unlocked",
+          "reasons": []
+        },
+        "demand": { "kind": "none", "reasons": [] },
+        "messages": []
+      },
+      "commercial": {
+        "price": {
+          "amount": 5000,
+          "currency": { "code": "USD", "base": 10, "exponent": 2 },
+          "scale": 2
+        },
+        "feesIncluded": false,
+        "maxSelectable": 10
+      },
+      "display": { "badges": [], "showLowRemaining": false }
+    },
+    {
+      "product": { "id": "vip", "name": "VIP Pass", "type": "ticket" },
+      "variant": {},
+      "state": {
+        "temporal": { "phase": "during", "reasons": [] },
+        "supply": { "status": "available", "reasons": [] },
+        "gating": {
+          "required": false,
+          "satisfied": true,
+          "listingPolicy": "omit_until_unlocked",
+          "reasons": []
+        },
+        "demand": { "kind": "none", "reasons": [] },
+        "messages": []
+      },
+      "commercial": {
+        "price": {
+          "amount": 10000,
+          "currency": { "code": "USD", "base": 10, "exponent": 2 },
+          "scale": 2
+        },
+        "feesIncluded": false,
+        "maxSelectable": 1
+      },
+      "display": { "badges": [], "showLowRemaining": false }
+    }
+  ]
+}
+```
+
+- **Derived:**
+  - Layout: **Full** (2 items)
+  - Quantity UI: **Steppers on ALL rows** (consistency rule: GA has maxSelectable>1)
+    - GA: stepper max 10
+    - VIP: stepper max 1 (constrained, but still a stepper for visual consistency)
+  - PanelActionButton: kind="checkout", "Get Tickets" (plural, enabled)
+
+#### H) Gated-only (access code entry screen)
+
+```jsonc
+{
+  "context": {
+    "orderRules": {
+      "types": "single",
+      "typesPerOrder": "single",
+      "ticketsPerType": "single",
+      "minSelectedTypes": 0,
+      "minTicketsPerSelectedType": 0
+    },
+    "gatingSummary": { "hasHiddenGatedItems": true },
+    "panelNotices": [
+      {
+        "code": "requires_code_entry",
+        "variant": "info",
+        "icon": "lock",
+        "title": "Have an access code?",
+        "description": "Enter your code below to unlock exclusive tickets.",
+        "priority": 100
+      }
+    ],
+    "welcomeText": "Access code required to view tickets.",
+    "clientCopy": {
+      "panel_action_button_cta": "Get Ticket"
+    }
+  },
+  "sections": [{ "id": "main", "label": "Tickets", "order": 1 }],
+  "items": [],
+  "pricing": {
+    "currency": { "code": "USD", "base": 10, "exponent": 2 },
+    "lineItems": []
+  }
+}
+```
+
+- **Derived:**
+  - Layout: **Gated-entry screen** (not compact product layout)
+  - Prominent notice with inline access code form
+  - Welcome text: "Access code required..."
+  - PanelActionButton: kind="checkout", "Get Ticket" (disabled)
+  - No product card (items array is empty)
+
 ---
 
 ### 8.6 Pseudocode (reference; keep it boring)
@@ -2550,10 +3074,16 @@ function derivePurchasable(item) {
   );
 }
 
-function deriveQuantityUI(item, pres, purch) {
+function deriveQuantityUI(item, pres, purch, panelContext) {
   if (pres !== "normal" || !purch) return "hidden";
   const max = item.commercial.maxSelectable ?? 0;
   if (max <= 0) return "hidden";
+
+  // Full layout consistency rule (§8.9)
+  if (panelContext.isFullLayout && panelContext.anyItemMultiQty) {
+    return "stepper"; // Enforce visual consistency
+  }
+
   return max === 1 ? "select" : "stepper";
 }
 
@@ -2609,14 +3139,480 @@ function deriveCTA(item, pres, purch) {
 
 ### 8.8 Client checklist (quick)
 
-- [ ] Compute `presentation`, `isPurchasable`, `quantityUI`, `priceUI`, `cta` **only** from server fields.
-- [ ] Do **not** invent banners or strings. Pull CTA labels via `messages[]`/`copyTemplates`.
-- [ ] Respect `commercial.maxSelectable` as the **only** clamp.
-- [ ] Mask price on locked rows; hide price when not purchasable.
-- [ ] If `maxSelectable=0`, the row is not purchasable; price is hidden and quantity is hidden.
-- [ ] When interpolating templates, any unknown `{placeholder}` resolves to `""` (empty string).
-- [ ] Collapse sold‑out lists only per `effectivePrefs.showTypeListWhenSoldOut`.
-- [ ] On any interaction, call server → replace payload → re‑derive.
+**Layout & Quantity UI:**
+
+- [ ] Detect compact vs. full layout based on `items.length`
+- [ ] In compact, show/hide quantity stepper based on `maxSelectable`
+- [ ] In full layout, enforce quantity UI consistency rule (all steppers if any maxSelectable>1)
+- [ ] Update `quantityUIAtom` to accept panel context for consistency derivation
+- [ ] Render welcome text from `welcomeText` or state-adaptive atom-derived defaults
+- [ ] Consolidate row message placements in compact mode (all under price zone)
+- [ ] Show pricing footer in compact when `maxSelectable > 1`
+
+**PanelActionButton (atom-driven):**
+
+- [ ] Derive kind: "checkout" | "waitlist" | "notify_me"
+- [ ] Derive enabled: boolean based on panel state
+- [ ] Derive label: atom supplies defaults, clientCopy provides overrides
+- [ ] Singular/plural context: compact + maxSelectable=1 vs. plural contexts
+- [ ] Never hardcode labels - atom handles all default logic
+- [ ] Disabled state uses same label, just visual styling
+
+**PanelNotice system:**
+
+- [ ] Render PanelNoticeArea at top of panel
+- [ ] Stack notices by priority (descending)
+- [ ] Render notice variants: standard text vs. specialized (access_code_entry)
+- [ ] Access code entry notice renders inline form
+
+**Core rules (unchanged):**
+
+- [ ] Compute `presentation`, `isPurchasable`, `quantityUI`, `priceUI`, `cta` **only** from server fields
+- [ ] Respect `commercial.maxSelectable` as the **only** clamp
+- [ ] Mask price on locked rows; hide price when not purchasable
+- [ ] When interpolating templates, any unknown `{placeholder}` resolves to `""` (empty string)
+- [ ] On any interaction, call server → replace payload → re‑derive
+
+---
+
+### 8.9 Layout Modes & Quantity UI Rules
+
+> **Purpose:** Define when the client renders compact vs. full layouts, and establish normative quantity UI consistency rules.
+
+---
+
+#### Layout Decision Matrix
+
+The client chooses presentation mode based on payload structure:
+
+**Compact Layout:**
+
+```
+items.length === 1
+```
+
+Single product display (card-based, streamlined)
+
+**Full Layout:**
+
+```
+items.length > 1
+```
+
+Multiple products (row-based list with sections)
+
+---
+
+#### Quantity UI Consistency Rule (Normative)
+
+**In full layout:**
+
+**IF** any item has `commercial.maxSelectable > 1`:
+
+- **THEN** ALL items **MUST** display quantity steppers
+- Items with `maxSelectable === 1` show stepper constrained to 0-1 range
+- **Rationale:** Visual consistency prevents user confusion about interaction patterns
+
+**ELSE** (all items have `maxSelectable === 1`):
+
+- **THEN** ALL items display simple "Add" button or single-select affordance (§8.1 "select" mode)
+
+**Implementation:**
+
+- Update `quantityUIAtom` to accept panel-level context
+- Quantity UI derivation must check: "Is this full layout AND does any sibling have maxSelectable > 1?"
+- If yes, override per-row "select" decision to "stepper" (clamped appropriately)
+
+**Truth table update (§8.1):**
+
+Add panel context parameter to quantity UI derivation:
+
+```typescript
+function deriveQuantityUI(
+  item: PanelItem,
+  panelContext: { isFullLayout: boolean; anyItemMultiQty: boolean }
+) {
+  if (presentation !== "normal" || !isPurchasable || maxSelectable <= 0)
+    return "hidden";
+
+  // Full layout consistency rule
+  if (panelContext.isFullLayout && panelContext.anyItemMultiQty) {
+    return "stepper"; // Even if this item's maxSelectable === 1
+  }
+
+  // Standard per-row derivation
+  return maxSelectable === 1 ? "select" : "stepper";
+}
+```
+
+---
+
+#### Compact Layout
+
+**When to use:** Single item in `items[]` array
+
+**Visual structure:**
+
+1. **Panel header** (title, close button - outside contract scope)
+
+2. **PanelNoticeArea**
+
+   - Stacks `context.panelNotices[]` vertically, priority-ordered
+   - May include standard notices (text) or specialized notices (access code entry form)
+
+3. **Welcome text**
+
+   - From `context.welcomeText` (if provided)
+   - **OR** state-adaptive default derived from panel button state:
+     - kind="checkout" → `clientCopy.welcome_default` or fallback
+     - kind="waitlist" → `clientCopy.welcome_waitlist` or fallback
+     - kind="notify_me" → `clientCopy.welcome_notify_me` or fallback
+
+4. **Product card** (full-width, prominent)
+
+   - **Left side:**
+
+     - Product name
+     - Price (follows §8 visibility rules: shown/masked/hidden)
+     - State messages (consolidated under price, priority-sorted)
+
+   - **Right side (conditional):**
+     - **IF `maxSelectable === 1`:** No quantity control (implicit qty=1)
+     - **IF `maxSelectable > 1`:** Quantity stepper (-, count, +)
+
+5. **User badge/info** (optional, implementation detail)
+
+6. **Pricing footer** (conditional)
+
+   - **IF `maxSelectable === 1`:** Footer **MAY** be omitted
+   - **IF `maxSelectable > 1`:** Footer **MUST** be shown (updates as qty changes)
+
+7. **PanelActionButton**
+
+   - Full-width prominent button
+   - State and label per §5.3a
+
+8. **AccessCodeCTA** (when applicable, when not using inline notice)
+
+---
+
+**Compact Layout Variations:**
+
+**A) Minimal compact (single ticket, no qty selector):**
+
+```
+items.length === 1 && maxSelectable === 1
+```
+
+- Product card: name + price (left only)
+- No quantity stepper
+- Pricing footer: Optional (may be omitted)
+- PanelActionButton: "Get Ticket" (singular)
+
+**B) Compact with quantity (multiple tickets available):**
+
+```
+items.length === 1 && maxSelectable > 1
+```
+
+- Product card: name + price (left), quantity stepper (right)
+- Pricing footer: Required (shows total as qty changes)
+- PanelActionButton: "Get Tickets" (plural)
+
+**C) Gated-only (no items, access code entry):**
+
+```
+items.length === 0 && gatingSummary.hasHiddenGatedItems === true
+```
+
+- **Cannot use compact product layout** (no product exists)
+- Render **gated-entry screen:**
+  - Prominent panelNotice (`requires_code_entry`) with inline access form
+  - Welcome text (optional context)
+  - User badge
+  - PanelActionButton (disabled, since nothing purchasable yet)
+
+---
+
+#### Full Layout
+
+**When to use:** Multiple items in `items[]` array
+
+**Visual structure:**
+
+1. Panel header
+2. PanelNoticeArea (same as compact)
+3. Welcome text (optional, less prominent)
+4. Section headers + product rows (grouped by `display.sectionId`)
+5. **ALL rows have consistent quantity UI** (per consistency rule above)
+6. Pricing footer (always shown)
+7. PanelActionButton (always plural label)
+8. AccessCodeCTA (when applicable)
+
+**PanelActionButton label:**
+
+- Always use plural form: `clientCopy.panel_action_button_cta_plural` or atom default
+- Never singular (multiple items implies cart-like behavior)
+
+---
+
+#### Message Rendering in Compact Mode
+
+Row message placements consolidate into zones under price:
+
+**Placement mapping:**
+
+- `row.under_title` → Immediately under product name
+- `row.under_price` → Primary message zone under price
+- `row.under_quantity` → Same zone (no separate quantity area)
+- `row.footer` → Same zone
+- `row.cta_label` → Not used (PanelActionButton uses clientCopy)
+
+**Rendering strategy:**
+
+1. Group all messages by priority (descending)
+2. Render in consolidated zone under price
+3. Apply variant styling (icon, color) per message
+4. Stack vertically with appropriate spacing
+
+**Example:** Item with pre-sale timing and low stock:
+
+```
+General Admission
+$50.00
+
+⏰ On sale Friday at 10:00 AM CT
+⚠️ Only 3 tickets available
+
+[Notify Me]
+```
+
+---
+
+#### State-Adaptive Welcome Text
+
+When `context.welcomeText` omitted, client derives default:
+
+```typescript
+const panelButtonState = get(panelActionButtonAtom);
+const welcomeKey = {
+  checkout: "welcome_default",
+  waitlist: "welcome_waitlist",
+  notify_me: "welcome_notify_me",
+}[panelButtonState.kind];
+
+const welcomeText =
+  context.welcomeText ||
+  context.clientCopy?.[welcomeKey] ||
+  defaultFallbacks[panelButtonState.kind];
+```
+
+**Default fallbacks (hardcoded in atom):**
+
+- checkout: "Welcome! To join the event, please get your ticket below."
+- waitlist: "This event is sold out. Join the waitlist to be notified if tickets become available."
+- notify_me: "Tickets aren't on sale yet. Get notified when they're available."
+
+---
+
+#### Layout Decision Examples
+
+**Example 1: Single Type Panel, Single Ticket per Order**
+
+```jsonc
+{
+  "items": [{ "product": { "id": "ga" }, "commercial": { "maxSelectable": 1 } }]
+}
+```
+
+→ **Minimal compact** (no qty stepper, singular CTA)
+
+**Example 2: Single Type Panel, Multi Ticket per Order**
+
+```jsonc
+{
+  "items": [{ "product": { "id": "ga" }, "commercial": { "maxSelectable": 6 } }]
+}
+```
+
+→ **Compact with quantity** (stepper on right, plural CTA, pricing footer shown)
+
+**Example 3: Multi Type Panel, All Single Ticket**
+
+```jsonc
+{
+  "items": [
+    { "product": { "id": "ga" }, "commercial": { "maxSelectable": 1 } },
+    { "product": { "id": "vip" }, "commercial": { "maxSelectable": 1 } }
+  ]
+}
+```
+
+→ **Full layout** with simple "Add" buttons (no steppers, all items max=1)
+
+**Example 4: Multi Type Panel, Mixed Quantities**
+
+```jsonc
+{
+  "items": [
+    { "product": { "id": "ga" }, "commercial": { "maxSelectable": 10 } },
+    { "product": { "id": "vip" }, "commercial": { "maxSelectable": 1 } }
+  ]
+}
+```
+
+→ **Full layout** with quantity steppers on **ALL rows** (even VIP with max=1, for consistency)
+
+**Example 5: Multi Type Panel, All Multi Ticket**
+
+```jsonc
+{
+  "items": [
+    { "product": { "id": "ga" }, "commercial": { "maxSelectable": 10 } },
+    { "product": { "id": "vip" }, "commercial": { "maxSelectable": 6 } }
+  ]
+}
+```
+
+→ **Full layout** with quantity steppers on all rows
+
+---
+
+#### Edge Cases in Compact Layout
+
+**Sold out with waitlist:**
+
+```jsonc
+{
+  "items": [
+    {
+      "state": {
+        "supply": { "status": "none" },
+        "demand": { "kind": "waitlist" }
+      },
+      "commercial": { "maxSelectable": 0 }
+    }
+  ]
+}
+```
+
+- Layout: Compact (1 item)
+- Price: Hidden (per §8.1)
+- Quantity: Hidden (maxSelectable=0)
+- Welcome text: Waitlist variant
+- PanelActionButton: kind="waitlist", "Join Waitlist" (enabled)
+- Messages: "Sold Out" in consolidated zone
+
+**Locked visible:**
+
+```jsonc
+{
+  "items": [
+    {
+      "state": {
+        "gating": {
+          "required": true,
+          "satisfied": false,
+          "listingPolicy": "visible_locked"
+        }
+      }
+    }
+  ]
+}
+```
+
+- Layout: Compact (1 item)
+- Price: Masked ("—" or "Locked")
+- Quantity: Hidden
+- Messages: "Requires access code" under price
+- PanelActionButton: kind="checkout", disabled
+- AccessCodeCTA: Shown below button
+
+**Not on sale yet:**
+
+```jsonc
+{
+  "items": [
+    {
+      "commercial": { "maxSelectable": 6 },
+      "state": {
+        "temporal": { "phase": "before" },
+        "demand": { "kind": "notify_me" },
+        "messages": [
+          {
+            "code": "on_sale_at",
+            "text": "On sale Friday at 10:00 AM CT",
+            "placement": "row.under_price"
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+- Layout: Compact (maxSelectable > 1, but not purchasable yet)
+- Price: Hidden (not on sale)
+- Quantity: Hidden (temporal.phase=before)
+- Messages: "On sale Friday..." in message zone
+- PanelActionButton: kind="notify_me", "Notify Me" (enabled)
+
+**Public sold out + hidden gated:**
+
+```jsonc
+{
+  "items": [{ "state": { "supply": { "status": "none" } } }],
+  "context": {
+    "gatingSummary": { "hasHiddenGatedItems": true },
+    "effectivePrefs": { "showTypeListWhenSoldOut": false }
+  }
+}
+```
+
+- **Falls back to gated-entry screen** (not compact product view)
+- Shows prominent `requires_code_entry` notice with inline form
+- PanelActionButton disabled
+
+---
+
+#### Tests (Layout & Quantity UI)
+
+**Layout detection:**
+
+- _Given_ 1 item → _Expect_ compact layout
+- _Given_ 2+ items → _Expect_ full layout
+
+**Quantity UI consistency (full layout):**
+
+- _Given_ full, all items `maxSelectable=1` → _Expect_ all show "Add" buttons
+- _Given_ full, any item `maxSelectable>1` → _Expect_ **all** show steppers (even max=1 items)
+- _Given_ full, item with `maxSelectable=1` in mixed context → _Expect_ stepper constrained 0-1
+
+**Quantity UI (compact):**
+
+- _Given_ compact, `maxSelectable=1` → _Expect_ no stepper
+- _Given_ compact, `maxSelectable>1` → _Expect_ stepper on right
+
+**PanelActionButton labels (atom-driven):**
+
+- _Given_ compact, `maxSelectable=1`, purchasable → _Expect_ singular default or clientCopy override
+- _Given_ compact, `maxSelectable>1`, purchasable → _Expect_ plural default or clientCopy override
+- _Given_ full layout, purchasable → _Expect_ plural
+
+**Welcome text:**
+
+- _Given_ `context.welcomeText="Custom"` → _Expect_ "Custom" displayed
+- _Given_ no `welcomeText`, purchasable → _Expect_ atom-derived default or clientCopy override
+
+**Message consolidation (compact):**
+
+- _Given_ messages with placements `row.under_title`, `row.under_price` → _Expect_ both in consolidated zone under price, priority-sorted
+
+**Pricing footer:**
+
+- _Given_ compact, `maxSelectable=1` → _Expect_ footer optional (may be omitted)
+- _Given_ compact, `maxSelectable>1` → _Expect_ footer shown
+- _Given_ full layout → _Expect_ footer always shown
 
 .
 
@@ -2711,8 +3707,8 @@ function deriveCTA(item, pres, purch) {
 - Access‑code validation, rate limiting, and unlock token issuance happen **server‑side**. The client **MUST NOT** validate or rate‑limit locally.
 - On invalid/expired code, the server returns a payload state that conveys errors via:
 
-  - A panel‑level notice (e.g., `{ code:"code_invalid", variant:"error", text:"Invalid access code" }`), **or**
-  - A row message for a **still‑locked** row (e.g., `{ code:"code_invalid", placement:"row.under_title", variant:"error" }`).
+  - A panel‑level notice (e.g., `{ code:"invalid_code", variant:"error", text:"Invalid access code" }`), **or**
+  - A row message for a **still‑locked** row (e.g., `{ code:"invalid_code", placement:"row.under_title", variant:"error" }`).
     The client renders **only** what the payload says (no local strings), per §7.
 
 #### F. Requirements metadata (optional, for copy only)
@@ -2754,7 +3750,7 @@ Understanding the complete unlock sequence helps implementers handle edge cases 
 **Post-unlock (error):**
 
 - Server responds with error payload or notice:
-  - `context.panelNotices[]` includes `{ code:"code_invalid", variant:"error", text:"Invalid access code. Please try again." }`
+  - `context.panelNotices[]` includes `{ code:"invalid_code", variant:"error", text:"Invalid access code. Please try again." }`
   - No items are unlocked; state remains unchanged
 - Client displays error banner (red, high priority)
 - User can retry with correct code
@@ -2877,7 +3873,7 @@ Understanding the complete unlock sequence helps implementers handle edge cases 
     "feesIncluded": false,
     "maxSelectable": 0
   },
-  "display": { "badges": ["Members"] }
+  "display": { "badges": ["Members"], "showLowRemaining": false }
 }
 ```
 
@@ -2901,7 +3897,7 @@ Understanding the complete unlock sequence helps implementers handle edge cases 
 "context": {
   "gatingSummary": { "hasHiddenGatedItems": true },
   "panelNotices": [
-    { "code": "code_invalid", "variant": "error", "text": "Invalid access code. Please try again.", "priority": 100 }
+    { "code": "invalid_code", "variant": "error", "text": "Invalid access code. Please try again.", "priority": 100 }
   ]
 }
 ```
@@ -2960,7 +3956,7 @@ Gating-related codes and their typical presentation:
   - As row message: Small text "Requires access code" under locked item title (info variant)
   - Visual: Lock icon, greyed-out row styling
 
-- **`code_invalid`** (panel notice, error state)
+- **`invalid_code`** (panel notice, error state)
 
   - Shown after failed unlock attempt
   - Panel notice: "Invalid access code. Please try again." (error variant, red banner)
@@ -2977,7 +3973,7 @@ Gating-related codes and their typical presentation:
 | Code            | Icon     | Styling    | Typical Placement            | Variant |
 | --------------- | -------- | ---------- | ---------------------------- | ------- |
 | `requires_code` | 🔒 Lock  | Grey/muted | Row: under title; Panel: top | info    |
-| `code_invalid`  | ⚠️ Alert | Red border | Panel: top banner            | error   |
+| `invalid_code`  | ⚠️ Alert | Red border | Panel: top banner            | error   |
 | `unlocked`      | ✓ Check  | Normal     | Row: under title (optional)  | neutral |
 
 ---
@@ -3049,7 +4045,7 @@ Gating-related codes and their typical presentation:
 **Visual implementation:**
 
 - [ ] Locked rows: greyed-out styling + lock icon + price placeholder ("Locked" or "—").
-- [ ] Reason code display: `requires_code` shows lock icon; `code_invalid` shows red error banner.
+- [ ] Reason code display: `requires_code` shows lock icon; `invalid_code` shows red error banner.
 - [ ] Unlock confirmation: unlocked items that are sold out still appear (disabled) to confirm code worked.
 
 **Edge case handling:**
@@ -3227,7 +4223,11 @@ The following examples demonstrate how `matchBehavior` works in practice. Notice
     "feesIncluded": false,
     "maxSelectable": 0
   },
-  "display": { "badges": ["Add‑on"], "sectionId": "add_ons" }
+  "display": {
+    "badges": ["Add‑on"],
+    "sectionId": "add_ons",
+    "showLowRemaining": false
+  }
 }
 ```
 
@@ -3278,7 +4278,11 @@ This example shows a typical per-order add-on. The server enforces `limits.perOr
     "limits": { "perOrder": 1 },
     "maxSelectable": 0 // before any parent selected
   },
-  "display": { "badges": ["Add‑on"], "sectionId": "add_ons" }
+  "display": {
+    "badges": ["Add‑on"],
+    "sectionId": "add_ons",
+    "showLowRemaining": false
+  }
 }
 ```
 
@@ -3837,14 +4841,15 @@ _Fees are included in tickets; server chose not to show a separate `FEES` row._
 
 #### E) Panel‑level notices (context: `panelNotices[].code`)
 
-| Code                     | Meaning                                    | Notes & surface                               |
-| ------------------------ | ------------------------------------------ | --------------------------------------------- |
-| `requires_code`          | Event has gated inventory users can unlock | Info banner; pairs with AccessCode input UI   |
-| `event_sold_out`         | All visible sellable inventory is gone     | Info banner; may appear with/without waitlist |
-| `payment_plan_available` | Payment plans exist at checkout            | Info banner; **never** per‑row badge (§5.3)   |
-| `sales_end_soon`         | Event‑wide urgency on sale end             | Optional banner (server chooses)              |
+| Code                     | Meaning                                    | Notice Type     | Notes & surface                               |
+| ------------------------ | ------------------------------------------ | --------------- | --------------------------------------------- |
+| `requires_code`          | Event has gated inventory users can unlock | Standard text   | Info banner; pairs with AccessCodeCTA         |
+| `requires_code_entry`    | Prominent access gate (gated-only)         | **Specialized** | Renders inline access form (input + submit)   |
+| `event_sold_out`         | All visible sellable inventory is gone     | Standard text   | Info banner; may appear with/without waitlist |
+| `payment_plan_available` | Payment plans exist at checkout            | Standard text   | Info banner; **never** per‑row badge (§5.3)   |
+| `sales_end_soon`         | Event‑wide urgency on sale end             | Standard text   | Optional banner (server chooses)              |
 
-> If public items are sold out **and** `gatingSummary.hasHiddenGatedItems=true`, prefer `requires_code` over an “Event Sold Out” banner to avoid misleading users. (§3.5, §5)
+> If public items are sold out **and** `gatingSummary.hasHiddenGatedItems=true`, prefer `requires_code` or `requires_code_entry` over an "Event Sold Out" banner to avoid misleading users. (§3.5, §5)
 
 #### F) Client‑triggered validation (context: `clientCopy` keys)
 
@@ -4321,8 +5326,10 @@ const NoticeSchema = z
     code: MachineCodeSchema,
     scope: z.enum(["panel", "item"]).default("panel"),
     variant: z.enum(["neutral", "info", "warning", "error"]).default("info"),
-    title: z.string().optional(),
-    text: z.string().optional(),
+    icon: z.string().optional(), // Icon identifier
+    title: z.string().optional(), // Notice heading
+    text: z.string().optional(), // Main message text
+    description: z.string().optional(), // Additional context
     params: z.record(z.unknown()).optional(),
     action: NoticeActionSchema.optional(),
     priority: z.number().default(0),
@@ -4344,14 +5351,23 @@ const CopyTemplateSchema = z
 
 const ClientCopySchema = z
   .object({
+    // Selection validation
     selection_min_reached: z.string().optional(),
     selection_max_types: z.string().optional(),
     quantity_min_reached: z.string().optional(),
     quantity_max_reached: z.string().optional(),
+
+    // Add-on validation
     addon_requires_parent: z.string().optional(),
-    panel_cta_continue: z.string().optional(),
-    panel_cta_waitlist: z.string().optional(),
-    panel_cta_disabled: z.string().optional(),
+
+    // Panel action button labels (singular/plural, state-adaptive)
+    panel_action_button_cta: z.string().optional(), // Singular form override
+    panel_action_button_cta_plural: z.string().optional(), // Plural form override
+
+    // Welcome text defaults (state-adaptive)
+    welcome_default: z.string().optional(),
+    welcome_waitlist: z.string().optional(),
+    welcome_notify_me: z.string().optional(),
   })
   .strict();
 
@@ -4387,6 +5403,7 @@ const ContextSchema = z
     gatingSummary: GatingSummarySchema.optional(),
     panelNotices: z.array(NoticeSchema).default([]),
     effectivePrefs: EffectivePrefsSchema,
+    welcomeText: z.string().optional(), // Panel-level welcome message
     copyTemplates: z.array(CopyTemplateSchema).optional(),
     clientCopy: ClientCopySchema.optional(),
     tooltips: z.array(TooltipSchema).optional(),
@@ -4944,9 +5961,10 @@ export const ctaKindAtom = (item: PanelItem) =>
     return "none" as const;
   });
 
-/** Quantity UI mode (§8.1) */
+/** Quantity UI mode (§8.1 + §8.9 consistency rule) */
 export const quantityUIAtom = (item: PanelItem) =>
   atom((get) => {
+    const panel = get(panelDataQueryAtom);
     const presentation = get(rowPresentationAtom(item));
     const isPurchasable = get(isPurchasableAtom(item));
     const { maxSelectable } = item.commercial;
@@ -4955,6 +5973,17 @@ export const quantityUIAtom = (item: PanelItem) =>
       return "hidden" as const;
     }
 
+    // Full layout consistency rule (§8.9)
+    const isFullLayout = panel.items.length > 1;
+    const anyItemMultiQty = panel.items.some(
+      (i) => i.commercial.maxSelectable > 1
+    );
+
+    if (isFullLayout && anyItemMultiQty) {
+      return "stepper" as const; // Enforce consistency
+    }
+
+    // Standard per-row derivation
     return maxSelectable === 1 ? ("select" as const) : ("stepper" as const);
   });
 
@@ -5013,6 +6042,88 @@ export const selectionValidAtom = atom((get) => {
   }
 
   return true;
+});
+
+/** Panel action button state (derived, atom-driven labels) */
+export const panelActionButtonAtom = atom((get) => {
+  const panel = get(panelDataQueryAtom);
+  const { clientCopy = {} } = panel.context;
+
+  // Determine layout context for singular/plural
+  const isCompactLayout = panel.items.length === 1;
+  const isSingular =
+    isCompactLayout && panel.items[0]?.commercial.maxSelectable === 1;
+
+  // Default labels by kind (atom-supplied)
+  const defaultLabels = {
+    checkout: { singular: "Get Ticket", plural: "Get Tickets" },
+    waitlist: { singular: "Join Waitlist", plural: "Join Waitlist" },
+    notify_me: { singular: "Notify Me", plural: "Notify Me" },
+  };
+
+  // Helper to get label for a kind
+  const getLabel = (kind: "checkout" | "waitlist" | "notify_me") => {
+    const override = isSingular
+      ? clientCopy.panel_action_button_cta
+      : clientCopy.panel_action_button_cta_plural;
+
+    return (
+      override ||
+      (isSingular ? defaultLabels[kind].singular : defaultLabels[kind].plural)
+    );
+  };
+
+  // Check if any item is purchasable
+  const anyPurchasable = panel.items.some((item) => {
+    const isPurchasable = get(isPurchasableAtom(item));
+    return isPurchasable && item.commercial.maxSelectable > 0;
+  });
+
+  if (anyPurchasable) {
+    return {
+      kind: "checkout" as const,
+      enabled: true,
+      label: getLabel("checkout"),
+    };
+  }
+
+  // Check for waitlist
+  const hasWaitlist = panel.items.some((item) => {
+    const gateSatisfied =
+      !item.state.gating.required || item.state.gating.satisfied;
+    return gateSatisfied && item.state.demand.kind === "waitlist";
+  });
+
+  if (hasWaitlist) {
+    return {
+      kind: "waitlist" as const,
+      enabled: true,
+      label: getLabel("waitlist"),
+    };
+  }
+
+  // Check for notify_me
+  const hasNotifyMe = panel.items.some((item) => {
+    return (
+      item.state.temporal.phase === "before" &&
+      item.state.demand.kind === "notify_me"
+    );
+  });
+
+  if (hasNotifyMe) {
+    return {
+      kind: "notify_me" as const,
+      enabled: true,
+      label: getLabel("notify_me"),
+    };
+  }
+
+  // Fallback: disabled checkout
+  return {
+    kind: "checkout" as const,
+    enabled: false,
+    label: getLabel("checkout"),
+  };
 });
 ```
 
@@ -5861,7 +6972,7 @@ CTA mapping is mechanical: `supply.status="none"` + `demand.kind="waitlist"` →
 
 - **Temporal:** `outside_window`, `sales_ended`
 - **Supply:** `sold_out`, `remaining_low`
-- **Gating:** `requires_code`, `code_invalid`, `code_verified`
+- **Gating:** `requires_code`, `invalid_code`, `code_verified`
 - **Demand:** `waitlist_available`, `notify_available`
 - **Panel‑level:** `event_sold_out`, `payment_plan_available`, `requires_code`
 
