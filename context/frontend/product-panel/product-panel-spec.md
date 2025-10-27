@@ -75,7 +75,7 @@
 
    - `listingPolicy="omit_until_unlocked"` default; `gatingSummary` is the only hint
 
-10. **Relations & Add‑ons** _(selection vs ownership; applyQuantity/matchBehavior)_
+10. **Relations & Add‑ons** _(constraint types; nested vs section display)_
 11. **Pricing Footer** _(server math; inclusions flags)_
 12. **Reason Codes Registry** _(machine codes; copy via messages/templates)_
 13. **Invariants & Guardrails** _(client MUST NOT compute X)_
@@ -946,11 +946,11 @@ Each element in `items[]` is a **Panel Item** the client renders verbatim (no cl
 
   - `relations` **MAY** express add‑on dependencies:
 
-    - `parentProductIds?: string[]` — IDs of products this item depends on. If empty/absent, the item has no dependencies.
-    - `matchBehavior?: "per_ticket" | "per_order"`:
-      - `"per_ticket"`: this add-on can be selected once per parent ticket (e.g., meal voucher per attendee).
-      - `"per_order"`: this add-on is limited to the order level regardless of parent quantity (e.g., one parking pass per order).
-    - **Note:** An "add-on" is not a separate `product.type`; it's any product with `parentProductIds[]` populated. The backend manages junction table relationships; the panel receives the derived `relations` object for UI enforcement.
+    - `parentProductIds: string[]` — IDs of products this item depends on (required, non-empty for add-ons).
+    - `displayMode: "nested" | "section"` — whether to render under parent or in a section.
+    - `constraint: "match_parent" | "optional" | "independent"` — quantity relationship to parent.
+    - `minQuantity?: number` — optional floor for "optional" and "independent" constraints.
+    - **Note:** An "add-on" is any product with `relations` present. Items without `relations` are standalone products. The backend manages dependencies; the panel receives the derived `relations` object for UI enforcement.
 
 - **MUST NOT** include any "admin/approval" axis (unpublished items are never sent; approval flows are out of scope).
 - **Gating sendability**:
@@ -1023,7 +1023,7 @@ Understanding how context, items, and pricing work together:
 - `state` (four axes + messages) describes **why** a product is/isn't purchasable
 - `commercial.maxSelectable` is the authoritative clamp (accounts for stock + limits + holds + fraud rules)
 - `display` provides view hints (badges, showLowRemaining flag, sectionId assignment)
-- `relations` defines add-on dependencies (parentProductIds, matchBehavior)
+- `relations` defines add-on dependencies (parentProductIds, displayMode, constraint, minQuantity)
 
 **Pricing provides the computed money summary:**
 
@@ -1242,6 +1242,8 @@ Understanding how context, items, and pricing work together:
 
   - When an item lacks `display.sectionId`, the client **SHOULD** render it in the first section by `order`.
   - Empty sections (no items) **MAY** be hidden by the client.
+  - Add-ons with `relations.displayMode="nested"` render under their parent product and ignore `display.sectionId`.
+  - Add-ons with `relations.displayMode="section"` render in the section specified by `display.sectionId`.
 
 - **Items integrity**
 
@@ -1922,10 +1924,12 @@ _Rendering: Both messages appear under title, sorted by priority (requires_code 
 
 - **`display`** — view hints (see §4): `badges[]`, optional `badgeDetails`, optional `sectionId`, and optional `showLowRemaining: boolean`.
 
-- **`relations`** _(optional)_ — add-on dependencies (see §4.3):
-  - `parentProductIds?: string[]` — IDs this item depends on
-  - `matchBehavior?: "per_ticket" | "per_order"` — how add-on quantity relates to parent quantity
-  - If absent or empty, the item has no dependencies (standalone product)
+- **`relations`** _(optional)_ — add-on dependencies (see §10):
+  - `parentProductIds: string[]` — IDs this item depends on (required, non-empty)
+  - `displayMode: "nested" | "section"` — render location
+  - `constraint: "match_parent" | "optional" | "independent"` — quantity rule
+  - `minQuantity?: number` — optional floor
+  - If absent, the item is standalone (not an add-on)
 
 > **Field naming:** contract fields are **camelCase**; machine **codes** (e.g., `messages[].code`) are **snake_case**.
 
@@ -2101,7 +2105,8 @@ _Rendering: Both messages appear under title, sorted by priority (requires_code 
   },
   "relations": {
     "parentProductIds": ["prod_ga", "prod_vip"],
-    "matchBehavior": "per_order"
+    "displayMode": "section",
+    "constraint": "independent"
   }
 }
 ```
@@ -2172,19 +2177,23 @@ _Note: This parking pass requires a parent ticket (GA or VIP) and is limited to 
   _Given_ `product.fulfillment.methods=["weird_future_channel"]`
   _Expect_ validation error (unknown method).
 
-- **Add-on without parent**
-  _Given_ an add-on with `relations.parentProductIds=["prod_vip"]` but no VIP ticket in the order
-  _Expect_ client may disable add-on selection or show validation message using `clientCopy`; server will reject order if submitted.
+- **Add-on without parent selected**
+  _Given_ an add-on with `relations.parentProductIds=["prod_vip"]` but no VIP ticket selected
+  _Expect_ `maxSelectable=0`, quantity UI hidden, client may show message using `clientCopy`
 
-- **Add-on with per-ticket match**
-  _Given_ 3 GA tickets selected and a meal voucher with `matchBehavior="per_ticket"`
-  _Expect_ client allows up to 3 meal vouchers (matching parent quantity); server enforces same on submission.
+- **Add-on with match_parent constraint**
+  _Given_ 3 GA tickets selected and a meal voucher with `constraint="match_parent"`
+  _Expect_ `maxSelectable=3`, client enforces exact match (3 vouchers for 3 tickets)
+
+- **Add-on with optional constraint and minQuantity**
+  _Given_ 5 tickets selected, insurance with `constraint="optional"` and `minQuantity=2`
+  _Expect_ `maxSelectable=5`, client allows 0, 2-5 insurance (not 1), server validates on submission
 
 ---
 
 ### 6.7 Migration notes (v0.3 → v0.4)
 
-- **Add‑on is not a product type.** Keep `type ∈ {"ticket","digital","physical"}`. Add‑on behavior is modeled via **relations** (§11).
+- **Add‑on is not a product type.** Keep `type ∈ {"ticket","digital","physical"}`. Add‑on behavior is modeled via **relations** (§10). Items without `relations` are standalone products.
 - **Visibility → listing policy.** Replace `gating.visibilityPolicy` with `gating.listingPolicy ∈ {"omit_until_unlocked","visible_locked"}`.
 - **Reason text channel unified.** Replace split `reasonTexts`/`microcopy` with `state.messages[]` (+ optional `context.copyTemplates`).
 - **Price location unified.** Any legacy `variant.price`/`product.price` must move to `commercial.price`.
@@ -2222,7 +2231,7 @@ _Note: This parking pass requires a parent ticket (GA or VIP) and is limited to 
 - [ ] Price masked when locked; price hidden when not purchasable; quantity hidden when locked or not purchasable.
 - [ ] Copy comes from `state.messages[]` / `context.copyTemplates` (no hardcoded strings).
 - [ ] Fulfillment icons/tooltips driven by `product.fulfillment.methods`; values MUST be from the enum (unknown methods are invalid).
-- [ ] Add-on dependencies respected via `relations.parentProductIds` and `matchBehavior`.
+- [ ] Add-on dependencies respected via `relations.parentProductIds`, `displayMode`, and `constraint`.
 - [ ] Currency consistency: all items' `commercial.price.currency.code` matches `pricing.currency.code`.
 - [ ] `context.welcomeText` optional; atom derives defaults from state if omitted.
 - [ ] Panel notices support `icon`, `title`, `text`, `description` fields.
@@ -4122,11 +4131,13 @@ Gating-related codes and their typical presentation:
 
 .
 
-## 10. Relations & Add‑ons _(selection vs ownership; `matchBehavior`)_
+## 10. Relations & Add‑ons _(constraint types; nested vs section display)_
 
 > **What this section does:** defines how a row can **depend on** other rows (parents), and how the client presents and validates those dependencies **without** inventing business rules. This is **not** a new axis; it's metadata used to constrain selection and explain behavior.
 >
-> **Common use cases:** Add-ons like parking passes, meal vouchers, or merchandise that should only be purchasable alongside a main ticket. For example, a parking pass might be limited to one per order regardless of ticket quantity (`per_order`), while a meal voucher might be available for each ticket purchased (`per_ticket`).
+> **Common use cases:** Add-ons like parking passes, meal vouchers, or merchandise that should only be purchasable alongside a main ticket. For example, a meal voucher might require exactly matching the ticket quantity (`match_parent`), while insurance could be optional 0-to-N per ticket (`optional`), and a parking pass might have an order-level cap regardless of ticket count (`independent`).
+>
+> **Display modes:** Add-ons can render nested under their parent product (`displayMode: "nested"`) for tightly-coupled items like meal vouchers, or in a separate section (`displayMode: "section"`) for loosely-coupled items like parking passes. Nested add-ons ignore `display.sectionId` and always render with their parent.
 >
 > **Key principle:** The server is the final gatekeeper. It validates all parent-child relationships on submission, so even if a user bypassed the UI, the server's `maxSelectable` and order validation would catch invalid selections.
 
@@ -4140,32 +4151,53 @@ Gating-related codes and their typical presentation:
 
   ```ts
   relations?: {
-    parentProductIds?: string[];         // IDs this item depends on
-    matchBehavior?: "per_ticket" | "per_order";
+    parentProductIds: string[];  // Required (non-empty = add-on)
+    displayMode: "nested" | "section";
+    constraint: "match_parent" | "optional" | "independent";
+    minQuantity?: number;  // Optional floor for "optional" and "independent"
   }
   ```
 
-- If `relations.parentProductIds` is **absent or empty** ⇒ the item is **standalone** (not an add‑on).
-- If `relations.parentProductIds` is **present and non‑empty** ⇒ the item is an **add‑on** to those **parent** products (IDs must match `items[].product.id` present or potentially present in this panel).
+- If `relations` is **absent** ⇒ the item is **standalone** (not an add‑on).
+- If `relations` is **present** ⇒ the item is an **add‑on** to those **parent** products (IDs in `parentProductIds` must match `items[].product.id` present or potentially present in this panel).
+- `parentProductIds` is **required and non-empty** for add-ons (truly independent products have no `relations` field at all).
+- `displayMode: "nested"` renders under parent, ignores `display.sectionId`.
+- `displayMode: "section"` renders in assigned section via `display.sectionId`.
+- `constraint` defines the quantity relationship to parent products (replaces old `matchBehavior`).
 
 #### B. Semantics (ownership & selection)
 
-- **Add‑on definition:** Any item with `parentProductIds[]` is an **add‑on**. “Add‑on” is a **relationship**, not a product type. `product.type` stays `"ticket" | "digital" | "physical"`.
+- **Add‑on definition:** Any item with `relations` present is an **add‑on**. "Add‑on" is a **relationship**, not a product type. `product.type` stays `"ticket" | "digital" | "physical"`.
 - **Parent set:** The **parent set** for an add‑on is the multiset sum of selected quantities across **all** `parentProductIds` that are currently visible/unlocked.
 
   - Let `parentSelectedCount = Σ selection[parentId]` across the listed IDs (client selection state).
 
-- **`matchBehavior` meaning:**
+- **`constraint` meaning:**
 
-  - `"per_ticket"` ⇒ An add‑on can be selected **at most** one‑for‑one with **the current** `parentSelectedCount`.
-  - `"per_order"` ⇒ An add‑on is limited **at the order level** regardless of parent quantity (typically one per order or a small cap).
+  - **`"match_parent"`**: Add-on quantity must exactly match parent quantity.
 
-- **Practical examples:**
+    - Example: Meal voucher — if 3 tickets selected, must select exactly 3 vouchers.
+    - Server sets `maxSelectable` to parent count; client enforces exact match.
+    - UI should show "Required" badge and auto-match quantity (disable manual controls).
 
-  - `"per_ticket"`: A "Fast Pass" add-on for each ticket. If a user selects 3 VIP tickets, the client should allow up to 3 Fast Passes to match (enforced via server-updated `maxSelectable`).
-  - `"per_order"`: A "Parking Pass" limited to one per order. No matter how many GA or VIP tickets are selected, only one Parking Pass can be added. The UI would disable adding a second once `maxSelectable` is reached.
+  - **`"optional"`**: Add-on quantity can be 0 to parent quantity.
 
-- **Default:** If `parentProductIds[]` exists and `matchBehavior` is **omitted**, clients **MUST** treat it as `"per_order"` for compatibility.
+    - Example: Insurance — 0 to 3 insurance add-ons for 3 tickets.
+    - `minQuantity` can set a floor (e.g., "if you buy insurance, minimum 2").
+    - Server sets `maxSelectable` to parent count.
+    - UI shows standard quantity picker with optional "Minimum X" hint.
+
+  - **`"independent"`**: Add-on has order-level cap regardless of parent quantity.
+    - Example: Parking pass — max 2 per order regardless of 10 tickets.
+    - `minQuantity` can set a floor (e.g., "minimum 1 parking pass").
+    - Server sets `maxSelectable` based on stock/limits, not parent quantity.
+    - UI shows standard quantity picker with optional "Minimum X" hint.
+
+- **`minQuantity` semantics:**
+  - Only valid for `"optional"` and `"independent"` constraints.
+  - Specifies minimum quantity if user selects any of this add-on (e.g., "0 or at least 2").
+  - Client shows as UI hint; server enforces on order submission.
+  - **MUST NOT** be used with `"match_parent"` (validation error).
 
 #### C. Server responsibilities
 
@@ -4173,33 +4205,54 @@ Gating-related codes and their typical presentation:
   The server **MUST** recompute `maxSelectable` for add‑ons on every payload refresh to reflect:
 
   - stock/holds/limits **and**
-  - the current selection of their parents (per `matchBehavior`).
+  - the current selection of their parents (per `constraint`).
 
-- **Parent‑absent state:** When `parentSelectedCount === 0`, the server **SHOULD** send `maxSelectable=0` for add‑ons; on parent selection changes, it **MUST** update `maxSelectable` accordingly in the next payload.
+- **Constraint-specific computation:**
+
+  - For `"match_parent"`: Server sets `maxSelectable = parentSelectedCount`.
+  - For `"optional"`: Server sets `maxSelectable = parentSelectedCount`, enforces `minQuantity` on submission.
+  - For `"independent"`: Server sets `maxSelectable` based on stock/limits, ignores parent quantity (but still requires parent presence).
+
+- **Parent‑absent state:** When `parentSelectedCount === 0`, the server **SHOULD** send `maxSelectable=0` for all constraint types; on parent selection changes, it **MUST** update `maxSelectable` accordingly in the next payload.
 - **Gating zero‑leak:** If **all** parents for an add‑on are omitted due to gating (`omit_until_unlocked`) or are otherwise not sendable, the add‑on **MUST** also be omitted (or sent with `maxSelectable=0` and its own gating), so that parent existence is not leaked.
-- **Multi‑parent:** When multiple parents are listed, the server’s clamp **MUST** reflect the **sum** of all selected parents for `"per_ticket"`, or the order cap for `"per_order"` (still ≤ `maxSelectable`).
+- **Multi‑parent:** When multiple parents are listed, the server's clamp **MUST** reflect the **sum** of all selected parents for `"match_parent"` and `"optional"`, or the order cap for `"independent"` (still ≤ `maxSelectable`).
 
 #### D. Client responsibilities
 
 - **Never invent caps:** The client **MUST NOT** compute or enforce numeric quantity caps besides `commercial.maxSelectable`.
   _Corollary:_ The client **MUST** initiate a payload refresh whenever parent selection changes so the server can update dependent `maxSelectable` values.
+
+- **Display mode enforcement:**
+
+  - `displayMode: "nested"` → render add-on under its parent product row, ignore `display.sectionId`.
+  - `displayMode: "section"` → render add-on in the section specified by `display.sectionId`.
+
+- **Constraint UI hints:**
+
+  - `"match_parent"` → show "Required" badge, disable quantity controls (auto-matches parent).
+  - `"optional"` → show standard quantity picker, optionally show "Minimum X" if `minQuantity` present.
+  - `"independent"` → show standard quantity picker, optionally show "Minimum X" if `minQuantity` present.
+
 - **Visibility & purchasability:** Add‑ons follow the **same** axes rules as any item (temporal, supply, gating, demand). If `maxSelectable=0` or the derived `isPurchasable` (§8) is false, quantity UI is hidden.
 - **Parent presence affordance:** When an add‑on has `parentProductIds[]` and `maxSelectable=0`, the client **MAY** render explanatory copy using server‑provided strings (e.g., `clientCopy.addon_requires_parent`) but **MUST NOT** inject local prose.
 - **Reduce on refresh:** If a payload refresh lowers `maxSelectable` below the user's current add‑on selection, the client **MUST** clamp the selection down to the new `maxSelectable` (see §8 and selection family) and reflect it immediately.
 - **No leakage:** Clients **MUST NOT** infer or surface any information about parents that are omitted due to gating. No placeholders, counts, or prices.
-- **UI presentation flexibility:** The contract doesn't mandate how add-ons are displayed. Some UIs might nest add-ons under parent tickets; others list them separately with explanatory text (e.g., "Requires a GA ticket"). What matters is that the dependency is clear to the user through server-provided copy and badges.
+- **minQuantity enforcement:** Client shows `minQuantity` as a UI hint (e.g., "Minimum 2 required"); server validates on order submission (security boundary).
 
 #### E. Interactions with other fields
 
 - **Limits & caps:** `limits.perOrder`/`limits.perUser` remain informational; `maxSelectable` already reflects them. Clients **MUST NOT** enforce `limits.*` directly.
 - **Demand:** Add‑ons **may** use `demand.kind` (`waitlist`, `notify_me`) like any item. Gating precedence (§3.5) still applies.
-- **Sectioning:** The server **SHOULD** place add‑ons under a distinct section via `display.sectionId` (e.g., `"add_ons"`), but clients **MUST** render them wherever they are assigned.
+- **Sectioning:** Add-ons with `displayMode: "section"` **MUST** have `display.sectionId` and render in that section. Add-ons with `displayMode: "nested"` ignore `display.sectionId` and render under their parent product.
 
 ---
 
 ### 10.2 **Rationale (why this shape works)**
 
-- Keeps **one clamp** (`maxSelectable`) as the only numeric authority while allowing **relationship semantics** (per‑ticket/per‑order) to be expressed server‑side and reflected on each refresh.
+- **Three constraint types** cover common patterns without complexity: required 1:1 (`match_parent`), optional per-ticket (`optional`), and order-level (`independent`).
+- **Explicit `displayMode`** removes ambiguity about presentation: nested for tightly-coupled add-ons (meal vouchers), section for loosely-coupled add-ons (parking passes).
+- **`minQuantity`** handles "at least X" cases without multipliers or complex math (e.g., "0 or minimum 2 shirts").
+- Keeps **one clamp** (`maxSelectable`) as the only numeric authority while allowing **relationship semantics** to be expressed server‑side and reflected on each refresh.
 - Avoids client‑side math races (parent changes while stock updates) and **prevents leakage** when parents are gated/omitted.
 - Scales from trivial (one parking pass per order) to complex (many parents, dynamic holds) without changing client code.
 - **Security:** The server validates everything on submission. If a user somehow bypassed the UI and tried to add 5 parking passes when `maxSelectable=1`, the server's order validation would reject it. The client UI is a convenience, not a security boundary.
@@ -4208,36 +4261,60 @@ Gating-related codes and their typical presentation:
 
 ### 10.3 **Examples (tiny, canonical)**
 
-The following examples demonstrate how `matchBehavior` works in practice. Notice how `maxSelectable` starts at 0 when no parent is selected, then updates via server refresh when parents are added.
+The following examples demonstrate how the three constraint types work in practice. Notice how `maxSelectable` starts at 0 when no parent is selected, then updates via server refresh when parents are added.
 
-#### Quick reference box — per‑ticket vs per‑order
+#### Quick reference box — constraint types
 
 ```jsonc
-// Per‑ticket add‑on: matches parent quantity (e.g., Fast Pass)
+// match_parent: required 1:1 with tickets (e.g., Meal Voucher)
 {
-  "product": { "id": "add_fastpass", "name": "Fast Pass", "type": "digital" },
-  "relations": { "parentProductIds": ["prod_ga", "prod_vip"], "matchBehavior": "per_ticket" },
-  "commercial": { "maxSelectable": 0 }
+  "product": { "id": "addon_meal", "name": "Meal Voucher", "type": "digital" },
+  "relations": {
+    "parentProductIds": ["prod_ga"],
+    "displayMode": "nested",
+    "constraint": "match_parent"
+  },
+  "commercial": { "maxSelectable": 0 },  // Updates to 3 when parent=3
+  "display": { "badges": ["Required"], "showLowRemaining": false }
 }
 
-// Per‑order add‑on: one per order regardless of parent quantity (e.g., Parking)
+// optional: 0 to N per ticket (e.g., Insurance)
 {
-  "product": { "id": "add_parking", "name": "Parking Pass", "type": "physical" },
-  "relations": { "parentProductIds": ["prod_ga", "prod_vip"], "matchBehavior": "per_order" },
-  "commercial": { "limits": { "perOrder": 1 }, "maxSelectable": 0 }
+  "product": { "id": "addon_insurance", "name": "Event Insurance", "type": "digital" },
+  "relations": {
+    "parentProductIds": ["prod_ga", "prod_vip"],
+    "displayMode": "nested",
+    "constraint": "optional"
+  },
+  "commercial": { "maxSelectable": 5 },  // Parent count = 5
+  "display": { "badges": ["Optional"], "showLowRemaining": false }
+}
+
+// independent: order-level cap (e.g., Parking Pass)
+{
+  "product": { "id": "addon_parking", "name": "Parking Pass", "type": "physical" },
+  "relations": {
+    "parentProductIds": ["prod_ga", "prod_vip"],
+    "displayMode": "section",
+    "constraint": "independent",
+    "minQuantity": 1
+  },
+  "commercial": { "maxSelectable": 2, "limits": { "perOrder": 2 } },
+  "display": { "badges": ["Add-on"], "sectionId": "add_ons", "showLowRemaining": false }
 }
 ```
 
 > Server recomputes `maxSelectable` on refresh based on current parent selection and stock; client never invents caps.
 
-#### A) Per‑ticket meal voucher (initial: no parent selected)
+#### A) Nested meal voucher with match_parent (initial: no parent selected)
 
 ```jsonc
 {
   "product": { "id": "addon_meal", "name": "Meal Voucher", "type": "digital" },
   "relations": {
-    "parentProductIds": ["prod_ga", "prod_vip"],
-    "matchBehavior": "per_ticket"
+    "parentProductIds": ["prod_ga"],
+    "displayMode": "nested",
+    "constraint": "match_parent"
   },
   "state": {
     "temporal": { "phase": "during", "reasons": [] },
@@ -4269,8 +4346,7 @@ The following examples demonstrate how `matchBehavior` works in practice. Notice
     "maxSelectable": 0
   },
   "display": {
-    "badges": ["Add‑on"],
-    "sectionId": "add_ons",
+    "badges": ["Required"],
     "showLowRemaining": false
   }
 }
@@ -4286,9 +4362,11 @@ _After the buyer selects **3** GA tickets and the client refreshes the payload:_
 }
 ```
 
-#### B) Per‑order parking pass (cap 1), parent required
+_Note: `displayMode: "nested"` means this renders under the GA ticket row, not in a separate section. The client auto-matches quantity (3 vouchers for 3 tickets)._
 
-This example shows a typical per-order add-on. The server enforces `limits.perOrder=1`, and `maxSelectable` updates from 0 to 1 once any parent ticket is selected (regardless of parent quantity).
+#### B) Parking pass with independent constraint (section display)
+
+This example shows an order-level add-on. The server enforces `limits.perOrder=2`, and `maxSelectable` updates from 0 to 2 once any parent ticket is selected (regardless of parent quantity). It renders in a separate "Add-ons" section.
 
 ```jsonc
 {
@@ -4299,7 +4377,9 @@ This example shows a typical per-order add-on. The server enforces `limits.perOr
   },
   "relations": {
     "parentProductIds": ["prod_ga", "prod_vip"],
-    "matchBehavior": "per_order"
+    "displayMode": "section",
+    "constraint": "independent",
+    "minQuantity": 1
   },
   "state": {
     "temporal": { "phase": "during", "reasons": [] },
@@ -4311,7 +4391,15 @@ This example shows a typical per-order add-on. The server enforces `limits.perOr
       "reasons": []
     },
     "demand": { "kind": "none", "reasons": [] },
-    "messages": []
+    "messages": [
+      {
+        "code": "addon_minimum",
+        "text": "Minimum 1 parking pass required",
+        "placement": "row.under_quantity",
+        "variant": "neutral",
+        "priority": 40
+      }
+    ]
   },
   "commercial": {
     "price": {
@@ -4320,7 +4408,7 @@ This example shows a typical per-order add-on. The server enforces `limits.perOr
       "scale": 2
     },
     "feesIncluded": false,
-    "limits": { "perOrder": 1 },
+    "limits": { "perOrder": 2 },
     "maxSelectable": 0 // before any parent selected
   },
   "display": {
@@ -4331,9 +4419,66 @@ This example shows a typical per-order add-on. The server enforces `limits.perOr
 }
 ```
 
-_After selecting any parent tickets (≥1), refresh yields `maxSelectable: 1`._
+_After selecting any parent tickets (≥1), refresh yields `maxSelectable: 2` (cap is 2 regardless of ticket count)._
 
-#### C) Hidden parent ⇒ add‑on omitted (zero‑leak)
+_Note: `displayMode: "section"` means this renders in the "add_ons" section, not nested under tickets. `minQuantity: 1` means if user selects any parking, they must select at least 1._
+
+#### C) Optional insurance with minQuantity
+
+This example shows an optional add-on with a minimum quantity requirement. User can select 0 insurance, or if they select any, must select at least 2.
+
+```jsonc
+{
+  "product": {
+    "id": "addon_insurance",
+    "name": "Event Insurance",
+    "type": "digital"
+  },
+  "relations": {
+    "parentProductIds": ["prod_ga", "prod_vip"],
+    "displayMode": "nested",
+    "constraint": "optional",
+    "minQuantity": 2
+  },
+  "state": {
+    "temporal": { "phase": "during", "reasons": [] },
+    "supply": { "status": "available", "reasons": [] },
+    "gating": {
+      "required": false,
+      "satisfied": true,
+      "listingPolicy": "omit_until_unlocked",
+      "reasons": []
+    },
+    "demand": { "kind": "none", "reasons": [] },
+    "messages": [
+      {
+        "code": "addon_minimum",
+        "text": "Minimum 2 insurance policies if selected",
+        "placement": "row.under_quantity",
+        "variant": "neutral",
+        "priority": 40
+      }
+    ]
+  },
+  "commercial": {
+    "price": {
+      "amount": 500,
+      "currency": { "code": "USD", "base": 10, "exponent": 2 },
+      "scale": 2
+    },
+    "feesIncluded": false,
+    "maxSelectable": 5 // Parent count = 5
+  },
+  "display": {
+    "badges": ["Optional"],
+    "showLowRemaining": false
+  }
+}
+```
+
+_Note: Client allows 0, 2, 3, 4, or 5 insurance (not 1). Server validates on order submission._
+
+#### D) Hidden parent ⇒ add‑on omitted (zero‑leak)
 
 ```jsonc
 // Parent product is gated and omitted with listingPolicy="omit_until_unlocked".
@@ -4376,16 +4521,16 @@ _After selecting any parent tickets (≥1), refresh yields `maxSelectable: 1`._
   _Given_ `relations.parentProductIds=["prod_ga"]`, `parentSelectedCount=0`
   _Expect_ server sends `maxSelectable=0`; quantity UI hidden; any row message comes from payload (no client prose).
 
-- **Parent added ⇒ add‑on enabled (per_ticket)**
+- **Parent added ⇒ add‑on enabled (match_parent)**
   _Given_ buyer selects 3 GA; server refresh sets `maxSelectable=3`
-  _Expect_ quantity UI `stepper`, cap 3; price shown when row is purchasable (per §8).
+  _Expect_ quantity UI auto-matches (3 vouchers for 3 tickets); price shown when row is purchasable (per §8).
 
 - **Parent reduced ⇒ add‑on clamped down**
   _Given_ add‑on selection=3, then parent selection drops to 1; server refresh sets `maxSelectable=1`
   _Expect_ client clamps selection to 1 immediately upon applying refresh.
 
-- **Per‑order cap respected**
-  _Given_ `"per_order"`, `limits.perOrder=1`, parentSelectedCount=4; server sends `maxSelectable=1`
+- **Independent constraint cap respected**
+  _Given_ `constraint="independent"`, `limits.perOrder=1`, parentSelectedCount=4; server sends `maxSelectable=1`
   _Expect_ quantity UI single‑select; attempts to exceed are prevented by `maxSelectable`.
 
 - **Hidden parent (omit) ⇒ add‑on omitted**
@@ -4396,7 +4541,7 @@ _After selecting any parent tickets (≥1), refresh yields `maxSelectable: 1`._
   _Given_ add‑on has `gating.required=true && !satisfied` and `listingPolicy="visible_locked"`
   _Expect_ `presentation="locked"`, price masked, quantity hidden, CTA none (per §§3.3, 6, 8).
 
-- **Multi‑parent sum (per_ticket)**
+- **Multi‑parent sum (match_parent or optional)**
   _Given_ `parentProductIds=["prod_ga","prod_vip"]`, selection GA=2, VIP=1 → parentSelectedCount=3
   _Expect_ server returns `maxSelectable=3`; client displays cap 3.
 
@@ -4408,12 +4553,14 @@ _After selecting any parent tickets (≥1), refresh yields `maxSelectable: 1`._
 
 ### 10.6 **Developer checklist (quick)**
 
-- [ ] Treat any `relations.parentProductIds[]` item as an **add‑on**; do **not** change `product.type`.
+- [ ] Treat any item with `relations` as an **add‑on**; do **not** change `product.type`.
 - [ ] Never compute numeric caps locally; always use `commercial.maxSelectable`.
 - [ ] On **any parent selection change**, trigger a server refresh; re‑derive UI from the new payload.
 - [ ] If a refresh lowers `maxSelectable`, clamp the current selection down to that value.
 - [ ] Do not leak gated parents: if parents are omitted, the dependent add‑on must not reveal them (trust server omission).
-- [ ] Place add‑ons in an “Add‑ons” section via `display.sectionId` when provided; otherwise render where assigned.
+- [ ] Respect `displayMode`: "nested" renders under parent (ignores sectionId), "section" renders in assigned section.
+- [ ] Show constraint-appropriate UI: "match_parent" auto-matches (show "Required"), "optional"/"independent" show quantity picker.
+- [ ] Enforce `minQuantity` client-side as a hint; server validates on submission.
 - [ ] Use only payload copy (e.g., `state.messages[]`, `clientCopy`) to explain dependencies; no local strings.
 
 ---
@@ -5631,10 +5778,24 @@ const CommercialSchema = z
 
 const RelationsSchema = z
   .object({
-    parentProductIds: z.array(ProductIdSchema).optional(),
-    matchBehavior: z.enum(["per_ticket", "per_order"]).optional(),
+    parentProductIds: z.array(ProductIdSchema).min(1), // Required, non-empty
+    displayMode: z.enum(["nested", "section"]),
+    constraint: z.enum(["match_parent", "optional", "independent"]),
+    minQuantity: z.number().int().positive().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (rel) => {
+      // minQuantity only makes sense for optional and independent
+      if (rel.minQuantity !== undefined && rel.constraint === "match_parent") {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "minQuantity cannot be used with match_parent constraint",
+    }
+  );
 
 const BadgeDetailRefSchema = z
   .object({

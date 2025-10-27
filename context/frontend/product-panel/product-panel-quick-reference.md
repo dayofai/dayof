@@ -230,10 +230,17 @@ export const DisplaySchema = z
 /** ——— Relations (Add-ons) ——— */
 export const RelationsSchema = z
   .object({
-    parentProductIds: z.array(z.string()).optional(),
-    matchBehavior: z.enum(["per_ticket", "per_order"]).optional(),
+    parentProductIds: z.array(z.string()).min(1),
+    displayMode: z.enum(["nested", "section"]),
+    constraint: z.enum(["match_parent", "optional", "independent"]),
+    minQuantity: z.number().int().positive().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (rel) =>
+      rel.constraint === "match_parent" ? rel.minQuantity === undefined : true,
+    { message: "minQuantity cannot be used with match_parent constraint" }
+  );
 
 /** ——— Item (Panel Row) ——— */
 export const ItemStateSchema = z
@@ -924,8 +931,9 @@ export function deriveRowFlags(
 
 **Relations (Add‑ons):**
 
-- Add‑on defined by `relations.parentProductIds[]` (not a `product.type`).
-- Server recomputes `maxSelectable` based on parent selection and `matchBehavior` (`per_ticket` vs `per_order`).
+- Add‑on defined by presence of `relations` (not a `product.type`).
+- Server recomputes `maxSelectable` based on parent selection and `constraint` (`match_parent`, `optional`, or `independent`).
+- `displayMode` controls rendering: `nested` under parent, `section` in assigned section.
 - If no parent selected → server should send `maxSelectable=0`.
 - If parents omitted by gating → add‑on omitted (or disabled without leakage).
 
