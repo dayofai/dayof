@@ -8,3 +8,4 @@ node_modules
 # Ignore build outputs
 /dist/
 **/dist/
+.repoprompt

@@ -274,7 +274,7 @@
 124. **Zod schema authority**: All TypeScript types MUST be derived from Zod schemas via `z.infer<>`
 125. **Strict mode**: Root `PanelDataSchema` MUST use `.strict()` to reject unknown fields
 126. **Validate at boundary**: TanStack Query MUST validate all API responses with `PanelDataSchema`
-127. **Machine code format**: Machine codes MUST be snake*case matching regex `^[a-z]a-z0-9*]\*$`
+127. **Machine code format**: Machine codes MUST be `snake_case` matching regex ``^[a-z][a-z0-9_]*$``
 128. **No manual types**: Manual TypeScript types that duplicate schema structure are FORBIDDEN
 
 ---
@@ -292,11 +292,11 @@
 
 ### PanelActionButton (main button)
 
-133. **Three states**: PanelActionButton states are `"continue"`, `"waitlist"`, or `"disabled"`
+133. **Four states**: PanelActionButton states are `"continue"`, `"waitlist"`, `"notify"`, or `"disabled"` (see Spec §8.4).
 134. **Continue default**: Default state is `"continue"` when items are purchasable and selection valid
-135. **Waitlist condition**: State becomes `"waitlist"` when NO items purchasable BUT any eligible visible item has `demand.kind="waitlist"`
-136. **Disabled when invalid**: State is `"disabled"` when selection invalid (doesn't meet `orderRules`) or nothing purchasable with no waitlist
-137. **Respects gating**: Locked items with waitlist do NOT trigger panel waitlist state until unlocked
+135. **Waitlist/Notify conditions**: State becomes `"waitlist"` when **no items are purchasable** but at least one **visible** item has `demand.kind="waitlist"`. It becomes `"notify"` when **no items are purchasable** and at least one **visible** item has `demand.kind="notify_me"` (e.g., before the sale window). Gate precedence applies (see 137).
+136. **Disabled when invalid**: State is `"disabled"` when selection invalid (doesn't meet `orderRules`) or nothing purchasable with no waitlist/notify
+137. **Respects gating**: Locked items with waitlist/notify do NOT trigger panel waitlist/notify state until unlocked
 138. **Labels from server**: PanelActionButton labels MUST come from server-provided copy (e.g., `context.clientCopy`)
 
 ### AccessCodeCTA
