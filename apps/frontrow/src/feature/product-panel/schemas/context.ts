@@ -91,6 +91,14 @@ export const EffectivePrefsSchema = z
   })
   .strict();
 
+export const PrimaryCTASchema = z
+  .object({
+    label: z.string().min(1),
+    action: z.enum(['checkout', 'waitlist', 'notify_me', 'disabled']),
+    enabled: z.boolean(),
+  })
+  .strict();
+
 export const ContextSchema = z
   .object({
     orderRules: OrderRulesSchema,
@@ -98,6 +106,7 @@ export const ContextSchema = z
     panelNotices: z.array(NoticeSchema).default([]),
     effectivePrefs: EffectivePrefsSchema,
     welcomeText: z.string().optional(),
+    primaryCTA: PrimaryCTASchema.optional(),
     copyTemplates: z.array(CopyTemplateSchema).optional(),
     clientCopy: ClientCopySchema.optional(),
     tooltips: z.array(TooltipSchema).optional(),
@@ -114,4 +123,5 @@ export type ClientCopy = z.infer<typeof ClientCopySchema>;
 export type Tooltip = z.infer<typeof TooltipSchema>;
 export type HoverCard = z.infer<typeof HoverCardSchema>;
 export type EffectivePrefs = z.infer<typeof EffectivePrefsSchema>;
+export type PrimaryCTA = z.infer<typeof PrimaryCTASchema>;
 export type Context = z.infer<typeof ContextSchema>;

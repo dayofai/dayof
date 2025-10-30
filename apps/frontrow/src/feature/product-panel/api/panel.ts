@@ -27,7 +27,9 @@ export function panelQueryOptions(eventId: string) {
 
       return getMockPanelData(eventId);
     },
-    staleTime: 60_000, // 1 minute
+    refetchInterval: 30_000, 
+    refetchOnWindowFocus: false,  
+    refetchOnReconnect: false,
   });
 }
 
@@ -146,6 +148,12 @@ function getMockPanelData(_eventId: string): PanelData {
         displayPaymentPlanAvailable: false,
       },
       panelNotices: [],
+      welcomeText: 'Select your tickets to continue',
+      primaryCTA: {
+        label: 'Checkout',
+        action: 'checkout',
+        enabled: false, 
+      },
     },
     sections,
     items,
