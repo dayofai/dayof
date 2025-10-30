@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import {
   DineroSnapshotSchema,
+  MachineCodeSchema,
   type PanelData,
   type PanelItem,
   type Pricing,
@@ -27,8 +28,8 @@ export function panelQueryOptions(eventId: string) {
 
       return getMockPanelData(eventId);
     },
-    refetchInterval: 30_000, 
-    refetchOnWindowFocus: false,  
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
 }
@@ -106,7 +107,10 @@ function getMockPanelData(_eventId: string): PanelData {
         },
       },
       display: {
-        badges: [],
+        badges: [
+          { label: 'Featured', variant: 'primary' },
+          { label: 'Limited', variant: 'warning' },
+        ],
         sectionId: '550e8400-e29b-41d4-a716-446655440001',
         showLowRemaining: false,
       },
@@ -147,12 +151,29 @@ function getMockPanelData(_eventId: string): PanelData {
         showTypeListWhenSoldOut: false,
         displayPaymentPlanAvailable: false,
       },
-      panelNotices: [],
-      welcomeText: 'Select your tickets to continue',
+      panelNotices: [
+        {
+          code: MachineCodeSchema.parse('payment_plan_available'),
+          variant: 'neutral',
+          icon: 'info',
+          title: 'Payment Plans Available',
+          description: 'Split your purchase into installments at checkout.',
+          priority: 50,
+        },
+        {
+          code: MachineCodeSchema.parse('payment_plan_availables'),
+          variant: 'warning',
+          icon: 'info',
+          title: 'Payment Plans Available',
+          description: 'Split your purchase into installments at checkout.',
+          priority: 90,
+        },
+      ],
+      welcomeText: 'Welcome! Please choose your desired ticket type:',
       primaryCTA: {
         label: 'Checkout',
         action: 'checkout',
-        enabled: false, 
+        enabled: false,
       },
     },
     sections,

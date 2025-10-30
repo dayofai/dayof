@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ThemeDemoRouteImport } from './routes/theme-demo'
+import { Route as ProductPanelDemoRouteImport } from './routes/product-panel-demo'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
@@ -19,6 +20,11 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 const ThemeDemoRoute = ThemeDemoRouteImport.update({
   id: '/theme-demo',
   path: '/theme-demo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductPanelDemoRoute = ProductPanelDemoRouteImport.update({
+  id: '/product-panel-demo',
+  path: '/product-panel-demo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/product-panel-demo': typeof ProductPanelDemoRoute
   '/theme-demo': typeof ThemeDemoRoute
   '/$orgHandle/$eventHandle': typeof OrgHandleEventHandleRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/product-panel-demo': typeof ProductPanelDemoRoute
   '/theme-demo': typeof ThemeDemoRoute
   '/$orgHandle/$eventHandle': typeof OrgHandleEventHandleRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
+  '/product-panel-demo': typeof ProductPanelDemoRoute
   '/theme-demo': typeof ThemeDemoRoute
   '/$orgHandle/$eventHandle': typeof OrgHandleEventHandleRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/login'
+    | '/product-panel-demo'
     | '/theme-demo'
     | '/$orgHandle/$eventHandle'
     | '/api/auth/$'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/login'
+    | '/product-panel-demo'
     | '/theme-demo'
     | '/$orgHandle/$eventHandle'
     | '/api/auth/$'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/login'
+    | '/product-panel-demo'
     | '/theme-demo'
     | '/$orgHandle/$eventHandle'
     | '/api/auth/$'
@@ -103,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
+  ProductPanelDemoRoute: typeof ProductPanelDemoRoute
   ThemeDemoRoute: typeof ThemeDemoRoute
   OrgHandleEventHandleRoute: typeof OrgHandleEventHandleRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -115,6 +128,13 @@ declare module '@tanstack/react-router' {
       path: '/theme-demo'
       fullPath: '/theme-demo'
       preLoaderRoute: typeof ThemeDemoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/product-panel-demo': {
+      id: '/product-panel-demo'
+      path: '/product-panel-demo'
+      fullPath: '/product-panel-demo'
+      preLoaderRoute: typeof ProductPanelDemoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -159,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
+  ProductPanelDemoRoute: ProductPanelDemoRoute,
   ThemeDemoRoute: ThemeDemoRoute,
   OrgHandleEventHandleRoute: OrgHandleEventHandleRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

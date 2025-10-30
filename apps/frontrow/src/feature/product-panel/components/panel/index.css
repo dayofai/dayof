@@ -1,0 +1,26 @@
+@layer components {
+  /* Product Panel scope: define semantic tokens for the feature */
+  .product-panel {
+    --panel-card-bg: var(--white-opacity-4);
+    --panel-card-border: var(--white-opacity-4);
+    --panel-card-radius: var(--radius-lg);
+    --panel-card-shadow: var(--black-opacity-16);
+    --panel-card-blur: 16px;
+  } 
+
+  .dark .product-panel {
+    --panel-card-bg: var(--white-opacity-8);
+    --panel-card-border: var(--white-opacity-8);
+    --panel-card-shadow: var(--black-opacity-24);
+  }
+
+  /* Card container using the panel tokens */
+  .product-panel .panel-card {
+    padding: 0.75rem 1rem;
+    background-color: var(--panel-card-bg);
+    border: 1px solid var(--panel-card-border);
+    border-radius: var(--panel-card-radius);
+    box-shadow: 0 1px 4px var(--panel-card-shadow);
+    backdrop-filter: blur(var(--panel-card-blur));
+  }
+}

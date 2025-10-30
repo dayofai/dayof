@@ -72,6 +72,26 @@ export const RelationsSchema = z
     { message: 'minQuantity cannot be used with match_parent constraint' }
   );
 
+export const BadgeSchema = z
+  .object({
+    label: z.string().min(1),
+    variant: z.union([
+      z.enum([
+        'primary',
+        'secondary',
+        'success',
+        'warning',
+        'info',
+        'destructive',
+        'outline',
+      ]),
+      z
+        .string()
+        .regex(/^oklch\(.+\)$/, 'Must be a valid OKLCH color or variant name'),
+    ]),
+  })
+  .strict();
+
 export const BadgeDetailRefSchema = z
   .object({
     kind: z.enum(['tooltip', 'hovercard']),
@@ -81,7 +101,7 @@ export const BadgeDetailRefSchema = z
 
 export const DisplaySchema = z
   .object({
-    badges: z.array(z.string()),
+    badges: z.array(BadgeSchema),
     badgeDetails: z.record(z.string(), BadgeDetailRefSchema).optional(),
     sectionId: SectionIdSchema.optional(),
     showLowRemaining: z.boolean(),
@@ -121,6 +141,7 @@ export type Product = z.infer<typeof ProductSchema>;
 export type Variant = z.infer<typeof VariantSchema>;
 export type Commercial = z.infer<typeof CommercialSchema>;
 export type Relations = z.infer<typeof RelationsSchema>;
+export type Badge = z.infer<typeof BadgeSchema>;
 export type BadgeDetailRef = z.infer<typeof BadgeDetailRefSchema>;
 export type Display = z.infer<typeof DisplaySchema>;
 export type PanelItem = z.infer<typeof PanelItemSchema>;

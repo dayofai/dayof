@@ -29,7 +29,7 @@ export const NoticeActionSchema = z
 export const NoticeSchema = z
   .object({
     code: MachineCodeSchema,
-    variant: z.enum(['neutral', 'info', 'warning', 'error']).default('info'),
+    variant: z.enum(['neutral', 'info', 'warning', 'error']).default('neutral'),
     icon: z.string().optional(),
     title: z.string().optional(),
     text: z.string().optional(),
